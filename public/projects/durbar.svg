@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <rect width="100%" height="100%" fill="#0a0a0c"/>
+  <defs>
+    <radialGradient id="patanglow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#ff3b26" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#0a0a0c" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  
+  <rect width="100%" height="100%" fill="url(#grid)" />
+  <circle cx="600" cy="400" r="340" fill="url(#patanglow)" />
+
+  <!-- Architectural Pagoda Wireframe / Sacred Newari Geometry -->
+  <g stroke="#ff3b26" stroke-width="1.2" fill="none" opacity="0.85">
+    <!-- Center Axis -->
+    <line x1="600" y1="120" x2="600" y2="680" stroke-dasharray="4 4" opacity="0.4"/>
+    
+    <!-- Top Pinnacle (Gajur) -->
+    <polygon points="600,140 590,170 610,170" fill="rgba(255,59,38,0.2)"/>
+    <circle cx="600" cy="135" r="4" fill="#ff3b26"/>
+    
+    <!-- Tier 3 Roof -->
+    <polygon points="600,180 520,240 680,240" stroke="#f5f5f3" stroke-width="1"/>
+    <line x1="510" y1="240" x2="690" y2="240" stroke="#ff3b26" stroke-width="2"/>
+    
+    <!-- Tier 2 Roof -->
+    <polygon points="600,260 460,350 740,350" stroke="#f5f5f3" stroke-width="1.2"/>
+    <line x1="440" y1="350" x2="760" y2="350" stroke="#ff3b26" stroke-width="2.5"/>
+    
+    <!-- Tier 1 Base Roof -->
+    <polygon points="600,370 380,490 820,490" stroke="#f5f5f3" stroke-width="1.5"/>
+    <line x1="350" y1="490" x2="850" y2="490" stroke="#ff3b26" stroke-width="3"/>
+    
+    <!-- Plinth / Base Steps -->
+    <rect x="420" y="500" width="360" height="40" stroke="#8e8e93" stroke-width="1"/>
+    <rect x="390" y="540" width="420" height="40" stroke="#8e8e93" stroke-width="1"/>
+    <rect x="360" y="580" width="480" height="40" stroke="#8e8e93" stroke-width="1"/>
+  </g>
+
+  <!-- Technical Annotations -->
+  <g font-family="monospace" font-size="12" fill="#8e8e93" letter-spacing="2">
+    <text x="60" y="80">[ PATAN DURBAR ARCHIVE · 27.6744°N 85.3245°E ]</text>
+    <text x="60" y="105" fill="#ff3b26">POINT CLOUD: 4,280,000 SPLATS</text>
+    <text x="60" y="740">OCTREE DEPTH: 14 · SHADER: GLSL 3.0</text>
+    <text x="960" y="740">REVERB: 1.84s</text>
+  </g>
+  
+  <!-- Subtle Crosshairs -->
+  <path d="M 580 400 L 620 400 M 600 380 L 600 420" stroke="#ff3b26" stroke-width="1" opacity="0.6"/>
+</svg>
