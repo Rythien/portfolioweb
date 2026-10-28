@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import HeroOGLCanvas from "@/components/canvas/HeroOGLCanvas";
+import AsciiDitherHero from "@/components/canvas/AsciiDitherHero";
 
 export default function Hero() {
   const containerRef = useRef<HTMLElement | null>(null);
@@ -84,13 +84,13 @@ export default function Hero() {
       aria-label="Introduction"
       className="relative min-h-screen flex flex-col justify-between pt-20 overflow-hidden"
     >
-      {/* Lightweight OGL WebGL Grain/Ripple Background */}
-      <HeroOGLCanvas />
+      {/* Signature Christen Dijoux ASCII & 8x8 Bayer Dither 3D Sphere */}
+      <AsciiDitherHero mode="dither" />
 
-      {/* Main hero content - shares exact same max-w-6xl and px with Header */}
-      <div className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 lg:px-12 w-full flex-1 flex flex-col justify-center py-12 sm:py-16">
-        {/* Monumental Name: fills ~60-70% of container width, never clips */}
-        <h1 className="font-[family-name:var(--font-display)] font-normal text-[clamp(3.45rem,15.2vw,11.25rem)] leading-[0.88] tracking-[-0.015em] text-[#edebe6] select-none">
+      {/* Main hero typography - pointer-events-none on wrapper so 3D background is draggable, pointer-events-auto on elements */}
+      <div className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 lg:px-12 w-full flex-1 flex flex-col justify-center py-12 sm:py-16 pointer-events-none">
+        {/* Monumental Name */}
+        <h1 className="font-[family-name:var(--font-display)] font-normal text-[clamp(3.45rem,15.2vw,11.25rem)] leading-[0.88] tracking-[-0.015em] text-[#edebe6] select-none pointer-events-auto w-fit">
           <div className="overflow-hidden">
             <div ref={line1Ref}>Searon</div>
           </div>
@@ -102,15 +102,15 @@ export default function Hero() {
         {/* Subtitle */}
         <p
           ref={sublineRef}
-          className="mt-8 sm:mt-10 text-base sm:text-lg text-[#8e8b82] font-normal"
+          className="mt-8 sm:mt-10 text-base sm:text-lg text-[#8e8b82] font-normal pointer-events-auto"
         >
           Frontend developer based in Kathmandu.
         </p>
 
-        {/* Two plain links */}
+        {/* Action Links */}
         <div
           ref={linksRef}
-          className="mt-8 sm:mt-10 flex items-center gap-8 text-sm"
+          className="mt-8 sm:mt-10 flex items-center gap-8 text-sm pointer-events-auto"
         >
           <a
             href="#work"
@@ -127,15 +127,15 @@ export default function Hero() {
         </div>
       </div>
 
-      {/* Bottom of hero: thin line, scroll cue left, live Kathmandu time right */}
+      {/* Bottom anchor bar: thin line, scroll cue left, live Kathmandu time right */}
       <div
         ref={bottomBarRef}
-        className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 lg:px-12 w-full"
+        className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 lg:px-12 w-full pointer-events-none"
       >
-        <div className="border-t border-white/[0.08] py-5 flex items-center justify-between text-xs text-[#8e8b82]">
+        <div className="border-t border-white/[0.08] py-5 flex items-center justify-between text-xs text-[#8e8b82] pointer-events-auto">
           <span>Scroll ↓</span>
           <span className="font-[family-name:var(--font-mono)] text-[11px] tracking-wider">
-            Kathmandu {time ? `${time} NPT` : "20:51 NPT"}
+            Kathmandu {time ? `${time} NPT` : "21:04 NPT"}
           </span>
         </div>
       </div>
