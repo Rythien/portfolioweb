@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import HeroCanvas from "@/components/canvas/HeroCanvas";
-import { PORTFOLIO_DATA } from "@/data/portfolio";
 import { gsap } from "gsap";
 
 export default function Hero() {

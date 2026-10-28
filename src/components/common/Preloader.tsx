@@ -22,9 +22,11 @@ export default function Preloader({ onComplete }: PreloaderProps) {
     ).matches;
 
     if (prefersReducedMotion) {
-      setIsFinished(true);
-      onComplete?.();
-      return;
+      const timer = setTimeout(() => {
+        setIsFinished(true);
+        onComplete?.();
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let current = 0;

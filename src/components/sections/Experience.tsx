@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { PORTFOLIO_DATA } from "@/data/portfolio";
 import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 export default function Experience() {
   const [expandedId, setExpandedId] = useState<string | null>("exp-1");

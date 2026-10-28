@@ -5,7 +5,6 @@ import Image from "next/image";
 import { PORTFOLIO_DATA } from "@/data/portfolio";
 import { ProjectItem } from "@/types";
 import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 export default function Projects() {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -48,6 +47,18 @@ export default function Projects() {
 
     return () => mm.revert();
   }, []);
+
+  // Keyboard accessibility: Close case study modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && activeProject) {
+        setActiveProject(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeProject]);
 
   return (
     <section

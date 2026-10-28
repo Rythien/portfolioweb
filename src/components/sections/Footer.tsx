@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
 import { PORTFOLIO_DATA } from "@/data/portfolio";
 
 export default function Footer() {

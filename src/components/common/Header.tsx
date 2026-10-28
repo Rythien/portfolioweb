@@ -100,14 +100,14 @@ export default function Header() {
         </nav>
 
         {/* Action Controls: Easter Egg Invert Mode + Mobile Trigger */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={toggleInverted}
             title="Toggle Negative Matrix Mode (Easter Egg)"
             aria-label={`Toggle Negative Film Mode: Currently ${
               isInverted ? "Inverted" : "Dark Obsidian"
             }`}
-            className="group flex items-center gap-2 border border-[var(--border-strong)] px-2.5 py-1.5 font-mono text-[11px] tracking-wider text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+            className="group min-h-[44px] flex items-center gap-2 border border-[var(--border-strong)] px-3 py-2 font-mono text-[11px] tracking-wider text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
           >
             <span
               className={`h-2.5 w-2.5 border border-current rounded-full transition-transform duration-300 ${
@@ -119,26 +119,26 @@ export default function Header() {
             </span>
           </button>
 
-          {/* Mobile Menu Toggle Button */}
+          {/* Mobile Menu Toggle Button (Strict 44x44px touch target) */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle Navigation Menu"
             aria-expanded={mobileMenuOpen}
-            className="xl:hidden flex flex-col justify-center items-center h-9 w-9 border border-[var(--border-strong)] p-1.5 space-y-1 text-[var(--text-primary)]"
+            className="xl:hidden flex flex-col justify-center items-center min-h-[44px] min-w-[44px] h-11 w-11 border border-[var(--border-strong)] p-2 space-y-1.5 text-[var(--text-primary)]"
           >
             <span
-              className={`block h-0.5 w-4 bg-current transition-transform duration-300 ${
-                mobileMenuOpen ? "rotate-45 translate-y-1.5" : ""
+              className={`block h-0.5 w-5 bg-current transition-transform duration-300 ${
+                mobileMenuOpen ? "rotate-45 translate-y-2" : ""
               }`}
             />
             <span
-              className={`block h-0.5 w-4 bg-current transition-opacity duration-300 ${
+              className={`block h-0.5 w-5 bg-current transition-opacity duration-300 ${
                 mobileMenuOpen ? "opacity-0" : ""
               }`}
             />
             <span
-              className={`block h-0.5 w-4 bg-current transition-transform duration-300 ${
-                mobileMenuOpen ? "-rotate-45 -translate-y-1.5" : ""
+              className={`block h-0.5 w-5 bg-current transition-transform duration-300 ${
+                mobileMenuOpen ? "-rotate-45 -translate-y-2" : ""
               }`}
             />
           </button>

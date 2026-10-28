@@ -7,19 +7,19 @@ export default function CustomCursor() {
   const ringRef = useRef<HTMLDivElement | null>(null);
   const [cursorText, setCursorText] = useState<string>("");
   const [isHovered, setIsHovered] = useState(false);
-  const [isTouch, setIsTouch] = useState(true);
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
-    // Check if device has fine pointer and no touch
     const hasPointer = window.matchMedia("(pointer: fine)").matches;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (!hasPointer || reducedMotion) {
-      setIsTouch(true);
       return;
     }
 
-    setIsTouch(false);
+    const timer = setTimeout(() => {
+      setEnabled(true);
+    }, 0);
 
     let mouseX = -100;
     let mouseY = -100;
@@ -67,13 +67,14 @@ export default function CustomCursor() {
     animId = requestAnimationFrame(animateRing);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseover", handleMouseOver);
       cancelAnimationFrame(animId);
     };
   }, []);
 
-  if (isTouch) return null;
+  if (!enabled) return null;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[999] overflow-hidden">

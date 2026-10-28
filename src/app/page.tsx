@@ -17,6 +17,12 @@ import Footer from "@/components/sections/Footer";
 export default function Home() {
   return (
     <LenisProvider>
+      <a
+        href="#hero"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-[var(--accent)] focus:text-white font-mono text-xs uppercase tracking-widest outline-none border border-white"
+      >
+        Skip to main content
+      </a>
       <Preloader />
       <CustomCursor />
       <Header />

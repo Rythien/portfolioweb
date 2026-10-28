@@ -132,12 +132,13 @@ input:focus-visible,
   border-radius: 2px;
 }
 
-/* Reduced motion */
+/* Reduced motion - calibrated to preserve state comprehension while eliminating spatial kinetic strain */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 0.01s !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0.01s !important;
     scroll-behavior: auto !important;
   }
 }
+

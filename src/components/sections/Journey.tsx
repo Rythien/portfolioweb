@@ -3,7 +3,6 @@
 import React, { useRef, useEffect } from "react";
 import { PORTFOLIO_DATA } from "@/data/portfolio";
 import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 export default function Journey() {
   const containerRef = useRef<HTMLElement | null>(null);

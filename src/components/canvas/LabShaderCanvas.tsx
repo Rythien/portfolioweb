@@ -14,8 +14,8 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
     if (!canvas) return;
 
     let animId: number;
-    let width = (canvas.width = canvas.parentElement?.clientWidth || 800);
-    let height = (canvas.height = 480);
+    const width = (canvas.width = canvas.parentElement?.clientWidth || 800);
+    const height = (canvas.height = 480);
 
     const mouse = {
       x: width / 2,
@@ -113,7 +113,7 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
           const uMouse = gl.getUniformLocation(program, "u_mouse");
           const uTime = gl.getUniformLocation(program, "u_time");
 
-          let startTime = performance.now();
+          const startTime = performance.now();
 
           const renderGL = () => {
             const now = (performance.now() - startTime) * 0.001;
