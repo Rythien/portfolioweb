@@ -349,10 +349,10 @@ export const PORTFOLIO_DATA = {
       { name: "Language", value: "TypeScript 5.x (Strict Typing)" },
       { name: "Styling", value: "Tailwind CSS v4 + Bespoke CSS Properties" },
       { name: "Motion Engine", value: "GSAP 3.12 (ScrollTrigger) + Lenis v1.1" },
-      { name: "Graphics", value: "Raw WebGL 2.0 & Canvas API (Zero heavy bloat)" },
+      { name: "Graphics Engine", value: "WebGL Raymarching + 8×8 Bayer Dither & 3D ASCII Globe" },
       { name: "Typography", value: "Syne (Display) · Geist Sans · JetBrains Mono" },
-      { name: "Hosting & CDN", value: "Vercel Edge Network (Global Anycast)" },
-      { name: "Design Philosophy", value: "Apple HIG Rigor · Editorial Craft · Newari Geometry" },
+      { name: "Visual Lineage", value: "Inspired by the editorial mood of Christen Dijoux" },
+      { name: "Design Rigor", value: "Apple HIG Principles · Hairline Grids · Newari Geometry" },
     ],
     ethics: [
       "No tracking pixels, third-party spyware, or external invasive analytics.",

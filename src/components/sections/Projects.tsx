@@ -65,24 +65,24 @@ export default function Projects() {
       ref={sectionRef}
       id="projects"
       aria-labelledby="projects-heading"
-      className="relative hairline-b overflow-hidden bg-[var(--bg-void)]"
+      className="relative border-t border-white/[0.08] overflow-hidden bg-[#050505]"
     >
       {/* Sticky Header Banner */}
-      <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 pt-20 pb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 pt-20 pb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 font-mono text-xs text-[var(--text-muted)] tracking-widest uppercase mb-3">
-            <span className="h-1.5 w-1.5 bg-[var(--accent)]" />
-            [ 06 / 10 ] · SELECTED COMMISSIONS
+          <div className="flex items-center gap-2 font-mono text-xs text-[#8e8b82] tracking-widest uppercase mb-3">
+            <span className="h-1.5 w-1.5 bg-[#edebe6]" />
+            [ 04 / 07 ] · SELECTED WORKS
           </div>
           <h2
             id="projects-heading"
-            className="font-[family-name:var(--font-syne)] text-3xl sm:text-5xl font-bold tracking-tight text-[var(--text-primary)]"
+            className="font-[family-name:var(--font-display)] text-3xl sm:text-5xl font-normal tracking-tight text-[#edebe6]"
           >
-            Featured Digital Works.
+            Selected Commissions.
           </h2>
         </div>
 
-        <div className="hidden lg:flex items-center gap-3 font-mono text-xs text-[var(--accent)] tracking-widest uppercase">
+        <div className="hidden lg:flex items-center gap-3 font-mono text-xs text-[#edebe6] tracking-widest uppercase">
           <span>SCROLL HORIZONTALLY</span>
           <span className="animate-pulse">→</span>
         </div>
@@ -91,21 +91,20 @@ export default function Projects() {
       {/* Projects Track: Horizontal on Desktop, Vertical Stack on Mobile */}
       <div
         ref={scrollContainerRef}
-        className="flex flex-col lg:flex-row gap-8 lg:gap-12 px-5 sm:px-8 lg:px-12 pb-24 lg:pb-32 w-full lg:w-max"
+        className="flex flex-col lg:flex-row gap-8 lg:gap-12 px-6 sm:px-10 lg:px-12 pb-24 lg:pb-32 w-full lg:w-max"
       >
         {PORTFOLIO_DATA.projects.map((project, idx) => (
           <div
             key={project.id}
-            data-cursor-text="VIEW"
             onClick={() => setActiveProject(project)}
-            className="group relative w-full lg:w-[680px] shrink-0 border border-white/10 bg-[var(--bg-surface)] hover:border-[var(--accent)]/60 transition-all duration-300 flex flex-col justify-between cursor-pointer"
+            className="group relative w-full lg:w-[680px] shrink-0 border border-white/10 bg-[#0c0c0e] hover:border-white/40 transition-all duration-300 flex flex-col justify-between cursor-pointer"
           >
             {/* Top Bar with Number & Category */}
             <div className="p-6 border-b border-white/10 flex items-center justify-between font-mono text-xs">
-              <span className="text-[var(--accent)] font-semibold">
+              <span className="text-white font-semibold">
                 [ 0{idx + 1} / 0{PORTFOLIO_DATA.projects.length} ]
               </span>
-              <span className="text-[var(--text-muted)] uppercase tracking-wider">
+              <span className="text-[#8e8b82] uppercase tracking-wider">
                 {project.category} · {project.year}
               </span>
             </div>
@@ -119,19 +118,19 @@ export default function Projects() {
                 height={800}
                 className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-surface)] via-transparent to-transparent opacity-80" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c0e] via-transparent to-transparent opacity-80" />
             </div>
 
             {/* Bottom Content Area */}
             <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
               <div>
-                <div className="font-mono text-xs text-[var(--text-muted)] mb-1">
+                <div className="font-mono text-xs text-[#8e8b82] mb-1">
                   CLIENT: {project.client}
                 </div>
-                <h3 className="font-[family-name:var(--font-syne)] text-2xl sm:text-3xl font-bold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
+                <h3 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-normal text-[#edebe6] group-hover:text-white transition-colors">
                   {project.title}
                 </h3>
-                <p className="mt-3 text-sm text-[var(--text-secondary)] font-light leading-relaxed">
+                <p className="mt-3 text-sm text-[#8e8b82] font-light leading-relaxed">
                   {project.oneLiner}
                 </p>
               </div>
@@ -142,19 +141,19 @@ export default function Projects() {
                   {project.stack.slice(0, 3).map((tech) => (
                     <span
                       key={tech}
-                      className="px-2 py-0.5 border border-white/10 text-[var(--text-muted)] text-[10px]"
+                      className="px-2 py-0.5 border border-white/10 text-[#8e8b82] text-[10px]"
                     >
                       {tech}
                     </span>
                   ))}
                   {project.stack.length > 3 && (
-                    <span className="px-2 py-0.5 text-[var(--text-muted)] text-[10px]">
+                    <span className="px-2 py-0.5 text-[#8e8b82] text-[10px]">
                       +{project.stack.length - 3}
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 text-[var(--accent)] font-semibold group-hover:translate-x-1 transition-transform">
+                <div className="flex items-center gap-2 text-white font-medium group-hover:translate-x-1 transition-transform">
                   <span>READ ARCHITECTURE</span>
                   <span>→</span>
                 </div>
@@ -170,23 +169,23 @@ export default function Projects() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
-          className="fixed inset-0 z-[120] flex items-center justify-end bg-black/80 backdrop-blur-md transition-all duration-300"
+          className="fixed inset-0 z-[120] flex items-center justify-end bg-black/85 backdrop-blur-md transition-all duration-300"
           onClick={() => setActiveProject(null)}
         >
           <div
-            className="w-full max-w-2xl h-full bg-[var(--bg-void)] border-l border-white/15 p-6 sm:p-10 overflow-y-auto flex flex-col justify-between"
+            className="w-full max-w-2xl h-full bg-[#050505] border-l border-white/15 p-6 sm:p-10 overflow-y-auto flex flex-col justify-between"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="space-y-8">
               {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-white/10 pb-6">
-                <div className="font-mono text-xs text-[var(--accent)]">
+                <div className="font-mono text-xs text-white">
                   [ CASE STUDY SPECIFICATION · {activeProject.year} ]
                 </div>
                 <button
                   onClick={() => setActiveProject(null)}
                   aria-label="Close Case Study"
-                  className="px-3 py-1.5 border border-white/20 font-mono text-xs text-[var(--text-primary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                  className="px-3 py-1.5 border border-white/20 font-mono text-xs text-[#edebe6] hover:border-white transition-colors"
                 >
                   [ CLOSE ✕ ]
                 </button>
@@ -196,29 +195,29 @@ export default function Projects() {
               <div>
                 <h3
                   id="modal-title"
-                  className="font-[family-name:var(--font-syne)] text-3xl sm:text-4xl font-extrabold text-[var(--text-primary)]"
+                  className="font-[family-name:var(--font-display)] text-3xl sm:text-4xl font-normal text-[#edebe6]"
                 >
                   {activeProject.title}
                 </h3>
-                <div className="mt-2 font-mono text-xs text-[var(--text-muted)]">
+                <div className="mt-2 font-mono text-xs text-[#8e8b82]">
                   CLIENT: {activeProject.client} · ROLE: {activeProject.role}
                 </div>
               </div>
 
               {/* Full Description */}
-              <p className="text-base text-[var(--text-secondary)] font-light leading-relaxed">
+              <p className="text-base text-[#8e8b82] font-light leading-relaxed">
                 {activeProject.description}
               </p>
 
               {/* Key Technical Highlights */}
               <div className="space-y-3">
-                <div className="font-mono text-xs uppercase text-[var(--text-muted)] tracking-wider">
+                <div className="font-mono text-xs uppercase text-[#8e8b82] tracking-wider">
                   TECHNICAL DELIVERABLES &amp; INNOVATIONS
                 </div>
-                <ul className="space-y-2.5 font-mono text-xs sm:text-sm text-[var(--text-secondary)]">
+                <ul className="space-y-2.5 font-mono text-xs sm:text-sm text-[#8e8b82]">
                   {activeProject.highlights.map((h, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <span className="text-[var(--accent)] font-bold">↳</span>
+                      <span className="text-white font-bold">↳</span>
                       <span>{h}</span>
                     </li>
                   ))}
@@ -226,8 +225,8 @@ export default function Projects() {
               </div>
 
               {/* Benchmark Result */}
-              <div className="border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4 font-mono text-xs text-[var(--text-primary)]">
-                <span className="text-[var(--accent)] font-semibold block mb-1">
+              <div className="border border-white/20 bg-white/5 p-4 font-mono text-xs text-white">
+                <span className="font-semibold block mb-1">
                   MEASURED IMPACT:
                 </span>
                 {activeProject.metrics}
@@ -235,14 +234,14 @@ export default function Projects() {
 
               {/* Full Tech Stack */}
               <div>
-                <div className="font-mono text-xs uppercase text-[var(--text-muted)] tracking-wider mb-2">
+                <div className="font-mono text-xs uppercase text-[#8e8b82] tracking-wider mb-2">
                   FULL SYSTEM STACK
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {activeProject.stack.map((s) => (
                     <span
                       key={s}
-                      className="font-mono text-xs px-3 py-1 border border-white/10 text-[var(--text-secondary)]"
+                      className="font-mono text-xs px-3 py-1 border border-white/10 text-[#8e8b82]"
                     >
                       {s}
                     </span>
@@ -257,7 +256,7 @@ export default function Projects() {
                 href={activeProject.link}
                 target="_blank"
                 rel="noreferrer"
-                className="px-5 py-3 bg-[var(--accent)] text-white font-semibold uppercase tracking-wider hover:bg-white hover:text-black transition-colors"
+                className="px-5 py-3 bg-[#edebe6] text-[#050505] font-semibold uppercase tracking-wider hover:bg-white transition-colors"
               >
                 LIVE PRODUCTION SITE ↗
               </a>
@@ -266,7 +265,7 @@ export default function Projects() {
                   href={activeProject.github}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-5 py-3 border border-white/20 text-[var(--text-primary)] uppercase tracking-wider hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                  className="px-5 py-3 border border-white/20 text-[#edebe6] uppercase tracking-wider hover:border-white transition-colors"
                 >
                   SOURCE ARCHITECTURE ↗
                 </a>
