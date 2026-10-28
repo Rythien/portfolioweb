@@ -36,42 +36,34 @@ export default function Hero() {
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    if (!prefersReducedMotion) {
+    if (!prefersReducedMotion && containerRef.current) {
       const ctx = gsap.context(() => {
         const tl = gsap.timeline({
           defaults: { ease: "power3.out" },
-          delay: 0.15,
+          delay: 0.1,
         });
 
-        tl.from([line1Ref.current, line2Ref.current], {
-          yPercent: 110,
-          duration: 1.15,
-          stagger: 0.14,
-        })
-          .from(
+        tl.fromTo(
+          [line1Ref.current, line2Ref.current],
+          { yPercent: 105 },
+          { yPercent: 0, duration: 1.15, stagger: 0.14 }
+        )
+          .fromTo(
             sublineRef.current,
-            {
-              opacity: 0,
-              y: 14,
-              duration: 0.8,
-            },
+            { opacity: 0, y: 14 },
+            { opacity: 1, y: 0, duration: 0.8 },
             "-=0.55"
           )
-          .from(
+          .fromTo(
             linksRef.current,
-            {
-              opacity: 0,
-              y: 10,
-              duration: 0.75,
-            },
+            { opacity: 0, y: 10 },
+            { opacity: 1, y: 0, duration: 0.75 },
             "-=0.55"
           )
-          .from(
+          .fromTo(
             bottomBarRef.current,
-            {
-              opacity: 0,
-              duration: 0.85,
-            },
+            { opacity: 0 },
+            { opacity: 1, duration: 0.85 },
             "-=0.5"
           );
       }, containerRef);
@@ -143,7 +135,7 @@ export default function Hero() {
         <div className="border-t border-white/[0.08] py-5 flex items-center justify-between text-xs text-[#8e8b82]">
           <span>Scroll ↓</span>
           <span className="font-[family-name:var(--font-mono)] text-[11px] tracking-wider">
-            Kathmandu {time ? `${time} NPT` : "20:10 NPT"}
+            Kathmandu {time ? `${time} NPT` : "20:51 NPT"}
           </span>
         </div>
       </div>
