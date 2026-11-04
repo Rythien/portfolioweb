@@ -1,46 +1,61 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
-import Image from "next/image";
-import { PORTFOLIO_DATA } from "@/data/portfolio";
-import { ProjectItem } from "@/types";
+import React, { useEffect, useRef } from "react";
+import Link from "next/link";
 import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import KineticHeading from "@/components/ui/Kinetic";
+import PixelImage from "@/components/ui/PixelImage";
+import { projects } from "@/content/projects";
+
+gsap.registerPlugin(ScrollTrigger);
 
 export default function Projects() {
   const sectionRef = useRef<HTMLElement | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const [activeProject, setActiveProject] = useState<ProjectItem | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    const section = sectionRef.current;
+    const track = trackRef.current;
+    if (!section || !track) return;
+
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
+    if (prefersReducedMotion) return;
+
     const mm = gsap.matchMedia();
 
-    // Desktop: Horizontal scrubbed pinned track (min-width: 1024px)
+    // Desktop horizontal pinning
     mm.add("(min-width: 1024px)", () => {
-      if (prefersReducedMotion || !scrollContainerRef.current || !sectionRef.current) return;
+      const getScrollAmount = () => Math.max(0, track.scrollWidth - window.innerWidth);
 
-      const container = scrollContainerRef.current;
-      const totalWidth = container.scrollWidth;
-      const windowWidth = window.innerWidth;
-      const distance = totalWidth - windowWidth + 120;
-
-      const tween = gsap.to(container, {
-        x: -distance,
+      const tween = gsap.to(track, {
+        x: () => -getScrollAmount(),
         ease: "none",
-        scrollTrigger: {
-          trigger: sectionRef.current,
-          pin: true,
-          scrub: 1,
-          start: "top top",
-          end: () => `+=${distance * 1.2}`,
-          invalidateOnRefresh: true,
-        },
       });
 
+      const trigger = ScrollTrigger.create({
+        trigger: section,
+        start: "top top",
+        end: () => `+=${getScrollAmount()}`,
+        pin: true,
+        animation: tween,
+        scrub: 0.5,
+        invalidateOnRefresh: true,
+        fastScrollEnd: true,
+      });
+
+      // Refresh when fonts and images finish loading
+      if (typeof document !== "undefined" && document.fonts) {
+        document.fonts.ready.then(() => {
+          ScrollTrigger.refresh();
+        });
+      }
+
       return () => {
+        trigger.kill();
         tween.kill();
       };
     });
@@ -48,232 +63,123 @@ export default function Projects() {
     return () => mm.revert();
   }, []);
 
-  // Keyboard accessibility: Close case study modal on Escape key press
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && activeProject) {
-        setActiveProject(null);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeProject]);
-
   return (
     <section
       ref={sectionRef}
       id="projects"
-      aria-labelledby="projects-heading"
-      className="relative border-t border-white/[0.08] overflow-hidden bg-[#050505]"
+      aria-label="Selected works and case studies"
+      className="py-24 lg:py-0 border-b border-white/[0.08] bg-[#050505] overflow-hidden lg:h-screen lg:flex lg:flex-col lg:justify-between"
     >
-      {/* Sticky Header Banner */}
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 pt-20 pb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 font-mono text-xs text-[#8e8b82] tracking-widest uppercase mb-3">
-            <span className="h-1.5 w-1.5 bg-[#edebe6]" />
-            [ 04 / 07 ] · SELECTED WORKS
+      {/* Top Header */}
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full pt-0 lg:pt-12 mb-8 lg:mb-0">
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+          <div className="flex items-center gap-4">
+            <span className="font-mono text-label uppercase tracking-widest text-[#edebe6]/75">
+              #08 · SELECTED WORK
+            </span>
+            <span className="hidden sm:inline font-mono text-label uppercase text-[#edebe6]/75">
+              Scroll → to browse
+            </span>
           </div>
-          <h2
-            id="projects-heading"
-            className="font-[family-name:var(--font-display)] text-3xl sm:text-5xl font-normal tracking-tight text-[#edebe6]"
+          <Link
+            href="/projects"
+            data-magnetic
+            data-cursor="Index"
+            className="font-mono text-label uppercase tracking-widest text-[#edebe6] hover:underline underline-offset-4"
           >
-            Selected Commissions.
-          </h2>
-        </div>
-
-        <div className="hidden lg:flex items-center gap-3 font-mono text-xs text-[#edebe6] tracking-widest uppercase">
-          <span>SCROLL HORIZONTALLY</span>
-          <span className="animate-pulse">→</span>
+            All Projects · {projects.length.toString().padStart(2, "0")} →
+          </Link>
         </div>
       </div>
 
-      {/* Projects Track: Horizontal on Desktop, Vertical Stack on Mobile */}
-      <div
-        ref={scrollContainerRef}
-        className="flex flex-col lg:flex-row gap-8 lg:gap-12 px-6 sm:px-10 lg:px-12 pb-24 lg:pb-32 w-full lg:w-max"
-      >
-        {PORTFOLIO_DATA.projects.map((project, idx) => (
-          <div
-            key={project.id}
-            onClick={() => setActiveProject(project)}
-            className="group relative w-full lg:w-[680px] shrink-0 border border-white/10 bg-[#0c0c0e] hover:border-white/40 transition-all duration-300 flex flex-col justify-between cursor-pointer"
-          >
-            {/* Top Bar with Number & Category */}
-            <div className="p-6 border-b border-white/10 flex items-center justify-between font-mono text-xs">
-              <span className="text-white font-semibold">
-                [ 0{idx + 1} / 0{PORTFOLIO_DATA.projects.length} ]
-              </span>
-              <span className="text-[#8e8b82] uppercase tracking-wider">
-                {project.category} · {project.year}
-              </span>
-            </div>
+      {/* Horizontal Track (Desktop) / Vertical Stack (Mobile) */}
+      <div className="my-auto overflow-visible">
+        <div
+          ref={trackRef}
+          className="flex flex-col lg:flex-row gap-12 lg:gap-16 px-6 sm:px-10 lg:px-16 w-full lg:w-max items-center"
+        >
+          {/* Intro Panel on Desktop */}
+          <div className="w-full lg:w-[380px] shrink-0 mb-4 lg:mb-0">
+            <KineticHeading
+              as="h2"
+              className="text-h1 font-light text-[#edebe6]"
+            >
+              Selected works.
+            </KineticHeading>
+            <p className="mt-4 font-[family-name:var(--font-sans)] text-body text-[#edebe6]/80 leading-relaxed max-w-[65ch] [text-wrap:pretty]">
+              Case studies in website design, mobile apps, and 3D modeling.
+            </p>
+          </div>
 
-            {/* Architectural SVG Artwork Preview */}
-            <div className="relative aspect-[16/10] w-full overflow-hidden bg-black/60">
-              <Image
-                src={project.image}
-                alt={`${project.title} Preview`}
-                width={1200}
-                height={800}
-                className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c0e] via-transparent to-transparent opacity-80" />
-            </div>
+          {/* Project Panels */}
+          {projects.map((project, idx) => (
+            <article
+              key={project.slug}
+              className="w-full lg:w-[620px] shrink-0 border border-white/[0.1] bg-white/[0.015] p-6 sm:p-8 rounded-sm hover:border-white/30 transition-colors group flex flex-col justify-between"
+            >
+              {/* Thumbnail with 2-Tone Bayer Dither and Hover Peek */}
+              <Link
+                href={`/project/${project.slug}`}
+                data-cursor="Open"
+                className="block mb-6 overflow-hidden"
+              >
+                <PixelImage
+                  src={project.images[0]?.src || ""}
+                  alt={project.title}
+                  caption={project.subtitle}
+                  aspectRatio="aspect-[16/10]"
+                />
+              </Link>
 
-            {/* Bottom Content Area */}
-            <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
-              <div>
-                <div className="font-mono text-xs text-[#8e8b82] mb-1">
-                  CLIENT: {project.client}
+              {/* Project Meta and Title */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between font-mono text-label uppercase tracking-wider text-[#edebe6]/75 tabular-nums">
+                  <span>
+                    0{idx + 1} · {project.type}
+                  </span>
+                  <span>{project.year}</span>
                 </div>
-                <h3 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-normal text-[#edebe6] group-hover:text-white transition-colors">
-                  {project.title}
-                </h3>
-                <p className="mt-3 text-sm text-[#8e8b82] font-light leading-relaxed">
-                  {project.oneLiner}
-                </p>
-              </div>
 
-              {/* Stack & Metric Strip */}
-              <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono text-xs">
-                <div className="flex flex-wrap gap-1.5">
-                  {project.stack.slice(0, 3).map((tech) => (
-                    <span
-                      key={tech}
-                      className="px-2 py-0.5 border border-white/10 text-[#8e8b82] text-[10px]"
-                    >
-                      {tech}
-                    </span>
-                  ))}
-                  {project.stack.length > 3 && (
-                    <span className="px-2 py-0.5 text-[#8e8b82] text-[10px]">
-                      +{project.stack.length - 3}
+                <h3 className="font-[family-name:var(--font-display)] text-h3 font-light text-[#edebe6] group-hover:text-white transition-colors">
+                  <Link href={`/project/${project.slug}`} data-cursor="Open">
+                    {project.title}
+                  </Link>
+                </h3>
+
+                <p className="font-[family-name:var(--font-sans)] text-body text-[#edebe6]/80 leading-relaxed line-clamp-2 [text-wrap:pretty]">
+                  {project.summary}
+                </p>
+
+                <div className="mt-4 pt-4 border-t border-white/[0.08] flex items-center justify-between font-mono text-label uppercase tracking-widest text-[#edebe6]/80">
+                  <Link
+                    href={`/project/${project.slug}`}
+                    data-magnetic
+                    className="inline-flex items-center gap-2 hover:underline underline-offset-4"
+                  >
+                    <span>Read case study</span>
+                    <span>→</span>
+                  </Link>
+                  {project.placeholder && (
+                    <span className="text-label text-[#edebe6]/60">
+                      [PLACEHOLDER]
                     </span>
                   )}
                 </div>
-
-                <div className="flex items-center gap-2 text-white font-medium group-hover:translate-x-1 transition-transform">
-                  <span>READ ARCHITECTURE</span>
-                  <span>→</span>
-                </div>
               </div>
-            </div>
-          </div>
-        ))}
+            </article>
+          ))}
+        </div>
       </div>
 
-      {/* Case Study Modal Drawer */}
-      {activeProject && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-title"
-          className="fixed inset-0 z-[120] flex items-center justify-end bg-black/85 backdrop-blur-md transition-all duration-300"
-          onClick={() => setActiveProject(null)}
-        >
-          <div
-            className="w-full max-w-2xl h-full bg-[#050505] border-l border-white/15 p-6 sm:p-10 overflow-y-auto flex flex-col justify-between"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-8">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-white/10 pb-6">
-                <div className="font-mono text-xs text-white">
-                  [ CASE STUDY SPECIFICATION · {activeProject.year} ]
-                </div>
-                <button
-                  onClick={() => setActiveProject(null)}
-                  aria-label="Close Case Study"
-                  className="px-3 py-1.5 border border-white/20 font-mono text-xs text-[#edebe6] hover:border-white transition-colors"
-                >
-                  [ CLOSE ✕ ]
-                </button>
-              </div>
-
-              {/* Title & One-Liner */}
-              <div>
-                <h3
-                  id="modal-title"
-                  className="font-[family-name:var(--font-display)] text-3xl sm:text-4xl font-normal text-[#edebe6]"
-                >
-                  {activeProject.title}
-                </h3>
-                <div className="mt-2 font-mono text-xs text-[#8e8b82]">
-                  CLIENT: {activeProject.client} · ROLE: {activeProject.role}
-                </div>
-              </div>
-
-              {/* Full Description */}
-              <p className="text-base text-[#8e8b82] font-light leading-relaxed">
-                {activeProject.description}
-              </p>
-
-              {/* Key Technical Highlights */}
-              <div className="space-y-3">
-                <div className="font-mono text-xs uppercase text-[#8e8b82] tracking-wider">
-                  TECHNICAL DELIVERABLES &amp; INNOVATIONS
-                </div>
-                <ul className="space-y-2.5 font-mono text-xs sm:text-sm text-[#8e8b82]">
-                  {activeProject.highlights.map((h, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <span className="text-white font-bold">↳</span>
-                      <span>{h}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Benchmark Result */}
-              <div className="border border-white/20 bg-white/5 p-4 font-mono text-xs text-white">
-                <span className="font-semibold block mb-1">
-                  MEASURED IMPACT:
-                </span>
-                {activeProject.metrics}
-              </div>
-
-              {/* Full Tech Stack */}
-              <div>
-                <div className="font-mono text-xs uppercase text-[#8e8b82] tracking-wider mb-2">
-                  FULL SYSTEM STACK
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {activeProject.stack.map((s) => (
-                    <span
-                      key={s}
-                      className="font-mono text-xs px-3 py-1 border border-white/10 text-[#8e8b82]"
-                    >
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* External Links */}
-            <div className="pt-8 border-t border-white/10 flex flex-wrap gap-4 font-mono text-xs">
-              <a
-                href={activeProject.link}
-                target="_blank"
-                rel="noreferrer"
-                className="px-5 py-3 bg-[#edebe6] text-[#050505] font-semibold uppercase tracking-wider hover:bg-white transition-colors"
-              >
-                LIVE PRODUCTION SITE ↗
-              </a>
-              {activeProject.github && (
-                <a
-                  href={activeProject.github}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-5 py-3 border border-white/20 text-[#edebe6] uppercase tracking-wider hover:border-white transition-colors"
-                >
-                  SOURCE ARCHITECTURE ↗
-                </a>
-              )}
-            </div>
-          </div>
+      {/* Bottom Progress Bar on Desktop */}
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full pb-0 lg:pb-8 hidden lg:block">
+        <div className="flex items-center justify-between font-mono text-label uppercase tracking-widest text-[#edebe6]/75 border-t border-white/[0.08] pt-4">
+          <span />
+          <Link href="/projects" className="hover:text-white">
+            VIEW ALL {projects.length} CASE STUDIES →
+          </Link>
         </div>
-      )}
+      </div>
     </section>
   );
 }

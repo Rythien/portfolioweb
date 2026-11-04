@@ -9,125 +9,165 @@ interface PreloaderProps {
 
 export default function Preloader({ onComplete }: PreloaderProps) {
   const [count, setCount] = useState(0);
-  const [isFinished, setIsFinished] = useState(false);
+  const [isDone, setIsDone] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const topCurtainRef = useRef<HTMLDivElement | null>(null);
-  const bottomCurtainRef = useRef<HTMLDivElement | null>(null);
-  const nameRef = useRef<HTMLDivElement | null>(null);
+  const nameLine1Ref = useRef<HTMLSpanElement | null>(null);
+  const nameLine2Ref = useRef<HTMLSpanElement | null>(null);
+  const metaLineRef = useRef<HTMLDivElement | null>(null);
+  const counterSlotRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Respect reduced motion
+    // Check if previously visited in this session or test flag
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const alreadySeen = sessionStorage.getItem("searon_preloader_seen");
+      if (alreadySeen || urlParams.get("nopreload") === "1") {
+        queueMicrotask(() => {
+          setIsDone(true);
+          onComplete?.();
+        });
+        return;
+      }
+    } catch {
+      // Ignore storage errors in private browsing
+    }
+
+    // Check reduced motion
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
     if (prefersReducedMotion) {
-      const timer = setTimeout(() => {
-        setIsFinished(true);
+      try {
+        sessionStorage.setItem("searon_preloader_seen", "1");
+      } catch {}
+      queueMicrotask(() => {
+        setIsDone(true);
         onComplete?.();
-      }, 0);
-      return () => clearTimeout(timer);
+      });
+      return;
     }
 
+    // Animate counter 000 -> 100
     let current = 0;
     const interval = setInterval(() => {
-      current += Math.floor(Math.random() * 4) + 1;
+      current += Math.floor(Math.random() * 5) + 2;
       if (current >= 100) {
         current = 100;
         clearInterval(interval);
         setCount(100);
 
-        // Sequence preloader outro
+        // Sequence masked lines reveal
         const tl = gsap.timeline({
           onComplete: () => {
-            setIsFinished(true);
+            try {
+              sessionStorage.setItem("searon_preloader_seen", "1");
+            } catch {}
+            setIsDone(true);
             onComplete?.();
           },
         });
 
-        tl.to(nameRef.current, {
-          opacity: 1,
-          y: 0,
-          duration: 0.6,
-          ease: "power3.out",
+        // 1. Fade the counter slot slightly
+        tl.to(counterSlotRef.current, {
+          opacity: 0.35,
+          duration: 0.3,
+          ease: "power2.out",
         })
-          .to(
-            nameRef.current,
+          // 2. Reveal masked name lines
+          .fromTo(
+            [nameLine1Ref.current, nameLine2Ref.current],
+            { yPercent: 110 },
             {
-              opacity: 0,
-              y: -20,
-              duration: 0.4,
-              delay: 0.4,
-              ease: "power2.in",
-            }
-          )
-          .to(
-            topCurtainRef.current,
-            {
-              yPercent: -100,
-              duration: 0.85,
-              ease: "expo.inOut",
+              yPercent: 0,
+              duration: 0.75,
+              stagger: 0.12,
+              ease: "power3.out",
             },
             "-=0.1"
           )
-          .to(
-            bottomCurtainRef.current,
+          .fromTo(
+            metaLineRef.current,
+            { opacity: 0, y: 10 },
             {
-              yPercent: 100,
-              duration: 0.85,
-              ease: "expo.inOut",
+              opacity: 1,
+              y: 0,
+              duration: 0.5,
+              ease: "power2.out",
             },
-            "<"
-          );
+            "-=0.4"
+          )
+          // 3. Pause for comprehension
+          .to({}, { duration: 0.5 })
+          // 4. Slide out curtain smoothly
+          .to(containerRef.current, {
+            yPercent: -100,
+            duration: 0.85,
+            ease: "power4.inOut",
+          });
       } else {
         setCount(current);
       }
-    }, 28);
+    }, 24);
 
     return () => clearInterval(interval);
   }, [onComplete]);
 
-  if (isFinished) return null;
+  if (isDone) return null;
 
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[100] flex flex-col pointer-events-none select-none overflow-hidden"
+      className="fixed inset-0 z-[1000] bg-[#08080a] text-[#f2efe9] flex flex-col justify-between p-6 sm:p-10 lg:p-16 select-none overflow-hidden"
+      aria-live="polite"
+      aria-label="Loading portfolio"
     >
-      {/* Top Half Curtain */}
+      {/* Top Left Monospace Counter */}
       <div
-        ref={topCurtainRef}
-        className="w-full flex-1 bg-[#050505] border-b border-white/10 flex items-end justify-center pb-8"
+        ref={counterSlotRef}
+        className="font-mono text-xs uppercase tracking-widest flex items-center gap-3 text-[#edebe6]/80"
       >
+        <span className="w-2 h-2 rounded-full bg-[#edebe6] animate-pulse" />
+        <span className="tabular-nums">
+          SYSTEM LOAD · {count.toString().padStart(3, "0")} / 100
+        </span>
+      </div>
+
+      {/* Top Right Reference Meta */}
+      <div className="font-mono text-label uppercase tracking-widest text-[#edebe6]/75 text-right hidden sm:block tabular-nums">
+        KTM 27.7172° N · 85.3240° E
+      </div>
+
+      {/* Center Masked Name Reveal */}
+      <div className="my-auto max-w-4xl">
+        <div className="overflow-hidden py-[0.1em] -my-[0.1em]">
+          <span
+            ref={nameLine1Ref}
+            className="block font-[family-name:var(--font-display)] text-display tracking-[-0.035em] leading-[1.05] font-light translate-y-[110%]"
+          >
+            Searon
+          </span>
+        </div>
+        <div className="overflow-hidden mt-1 sm:mt-2 py-[0.1em] -my-[0.1em]">
+          <span
+            ref={nameLine2Ref}
+            className="block font-[family-name:var(--font-display)] text-display tracking-[-0.035em] leading-[1.05] font-light italic translate-y-[110%]"
+          >
+            Maharjan
+          </span>
+        </div>
         <div
-          ref={nameRef}
-          className="opacity-0 translate-y-6 text-center transition-transform"
+          ref={metaLineRef}
+          className="mt-6 font-mono text-label uppercase tracking-widest text-[#edebe6]/75 opacity-0"
         >
-          <div className="font-mono text-xs uppercase tracking-[0.3em] text-[var(--accent)] mb-2">
-            INITIALIZING SYSTEM · KTM 27.71°N 85.32°E
-          </div>
-          <div className="font-[family-name:var(--font-syne)] text-4xl sm:text-6xl font-extrabold tracking-tighter text-[#f5f5f3]">
-            SEARON MAHARJAN
-          </div>
+          Website & App Designer · Kathmandu
         </div>
       </div>
 
-      {/* Bottom Half Curtain */}
-      <div
-        ref={bottomCurtainRef}
-        className="w-full flex-1 bg-[#050505] border-t border-white/10 flex items-start justify-center pt-8"
-      >
-        <div className="flex flex-col items-center gap-2">
-          <div className="font-mono text-3xl sm:text-5xl font-light text-[#f5f5f3] tracking-widest tabular-nums">
-            {count.toString().padStart(3, "0")}
-            <span className="text-[var(--accent)] text-lg sm:text-2xl ml-1">
-              %
-            </span>
-          </div>
-          <div className="font-mono text-[11px] text-[#8e8e93] tracking-widest uppercase">
-            CALIBRATING REALTIME GRAPHICS
-          </div>
-        </div>
+      {/* Bottom Bar: Status */}
+      <div className="flex items-center justify-between border-t border-white/[0.08] pt-4 font-mono text-label uppercase tracking-widest text-[#edebe6]/75">
+        <span>PORTFOLIO © 2026</span>
+        <span>TWO-TONE · NO ASSET OVERHEAD</span>
       </div>
     </div>
   );

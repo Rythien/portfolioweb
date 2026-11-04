@@ -31,7 +31,7 @@ export default function ChristenDitherHero({
     ).matches;
 
     const inkColor = [5 / 255, 5 / 255, 5 / 255];
-    const paperColor = [242 / 255, 242 / 255, 238 / 255];
+    const paperColor = [237 / 255, 235 / 255, 230 / 255];
 
     let animId: number;
     let isVisible = true;
@@ -174,18 +174,16 @@ export default function ChristenDitherHero({
           float bands=0.08*sin(dot(p,vec3(9.0,7.0,5.0))+uTime*0.6);
           lum=0.03+diff*0.8+rim*0.3+bands;
         } else {
-          // halo + starfield
-          float r=length(uv);
-          lum=max(0.0,0.14*exp(-r*2.2)-0.06);
-          if(uFocus.z>0.0) lum*=0.35;
-          float star=step(0.997,fract(sin(dot(cell,vec2(12.9898,78.233)))*43758.5453));
-          lum+=star*0.6*(0.5+0.5*sin(uTime*2.0+cell.x));
+          // Soft atmospheric dither halo around the breathing sphere
+          float r = length(uv);
+          lum = max(0.0, 0.16 * exp(-r * 2.4) - 0.05);
+          if (uFocus.z > 0.0) lum *= 0.35;
         }
         lum*=(1.0-uScroll*0.55)*(portrait&&uCenter<0.5?0.85:1.0);
 
-        float threshold=bayer8(cell);
-        float on=step(threshold,clamp(lum,0.0,1.0)*0.98);
-        gl_FragColor=vec4(mix(uInk,uPaper,on),1.0);
+        float threshold = bayer8(cell);
+        float on = lum > 0.04 ? step(threshold, clamp(lum, 0.0, 1.0) * 0.98) : 0.0;
+        gl_FragColor = vec4(mix(uInk, uPaper, on), 1.0);
       }
     `;
 

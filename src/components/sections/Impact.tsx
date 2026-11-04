@@ -1,82 +1,79 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
-import { PORTFOLIO_DATA } from "@/data/portfolio";
-import { gsap } from "gsap";
+import React from "react";
+import KineticHeading from "@/components/ui/Kinetic";
+import Counter from "@/components/ui/Counter";
 
 export default function Impact() {
-  const containerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (!prefersReducedMotion) {
-      const ctx = gsap.context(() => {
-        gsap.from(".metric-card", {
-          scrollTrigger: {
-            trigger: containerRef.current,
-            start: "top 75%",
-            toggleActions: "play none none reverse",
-          },
-          y: 35,
-          opacity: 0,
-          duration: 0.85,
-          stagger: 0.12,
-          ease: "power3.out",
-        });
-      }, containerRef);
-
-      return () => ctx.revert();
-    }
-  }, []);
-
   return (
     <section
-      ref={containerRef}
-      id="impact"
-      aria-labelledby="impact-heading"
-      className="py-24 sm:py-32 lg:py-40 max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 hairline-b"
+      id="results"
+      aria-label="Numbers and impact"
+      className="py-24 sm:py-32 border-b border-white/[0.08]"
     >
-      <div className="flex items-center justify-between font-mono text-xs text-[var(--text-muted)] tracking-widest uppercase mb-12 sm:mb-16">
-        <span className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 bg-[var(--accent)]" />
-          [ 05 / 10 ] · QUANTITATIVE OUTCOMES
-        </span>
-        <span>VERIFIED BENCHMARKS</span>
-      </div>
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
+        {/* Section Header */}
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 mb-12 sm:mb-16">
+          <span className="font-mono text-label uppercase tracking-widest text-[#edebe6]/75">
+            #07 · NUMBERS
+          </span>
+          <span className="font-mono text-label uppercase tracking-widest text-[#edebe6]/75">
+            IMPACT & MILESTONES
+          </span>
+        </div>
 
-      <div className="mb-14">
-        <h2
-          id="impact-heading"
-          className="font-[family-name:var(--font-syne)] text-3xl sm:text-5xl font-bold tracking-tight text-[var(--text-primary)]"
-        >
-          Measurable Engineering Results.
-        </h2>
-      </div>
-
-      {/* 4-Column High-Impact Metric Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 border border-white/10">
-        {PORTFOLIO_DATA.metrics.map((metric) => (
-          <div
-            key={metric.label}
-            className="metric-card bg-[var(--bg-void)] p-8 sm:p-10 flex flex-col justify-between hover:bg-[var(--bg-surface)] transition-colors duration-300"
+        {/* Section Intro */}
+        <div className="mb-14 sm:mb-20 max-w-2xl">
+          <KineticHeading
+            as="h2"
+            className="text-h1 font-light text-[#edebe6]"
           >
-            <div className="font-mono text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tighter text-[var(--accent)] mb-4 tabular-nums">
-              {metric.number}
-            </div>
+            Numbers.
+          </KineticHeading>
+        </div>
 
-            <div>
-              <div className="font-[family-name:var(--font-syne)] text-lg font-bold text-[var(--text-primary)] mb-2">
-                {metric.label}
-              </div>
-              <p className="font-mono text-xs text-[var(--text-secondary)] leading-relaxed">
-                {metric.subtext}
-              </p>
+        {/* 4 Numbers as open columns separated by hairlines */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-t border-b border-white/[0.08] divide-y sm:divide-y-0 sm:divide-x divide-white/[0.08]">
+          {/* Number 1: 4 years */}
+          <div className="py-8 sm:py-10 sm:px-6 lg:px-8 first:sm:pl-0 flex flex-col justify-between min-h-[180px]">
+            <div className="font-mono text-display sm:text-6xl font-light text-[#edebe6] tabular-nums">
+              <Counter value={4} />
             </div>
+            <p className="font-[family-name:var(--font-sans)] text-body text-[#edebe6]/80 leading-relaxed mt-6 max-w-[65ch] [text-wrap:pretty]">
+              years studying BICT (2021–2025)
+            </p>
           </div>
-        ))}
+
+          {/* Number 2: 1 full e-commerce */}
+          <div className="py-8 sm:py-10 sm:px-6 lg:px-8 flex flex-col justify-between min-h-[180px]">
+            <div className="font-mono text-display sm:text-6xl font-light text-[#edebe6] tabular-nums">
+              <Counter value={1} />
+            </div>
+            <p className="font-[family-name:var(--font-sans)] text-body text-[#edebe6]/80 leading-relaxed mt-6 max-w-[65ch] [text-wrap:pretty]">
+              full e-commerce website built from scratch (capstone)
+            </p>
+          </div>
+
+          {/* Number 3: 6 steps */}
+          <div className="py-8 sm:py-10 sm:px-6 lg:px-8 flex flex-col justify-between min-h-[180px]">
+            <div className="font-mono text-display sm:text-6xl font-light text-[#edebe6] tabular-nums">
+              <Counter value={6} />
+            </div>
+            <p className="font-[family-name:var(--font-sans)] text-body text-[#edebe6]/80 leading-relaxed mt-6 max-w-[65ch] [text-wrap:pretty]">
+              steps on every project, from first sketch to launch
+            </p>
+          </div>
+
+          {/* Number 4: Placeholder */}
+          <div className="py-8 sm:py-10 sm:px-6 lg:px-8 last:sm:pr-0 flex flex-col justify-between min-h-[180px]">
+            <div className="font-mono text-label uppercase tracking-widest text-[#edebe6]/60 pt-2">
+              [PLACEHOLDER]
+            </div>
+            <p className="font-mono text-label text-[#edebe6]/75 leading-relaxed mt-6">
+              [One more number: for example, 1 internship, or N projects built]
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );

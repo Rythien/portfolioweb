@@ -1,179 +1,98 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { PORTFOLIO_DATA } from "@/data/portfolio";
-import { gsap } from "gsap";
+import React from "react";
+import KineticHeading from "@/components/ui/Kinetic";
+import Expandable from "@/components/ui/Expandable";
+import { HiddenStar } from "@/contexts/StarContext";
 
 export default function Experience() {
-  const [expandedId, setExpandedId] = useState<string | null>("exp-1");
-  const containerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (!prefersReducedMotion) {
-      const ctx = gsap.context(() => {
-        gsap.from(".timeline-row", {
-          scrollTrigger: {
-            trigger: containerRef.current,
-            start: "top 75%",
-            toggleActions: "play none none reverse",
-          },
-          y: 35,
-          opacity: 0,
-          duration: 0.8,
-          stagger: 0.15,
-          ease: "power3.out",
-        });
-      }, containerRef);
-
-      return () => ctx.revert();
-    }
-  }, []);
-
-  const toggleExpand = (id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
-
   return (
     <section
-      ref={containerRef}
       id="path"
-      aria-labelledby="path-heading"
-      className="py-24 sm:py-32 lg:py-40 max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 hairline-b"
+      aria-label="Experience and education"
+      className="py-24 sm:py-32 border-b border-white/[0.08]"
     >
-      <div className="flex items-center justify-between font-mono text-xs text-[var(--text-muted)] tracking-widest uppercase mb-12 sm:mb-16">
-        <span className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 bg-[var(--accent)]" />
-          [ 04 / 10 ] · CAREER TIMELINE / PATH
-        </span>
-        <span>2020 — 2026 ARCHIVE</span>
-      </div>
-
-      <div className="mb-14">
-        <h2
-          id="path-heading"
-          className="font-[family-name:var(--font-syne)] text-3xl sm:text-5xl font-bold tracking-tight text-[var(--text-primary)]"
-        >
-          Engineering History &amp; Milestones.
-        </h2>
-      </div>
-
-      {/* Vertical Timeline Accordion */}
-      <div className="divide-y divide-white/10 border-t border-b border-white/10">
-        {PORTFOLIO_DATA.experience.map((item) => {
-          const isExpanded = expandedId === item.id;
-
-          return (
-            <div key={item.id} className="timeline-row group py-8 sm:py-10 transition-colors duration-300">
-              <div
-                onClick={() => toggleExpand(item.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    toggleExpand(item.id);
-                  }
-                }}
-                aria-expanded={isExpanded}
-                className="cursor-pointer flex flex-col md:flex-row md:items-baseline justify-between gap-4 select-none"
-              >
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-3 font-mono text-xs text-[var(--accent)]">
-                    <span>{item.period}</span>
-                    <span>·</span>
-                    <span className="text-[var(--text-muted)]">{item.location}</span>
-                  </div>
-
-                  <h3 className="font-[family-name:var(--font-syne)] text-2xl sm:text-3xl font-bold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
-                    {item.role}
-                  </h3>
-
-                  <div className="font-mono text-sm text-[var(--text-secondary)]">
-                    @ {item.company}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 font-mono text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
-                  <span>{isExpanded ? "[ COLLAPSE − ]" : "[ DETAILS + ]"}</span>
-                </div>
-              </div>
-
-              {/* High-level summary */}
-              <p className="mt-4 max-w-3xl text-sm sm:text-base text-[var(--text-secondary)] font-light leading-relaxed">
-                {item.summary}
-              </p>
-
-              {/* Expandable Results and Stack */}
-              {isExpanded && (
-                <div className="mt-6 pt-6 border-t border-white/5 space-y-6 animate-fadeIn">
-                  <div>
-                    <div className="font-mono text-xs uppercase text-[var(--text-muted)] tracking-wider mb-3">
-                      KEY DELIVERABLES &amp; IMPACT
-                    </div>
-                    <ul className="space-y-3 font-mono text-xs sm:text-sm text-[var(--text-secondary)]">
-                      {item.results.map((res, i) => (
-                        <li key={i} className="flex items-start gap-3">
-                          <span className="text-[var(--accent)] font-bold mt-0.5">↳</span>
-                          <span>{res}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <div className="font-mono text-xs uppercase text-[var(--text-muted)] tracking-wider mb-2">
-                      CORE TECHNOLOGIES
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {item.stack.map((s) => (
-                        <span
-                          key={s}
-                          className="font-mono text-[11px] px-2.5 py-1 bg-[var(--bg-surface-elevated)] border border-white/10 text-[var(--text-primary)]"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Education & Academic Rigor Section */}
-      <div className="mt-16 pt-12 border-t border-white/10">
-        <div className="font-mono text-xs uppercase text-[var(--text-muted)] tracking-widest mb-6">
-          ACADEMIC RIGOR &amp; INDEPENDENT RESEARCH
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
+        {/* Section Header */}
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 mb-12 sm:mb-16">
+          <div className="flex items-center gap-3 font-mono text-label uppercase tracking-widest text-[#edebe6]/75">
+            <span>#06 · PATH</span>
+            <HiddenStar id="path-star" />
+          </div>
+          <span className="font-mono text-label uppercase tracking-widest text-[#edebe6]/75">
+            EXPERIENCE & EDUCATION
+          </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {PORTFOLIO_DATA.education.map((edu) => (
-            <div
-              key={edu.institution}
-              className="border border-white/10 p-6 bg-[var(--bg-surface)] flex flex-col justify-between space-y-4"
-            >
-              <div>
-                <div className="font-mono text-xs text-[var(--accent)] mb-1">
-                  {edu.period} · {edu.location}
+        {/* Section Intro */}
+        <div className="mb-14 sm:mb-20 max-w-2xl">
+          <KineticHeading
+            as="h2"
+            className="text-h1 font-light text-[#edebe6]"
+          >
+            Path.
+          </KineticHeading>
+          <p className="mt-3 font-mono text-label uppercase tracking-widest text-[#edebe6]/75">
+            Experience and education milestones.
+          </p>
+        </div>
+
+        {/* Experience Entries as specified verbatim */}
+        <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
+          {/* Entry #1: 2024 Internship */}
+          <div className="py-10 sm:py-12">
+            <Expandable
+              previewContent={
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-label uppercase tracking-wider text-[#edebe6]/75 tabular-nums">
+                    <span>2024</span>
+                    <span>[Company or organization name, Kathmandu]</span>
+                  </div>
+                  <h3 className="font-[family-name:var(--font-display)] text-h3 font-light text-[#edebe6] mt-2">
+                    [INTERNSHIP / ROLE TITLE]
+                  </h3>
+                  <p className="font-[family-name:var(--font-sans)] text-body text-[#edebe6]/80 leading-relaxed mt-1 max-w-[65ch] [text-wrap:pretty]">
+                    Used Blender to build 3D models and renders.
+                  </p>
+                  <p className="font-mono text-label text-[#edebe6]/75 mt-1">
+                    [One short line on what you did]
+                  </p>
                 </div>
-                <h4 className="font-[family-name:var(--font-syne)] text-lg sm:text-xl font-bold text-[var(--text-primary)]">
-                  {edu.degree}
-                </h4>
-                <div className="font-mono text-xs text-[var(--text-muted)] mt-1">
-                  {edu.institution}
+              }
+              expandedContent={
+                <div className="font-[family-name:var(--font-sans)] text-small text-[#edebe6]/75 pt-2 space-y-1">
+                  <p>• 3D modeling and rendering in Blender</p>
+                  <p>• [Additional project detail or output]</p>
                 </div>
-              </div>
-              <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed font-light">
-                {edu.details}
-              </p>
-            </div>
-          ))}
+              }
+            />
+          </div>
+
+          {/* Entry #2: 2021 — 2025 Education & Capstone */}
+          <div className="py-10 sm:py-12">
+            <Expandable
+              previewContent={
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-label uppercase tracking-wider text-[#edebe6]/75 tabular-nums">
+                    <span>2021–2025</span>
+                    <span>Asia&nbsp;e&nbsp;University</span>
+                  </div>
+                  <h3 className="font-[family-name:var(--font-display)] text-h3 font-light text-[#edebe6] mt-2">
+                    Bachelor of Information and Communication Technology (BICT)
+                  </h3>
+                  <p className="font-[family-name:var(--font-sans)] text-body text-[#edebe6]/80 leading-relaxed mt-1 max-w-[65ch] [text-wrap:pretty]">
+                    Graduated 2025. Capstone project: designed and built a full e-commerce website.
+                  </p>
+                </div>
+              }
+              expandedContent={
+                <div className="font-[family-name:var(--font-sans)] text-small text-[#edebe6]/75 pt-2 space-y-1">
+                  <p>• Full e-commerce storefront, product catalog, cart, and checkout flow</p>
+                  <p>• Responsive frontend code built with React, Next.js, and Tailwind CSS</p>
+                </div>
+              }
+            />
+          </div>
         </div>
       </div>
     </section>

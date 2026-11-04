@@ -1,72 +1,96 @@
 "use client";
 
-import React from "react";
-import { PORTFOLIO_DATA } from "@/data/portfolio";
+import React, { useRef, useEffect } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { SITE_DATA } from "@/content/site";
+
+gsap.registerPlugin(ScrollTrigger);
 
 export default function About() {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const statementRef = useRef<HTMLParagraphElement | null>(null);
+  const bodyRef = useRef<HTMLParagraphElement | null>(null);
+  const secondLangRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    if (prefersReducedMotion || !sectionRef.current) return;
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        [statementRef.current, bodyRef.current, secondLangRef.current],
+        { opacity: 0, y: 35 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.9,
+          stagger: 0.18,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top 75%",
+            toggleActions: "play none none reverse",
+          },
+        }
+      );
+    }, sectionRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
     <section
+      ref={sectionRef}
       id="about"
-      aria-labelledby="about-heading"
-      className="py-24 sm:py-32 lg:py-40 border-t border-white/[0.08] bg-[#050505]"
+      aria-label="About Searon Maharjan"
+      className="py-28 sm:py-36 lg:py-44 border-t border-white/[0.08] relative"
     >
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-12">
-        <div className="flex items-center justify-between font-mono text-xs text-[#8e8b82] tracking-widest uppercase mb-12 sm:mb-16">
-          <span className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 bg-[#edebe6]" />
-            [ 01 / 07 ] · PROFILE &amp; SPECIALIZATION
-          </span>
-          <span>KATHMANDU · NEPAL</span>
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
+        {/* Numbered Section Tag */}
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 mb-16 sm:mb-24 font-mono text-label uppercase tracking-widest text-[#8b8e99]">
+          <span>{SITE_DATA.about.sectionNum} · {SITE_DATA.about.title}</span>
+          <span>ETHOS & ORIGIN</span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
-          {/* Left Column: Narrative */}
-          <div className="lg:col-span-5 space-y-6">
-            <h2
-              id="about-heading"
-              className="font-[family-name:var(--font-display)] text-3xl sm:text-5xl font-normal tracking-tight text-[#edebe6] leading-[1.05]"
-            >
-              From Newari Roots to Digital Architecture.
-            </h2>
+        <div className="max-w-4xl">
+          {/* Large statement paragraph with one italic accent word */}
+          <p
+            ref={statementRef}
+            className="font-[family-name:var(--font-display)] text-h1 font-light leading-[1.12] text-[#f2efe9] tracking-[-0.025em] [text-wrap:pretty]"
+          >
+            {SITE_DATA.about.statementPrefix}{" "}
+            <span className="italic text-[#d8d4cb] font-serif font-normal">
+              {SITE_DATA.about.statementItalic}
+            </span>{" "}
+            {SITE_DATA.about.statementSuffix}
+          </p>
 
-            <p className="text-base sm:text-lg text-[#8e8b82] font-light leading-relaxed">
-              {PORTFOLIO_DATA.personal.bio}
+          {/* Longer explanatory body paragraph */}
+          <p
+            ref={bodyRef}
+            className="mt-10 sm:mt-14 font-[family-name:var(--font-sans)] text-body-lg text-[#8b8e99] leading-relaxed max-w-[65ch] [text-wrap:pretty]"
+          >
+            {SITE_DATA.about.body}
+          </p>
+
+          {/* Second language version below it (Nepali script + English translation) */}
+          <div
+            ref={secondLangRef}
+            className="mt-14 sm:mt-20 pt-8 sm:pt-10 border-t border-white/[0.08] flex flex-col gap-3 font-mono text-xs"
+          >
+            <div className="text-label uppercase tracking-widest text-[#8b8e99]">
+              {SITE_DATA.about.secondaryLanguage.lang}
+            </div>
+            <p className="font-[family-name:var(--font-sans)] text-base sm:text-lg text-[#f2efe9]/90 italic leading-relaxed">
+              &ldquo;{SITE_DATA.about.secondaryLanguage.quote}&rdquo;
             </p>
-
-            <p className="text-sm sm:text-base text-[#8e8b82]/80 font-light leading-relaxed border-l border-white/20 pl-4 italic">
-              &ldquo;{PORTFOLIO_DATA.personal.originStory}&rdquo;
+            <p className="text-label text-[#8b8e99] leading-relaxed max-w-[65ch]">
+              {SITE_DATA.about.secondaryLanguage.translation}
             </p>
-          </div>
-
-          {/* Right Column: 3 Focus Cards (#01, #02, #03) */}
-          <div className="lg:col-span-7 flex flex-col divide-y divide-white/10 border-t border-b border-white/10 lg:border-t-0">
-            {PORTFOLIO_DATA.focusAreas.map((area) => (
-              <div key={area.number} className="py-8 sm:py-10 group">
-                <div className="flex items-center justify-between font-mono text-xs mb-2">
-                  <span className="text-white font-semibold">{area.number} · {area.title.split(" ")[0].toUpperCase()}</span>
-                  <span className="text-[#8e8b82]">{area.tagline}</span>
-                </div>
-
-                <h3 className="font-[family-name:var(--font-display)] text-2xl font-normal text-[#edebe6] mb-3">
-                  {area.title}
-                </h3>
-
-                <p className="text-sm text-[#8e8b82] font-light leading-relaxed mb-4">
-                  {area.description}
-                </p>
-
-                <div className="flex flex-wrap gap-2">
-                  {area.tech.map((t) => (
-                    <span
-                      key={t}
-                      className="font-mono text-[11px] px-2.5 py-1 border border-white/10 text-[#8e8b82]"
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </div>

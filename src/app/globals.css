@@ -1,12 +1,31 @@
 @import "tailwindcss";
 
+@theme {
+  --font-display: var(--font-display), "Newsreader", Georgia, serif;
+  --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+  --color-void: #050505;
+  --color-paper: #edebe6;
+}
+
 :root {
-  --bg-color: #0b0b0b;
+  --bg-color: #050505;
   --text-color: #edebe6;
-  --text-muted: #8e8b82;
+  --text-muted: rgba(237, 235, 230, 0.75);
   --border-subtle: rgba(237, 235, 230, 0.12);
   --border-hover: rgba(237, 235, 230, 0.35);
+  --accent: #edebe6;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+}
+
+html[data-theme="inverted"] {
+  --bg-color: #edebe6;
+  --text-color: #050505;
+  --text-muted: rgba(5, 5, 5, 0.55);
+  --border-subtle: rgba(5, 5, 5, 0.12);
+  --border-hover: rgba(5, 5, 5, 0.35);
+  --accent: #050505;
 }
 
 @layer base {
@@ -14,6 +33,7 @@
     scroll-behavior: initial;
     background-color: var(--bg-color);
     color: var(--text-color);
+    transition: background-color 0.4s var(--ease-out-expo), color 0.4s var(--ease-out-expo);
   }
 
   body {
@@ -22,12 +42,75 @@
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   ::selection {
-    background: #edebe6;
-    color: #0b0b0b;
+    background: var(--text-color);
+    color: var(--bg-color);
   }
+}
+
+/* Typography Token Utilities (Fluid scale with rem anchor for WCAG 1.4.4 zoom compliance) */
+@utility text-display {
+  font-size: clamp(3.75rem, 2.5rem + 5vw, 7.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+
+@utility text-h1 {
+  font-size: clamp(2.5rem, 1.8rem + 3vw, 4.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+@utility text-h2 {
+  font-size: clamp(1.75rem, 1.4rem + 1.5vw, 2.75rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+@utility text-h3 {
+  font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.625rem);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+@utility text-body-lg {
+  font-size: clamp(1.125rem, 1.05rem + 0.3vw, 1.25rem);
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+}
+
+@utility text-body {
+  font-size: clamp(0.9375rem, 0.9rem + 0.15vw, 1rem);
+  line-height: 1.65;
+  letter-spacing: 0em;
+}
+
+@utility text-small {
+  font-size: clamp(0.8125rem, 0.8rem + 0.05vw, 0.875rem);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+@utility text-label {
+  font-size: 0.75rem; /* 12px minimum floor */
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+}
+
+@utility tnum {
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Custom Scrollbar for Lenis */
@@ -40,15 +123,15 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(237, 235, 230, 0.2);
+  background: var(--border-subtle);
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(237, 235, 230, 0.4);
+  background: var(--border-hover);
 }
 
-/* Lenis */
+/* Lenis CSS integration */
 html.lenis, html.lenis body {
   height: auto;
 }
@@ -67,12 +150,33 @@ html.lenis, html.lenis body {
 
 /* Accessible Focus States */
 a:focus-visible,
-button:focus-visible {
-  outline: 1px solid #edebe6;
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 1.5px solid var(--text-color);
   outline-offset: 4px;
 }
 
-/* Reduced motion */
+/* View Transition support for negative mode */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Cursor overrides when custom cursor is active on desktop */
+@media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  body.has-custom-cursor,
+  body.has-custom-cursor a,
+  body.has-custom-cursor button,
+  body.has-custom-cursor [role="button"],
+  body.has-custom-cursor [data-cursor],
+  body.has-custom-cursor [data-magnetic] {
+    cursor: none !important;
+  }
+}
+
+/* Reduced motion standard */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01s !important;

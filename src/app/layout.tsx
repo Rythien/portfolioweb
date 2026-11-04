@@ -1,36 +1,80 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Serif, Geist, Geist_Mono } from "next/font/google";
+import { Newsreader, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import CustomCursor from "@/components/common/CustomCursor";
+import { DreamModeProvider } from "@/contexts/DreamModeContext";
+import { SITE_DATA } from "@/content/site";
 
-const instrumentSerif = Instrument_Serif({
+const newsreader = Newsreader({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: "400",
   display: "swap",
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+  adjustFontFallback: true,
 });
 
 const geist = Geist({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
+  adjustFontFallback: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
+  adjustFontFallback: true,
 });
 
 export const viewport: Viewport = {
-  themeColor: "#0b0b0b",
+  themeColor: "#08080a",
   width: "device-width",
   initialScale: 1,
 };
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://searonmaharjan.com"),
-  title: "Searon Maharjan — Frontend Developer",
-  description: "Frontend developer based in Kathmandu.",
+  title: `${SITE_DATA.brand.name} — ${SITE_DATA.brand.role}`,
+  description: `${SITE_DATA.brand.tagline} Portfolio of ${SITE_DATA.brand.name}, based in ${SITE_DATA.brand.city}, ${SITE_DATA.brand.country}.`,
+  authors: [{ name: SITE_DATA.brand.name }],
+  creator: SITE_DATA.brand.name,
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://searonmaharjan.com",
+    title: `${SITE_DATA.brand.name} — ${SITE_DATA.brand.role}`,
+    description: `${SITE_DATA.brand.tagline} Portfolio of ${SITE_DATA.brand.name}, based in ${SITE_DATA.brand.city}, ${SITE_DATA.brand.country}.`,
+    siteName: `${SITE_DATA.brand.name} Portfolio`,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_DATA.brand.name} — ${SITE_DATA.brand.role}`,
+    description: `${SITE_DATA.brand.tagline} Portfolio of ${SITE_DATA.brand.name}, based in ${SITE_DATA.brand.city}, ${SITE_DATA.brand.country}.`,
+  },
+};
+
+const personStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "Person",
+  name: SITE_DATA.brand.name,
+  jobTitle: SITE_DATA.brand.role,
+  description: `${SITE_DATA.brand.tagline} Web & Interactive Designer and Creative Developer based in ${SITE_DATA.brand.city}, ${SITE_DATA.brand.country}.`,
+  address: {
+    "@type": "PostalAddress",
+    addressLocality: SITE_DATA.brand.city,
+    addressCountry: "NP",
+  },
+  alumniOf: {
+    "@type": "EducationalOrganization",
+    name: "Asia e University",
+  },
+  url: "https://searonmaharjan.com",
+  sameAs: [
+    "https://github.com/rythien",
+    "https://linkedin.com/in/searon-maharjan",
+  ],
 };
 
 export default function RootLayout({
@@ -41,10 +85,21 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${instrumentSerif.variable} ${geist.variable} ${geistMono.variable} antialiased`}
+      className={`${newsreader.variable} ${geist.variable} ${geistMono.variable} antialiased`}
     >
-      <body className="font-[family-name:var(--font-sans)] bg-[#0b0b0b] text-[#edebe6] min-h-screen">
-        {children}
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(personStructuredData),
+          }}
+        />
+      </head>
+      <body className="font-[family-name:var(--font-sans)] bg-[#08080a] text-[#f2efe9] min-h-screen selection:bg-[#f2efe9] selection:text-[#08080a]">
+        <CustomCursor />
+        <DreamModeProvider>
+          {children}
+        </DreamModeProvider>
       </body>
     </html>
   );

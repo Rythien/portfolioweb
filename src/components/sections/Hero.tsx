@@ -1,143 +1,142 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { gsap } from "gsap";
+import { SITE_DATA } from "@/content/site";
 import ChristenDitherHero from "@/components/canvas/ChristenDitherHero";
 
 export default function Hero() {
   const containerRef = useRef<HTMLElement | null>(null);
   const line1Ref = useRef<HTMLDivElement | null>(null);
   const line2Ref = useRef<HTMLDivElement | null>(null);
-  const [time, setTime] = useState<{ hours: string; minutes: string; seconds: string }>({
-    hours: "21",
-    minutes: "38",
-    seconds: "00",
-  });
+  const metaRef = useRef<HTMLDivElement | null>(null);
+  const footerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "Asia/Kathmandu",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }).formatToParts(now);
-
-      const h = parts.find((p) => p.type === "hour")?.value || "21";
-      const m = parts.find((p) => p.type === "minute")?.value || "38";
-      const s = parts.find((p) => p.type === "second")?.value || "00";
-      setTime({ hours: h, minutes: m, seconds: s });
-    };
-
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    if (!prefersReducedMotion && containerRef.current) {
-      const ctx = gsap.context(() => {
-        gsap.fromTo(
-          [line1Ref.current, line2Ref.current],
-          { yPercent: 105 },
-          { yPercent: 0, duration: 1.15, stagger: 0.12, ease: "power3.out" }
-        );
-      }, containerRef);
-
-      return () => {
-        clearInterval(interval);
-        ctx.revert();
-      };
+    if (prefersReducedMotion) {
+      if (line1Ref.current) line1Ref.current.style.transform = "none";
+      if (line2Ref.current) line2Ref.current.style.transform = "none";
+      if (metaRef.current) metaRef.current.style.opacity = "1";
+      if (footerRef.current) footerRef.current.style.opacity = "1";
+      return;
     }
 
-    return () => clearInterval(interval);
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ delay: 0.15 });
+
+      // Staggered per-line text reveal
+      tl.fromTo(
+        [line1Ref.current, line2Ref.current],
+        { yPercent: 115, opacity: 0 },
+        {
+          yPercent: 0,
+          opacity: 1,
+          duration: 1.1,
+          stagger: 0.16,
+          ease: "power3.out",
+        }
+      )
+        // Fade in metadata, discipline list, and footer hints
+        .fromTo(
+          [metaRef.current, footerRef.current],
+          { opacity: 0, y: 15 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.8,
+            stagger: 0.12,
+            ease: "power2.out",
+          },
+          "-=0.4"
+        );
+    }, containerRef);
+
+    return () => ctx.revert();
   }, []);
 
   return (
     <section
       ref={containerRef}
-      id="hero"
-      aria-label="Introduction"
-      className="relative min-h-screen flex flex-col justify-between pt-16 overflow-hidden bg-[#050505]"
+      id="top"
+      aria-label="Hero Introduction"
+      className="relative min-h-screen flex flex-col justify-between pt-28 pb-10 sm:pb-14 px-6 sm:px-10 lg:px-16 max-w-7xl mx-auto w-full overflow-hidden select-none"
     >
-      {/* Real christendijoux.com 3D Raymarched 8x8 Bayer Dither Sphere */}
-      <ChristenDitherHero className="opacity-90" />
+      {/* Ambient Dither Sphere Canvas Backdrop */}
+      <div className="absolute inset-0 pointer-events-none opacity-40 z-0">
+        <ChristenDitherHero />
+      </div>
 
-      {/* christendijoux.com 4-Column Editorial Metadata Strip */}
-      <div className="relative z-10 w-full border-b border-white/[0.08] bg-[#050505]/70 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 py-3.5 grid grid-cols-2 md:grid-cols-4 gap-4 font-mono text-[11px] tracking-wider uppercase text-[#8e8b82]">
-          <div>
-            <div className="text-white font-medium">SEARON</div>
-            <div className="text-[#8e8b82]/60">MAHARJAN</div>
-          </div>
-          <div>
-            <div className="text-white font-medium">KATHMANDU</div>
-            <div className="text-[#8e8b82]/60">NEPAL · 27.71°N 85.32°E</div>
-          </div>
-          <div className="hidden md:block">
-            <div className="text-white font-medium">CREATIVE DEVELOPER</div>
-            <div className="text-[#8e8b82]/60">FRONTEND &amp; REALTIME SHADERS</div>
-          </div>
-          <div className="text-right">
-            <div className="text-[#8e8b82]/60">LOCAL TIME</div>
-            <div className="text-white font-medium tabular-nums">
-              <span>{time.hours}</span>
-              <span className="animate-pulse">:</span>
-              <span>{time.minutes}</span>
-              <span className="animate-pulse">:</span>
-              <span>{time.seconds}</span>
-              <span className="text-[10px] text-[#8e8b82]/70 ml-1">NPT</span>
-            </div>
-          </div>
+      {/* Top Coordinate & City Reference */}
+      <div className="relative z-10 flex items-center justify-between font-mono text-label uppercase tracking-widest text-[#8b8e99] pt-4">
+        <div className="flex items-center gap-3">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#f2efe9]" />
+          <span>{SITE_DATA.brand.role}</span>
+        </div>
+        <div className="tabular-nums hidden sm:block">
+          {SITE_DATA.brand.coordinates}
         </div>
       </div>
 
-      {/* Main Hero Typography Overlay */}
-      <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 w-full flex-1 flex flex-col justify-center py-16 sm:py-20 pointer-events-none">
-        <div className="max-w-2xl">
-          <div className="font-mono text-xs uppercase tracking-widest text-[#8e8b82] mb-4 pointer-events-auto">
-            [ PORTFOLIO · 2026 ]
-          </div>
-
-          <h1 className="font-[family-name:var(--font-display)] font-normal text-[clamp(3.5rem,12vw,9.5rem)] leading-[0.88] tracking-[-0.015em] text-[#edebe6] select-none pointer-events-auto w-fit">
-            <div className="overflow-hidden">
-              <div ref={line1Ref}>Searon</div>
+      {/* Main Center Display Headline */}
+      <div className="relative z-10 my-auto py-12 max-w-5xl">
+        <h1 className="font-[family-name:var(--font-display)] text-display font-light text-[#f2efe9] leading-[1.04] tracking-[-0.035em]">
+          <div className="overflow-hidden py-[0.08em] -my-[0.08em]">
+            <div ref={line1Ref}>
+              {SITE_DATA.hero.headlineLine1}
             </div>
-            <div className="overflow-hidden">
-              <div ref={line2Ref}>Maharjan</div>
-            </div>
-          </h1>
-
-          <p className="mt-8 text-base sm:text-xl text-[#8e8b82] font-light leading-relaxed pointer-events-auto">
-            Creative developer and frontend architect based in Kathmandu.
-            Designing applications, realtime WebGL shaders, and high-performance digital systems.
-          </p>
-
-          <div className="mt-8 sm:mt-10 flex items-center gap-8 font-mono text-xs uppercase tracking-wider pointer-events-auto">
-            <a
-              href="#projects"
-              className="px-5 py-3 bg-[#edebe6] text-[#050505] font-semibold hover:bg-white transition-colors"
-            >
-              SELECTED WORK ↓
-            </a>
-            <a
-              href="#contact"
-              className="px-5 py-3 border border-white/20 text-[#edebe6] hover:border-white transition-colors"
-            >
-              GET IN TOUCH →
-            </a>
           </div>
+          <div className="overflow-hidden mt-2 sm:mt-4 py-[0.08em] -my-[0.08em]">
+            <div ref={line2Ref} className="italic text-[#d8d4cb]">
+              {SITE_DATA.hero.headlineLine2}
+            </div>
+          </div>
+        </h1>
+
+        {/* Small Discipline List Underneath */}
+        <div
+          ref={metaRef}
+          className="mt-8 sm:mt-12 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-label uppercase tracking-widest text-[#8b8e99]"
+        >
+          {SITE_DATA.hero.disciplines.map((item, idx) => (
+            <React.Fragment key={item}>
+              <span className="text-[#f2efe9]/90 hover:text-white transition-colors">
+                {item}
+              </span>
+              {idx < SITE_DATA.hero.disciplines.length - 1 && (
+                <span className="text-white/20">·</span>
+              )}
+            </React.Fragment>
+          ))}
         </div>
       </div>
 
-      {/* Bottom of hero: thin line, scroll cue left, coordinates right */}
-      <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 w-full pointer-events-none">
-        <div className="border-t border-white/[0.08] py-5 flex items-center justify-between text-xs text-[#8e8b82] font-mono pointer-events-auto">
-          <span>Scroll ↓</span>
-          <span className="tracking-wider">27.7172° N · 85.3240° E · UTC+05:45</span>
+      {/* Bottom Hint Line & Social Link */}
+      <div
+        ref={footerRef}
+        className="relative z-10 flex items-center justify-between border-t border-white/[0.08] pt-6 font-mono text-label uppercase tracking-widest text-[#8b8e99]"
+      >
+        {/* Hint Line */}
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:inline">{SITE_DATA.hero.hint}</span>
+          <span className="sm:hidden">{SITE_DATA.hero.hintTouch}</span>
+          <span className="animate-bounce">↓</span>
+        </div>
+
+        {/* Social Link */}
+        <div>
+          <a
+            href={SITE_DATA.hero.socialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-magnetic
+            className="hover:text-[#f2efe9] underline underline-offset-4 decoration-white/20 transition-colors"
+          >
+            {SITE_DATA.hero.socialLabel} ↗
+          </a>
         </div>
       </div>
     </section>

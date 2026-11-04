@@ -23,11 +23,11 @@ export default function Colophon() {
       <div className="mb-14">
         <h2
           id="colophon-heading"
-          className="font-[family-name:var(--font-syne)] text-3xl sm:text-5xl font-bold tracking-tight text-[var(--text-primary)]"
+          className="font-[family-name:var(--font-display)] text-h1 font-light tracking-tight text-[var(--text-primary)]"
         >
           The Site, Taken Apart.
         </h2>
-        <p className="mt-3 max-w-2xl text-sm sm:text-base text-[var(--text-secondary)] font-light leading-relaxed">
+        <p className="mt-3 max-w-[65ch] text-body text-[var(--text-secondary)] font-normal leading-relaxed [text-wrap:pretty]">
           Full technical disclosure of the frameworks, typography, rendering engines, and ethical design standards powering this portfolio.
         </p>
       </div>
@@ -42,7 +42,7 @@ export default function Colophon() {
             <div className="font-mono text-xs text-[var(--accent)] uppercase">
               {item.name}
             </div>
-            <div className="font-[family-name:var(--font-syne)] text-base sm:text-lg font-semibold text-[var(--text-primary)]">
+            <div className="font-[family-name:var(--font-display)] text-h3 font-light text-[var(--text-primary)]">
               {item.value}
             </div>
           </div>

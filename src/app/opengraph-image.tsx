@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Searon Maharjan — Creative Developer & Frontend Architect";
+export const alt = "Searon Maharjan — Website & App Designer, Kathmandu";
 export const size = {
   width: 1200,
   height: 630,
@@ -19,9 +19,9 @@ export default async function Image() {
           justifyContent: "space-between",
           padding: "80px",
           backgroundColor: "#050505",
-          color: "#f5f5f3",
+          color: "#edebe6",
           fontFamily: "sans-serif",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
+          border: "1px solid rgba(237, 235, 230, 0.12)",
         }}
       >
         <div
@@ -37,11 +37,11 @@ export default async function Image() {
               display: "flex",
               fontSize: "18px",
               letterSpacing: "0.2em",
-              color: "#8e8e93",
+              color: "rgba(237, 235, 230, 0.6)",
               fontFamily: "monospace",
             }}
           >
-            [ KATHMANDU · 27.71°N 85.32°E ]
+            [ KATHMANDU · 27.7172°N 85.3240°E ]
           </div>
           <div
             style={{
@@ -49,7 +49,7 @@ export default async function Image() {
               alignItems: "center",
               gap: "8px",
               fontSize: "16px",
-              color: "#ff3b26",
+              color: "#edebe6",
               fontFamily: "monospace",
             }}
           >
@@ -58,7 +58,7 @@ export default async function Image() {
                 width: "8px",
                 height: "8px",
                 borderRadius: "50%",
-                backgroundColor: "#ff3b26",
+                backgroundColor: "#edebe6",
                 display: "flex",
               }}
             />
@@ -75,21 +75,21 @@ export default async function Image() {
               fontWeight: 800,
               lineHeight: 1.05,
               letterSpacing: "-0.03em",
-              color: "#f5f5f3",
+              color: "#edebe6",
             }}
           >
             <div style={{ display: "flex" }}>SEARON</div>
-            <div style={{ display: "flex", color: "#ff3b26" }}>MAHARJAN</div>
+            <div style={{ display: "flex" }}>MAHARJAN</div>
           </div>
           <div
             style={{
               display: "flex",
               fontSize: "26px",
-              color: "#8e8e93",
+              color: "rgba(237, 235, 230, 0.7)",
               fontWeight: 400,
             }}
           >
-            Creative Developer &amp; Frontend Architect
+            Website and App Designer · Frontend Developer
           </div>
         </div>
 
@@ -99,16 +99,16 @@ export default async function Image() {
             justifyContent: "space-between",
             alignItems: "flex-end",
             paddingTop: "40px",
-            borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+            borderTop: "1px solid rgba(237, 235, 230, 0.12)",
             fontFamily: "monospace",
             fontSize: "16px",
-            color: "#5c5c62",
+            color: "rgba(237, 235, 230, 0.5)",
           }}
         >
           <div style={{ display: "flex" }}>
-            ARCHITECTURAL CODE · REALTIME WEBGL · MOTION SYSTEMS
+            DESIGN · BUILD · SHIP
           </div>
-          <div style={{ display: "flex", color: "#ff3b26" }}>©2026 EDITION</div>
+          <div style={{ display: "flex" }}>© 2026 EDITION</div>
         </div>
       </div>
     ),

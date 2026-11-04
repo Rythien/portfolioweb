@@ -1,38 +1,74 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
 
 export default function CustomCursor() {
   const dotRef = useRef<HTMLDivElement | null>(null);
-  const ringRef = useRef<HTMLDivElement | null>(null);
-  const [cursorText, setCursorText] = useState<string>("");
-  const [isHovered, setIsHovered] = useState(false);
-  const [enabled, setEnabled] = useState(false);
+  const reticleRef = useRef<HTMLDivElement | null>(null);
+  const labelRef = useRef<HTMLSpanElement | null>(null);
+  const [cursorLabel, setCursorLabel] = useState<string>("");
+  const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
-    const hasPointer = window.matchMedia("(pointer: fine)").matches;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Check fine pointer and reduced motion preference
+    const isFinePointer = window.matchMedia("(pointer: fine)").matches;
+    const isReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
 
-    if (!hasPointer || reducedMotion) {
+    if (!isFinePointer || isReducedMotion) {
       return;
     }
 
-    const timer = setTimeout(() => {
-      setEnabled(true);
-    }, 0);
+    const dot = dotRef.current;
+    const reticle = reticleRef.current;
+    if (!dot || !reticle) return;
 
-    let mouseX = -100;
-    let mouseY = -100;
-    let ringX = -100;
-    let ringY = -100;
-    let animId: number;
+    // Enable custom cursor styles on body
+    document.body.classList.add("has-custom-cursor");
+    setIsActive(true);
+
+    // Initial positioning off-screen
+    gsap.set([dot, reticle], { xPercent: -50, yPercent: -50, x: -100, y: -100 });
+
+    // GSAP quickTo for two different speeds (snappy dot, lagging reticle)
+    const xDot = gsap.quickTo(dot, "x", { duration: 0.08, ease: "power3.out" });
+    const yDot = gsap.quickTo(dot, "y", { duration: 0.08, ease: "power3.out" });
+
+    const xReticle = gsap.quickTo(reticle, "x", {
+      duration: 0.38,
+      ease: "power3.out",
+    });
+    const yReticle = gsap.quickTo(reticle, "y", {
+      duration: 0.38,
+      ease: "power3.out",
+    });
+
+    let currentMagneticEl: HTMLElement | null = null;
 
     const handleMouseMove = (e: MouseEvent) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
+      const { clientX: mx, clientY: my } = e;
+      xDot(mx);
+      yDot(my);
+      xReticle(mx);
+      yReticle(my);
 
-      if (dotRef.current) {
-        dotRef.current.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0)`;
+      // Magnetic handling if hovering over an element with data-magnetic
+      if (currentMagneticEl) {
+        const rect = currentMagneticEl.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const deltaX = (mx - centerX) * 0.32;
+        const deltaY = (my - centerY) * 0.32;
+
+        gsap.to(currentMagneticEl, {
+          x: deltaX,
+          y: deltaY,
+          duration: 0.25,
+          ease: "power2.out",
+          overwrite: "auto",
+        });
       }
     };
 
@@ -40,66 +76,109 @@ export default function CustomCursor() {
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
-      const interactive = target.closest("a, button, [role='button'], [data-cursor]");
-      if (interactive) {
-        setIsHovered(true);
-        const customText = interactive.getAttribute("data-cursor-text");
-        setCursorText(customText || "");
+      // Check magnetic target
+      const magneticTarget = target.closest("[data-magnetic]") as HTMLElement | null;
+      if (magneticTarget) {
+        currentMagneticEl = magneticTarget;
+      }
+
+      // Check cursor label
+      const cursorTarget = target.closest("[data-cursor]") as HTMLElement | null;
+      const interactiveTarget = target.closest("a, button, [role='button']");
+
+      if (cursorTarget) {
+        const label = cursorTarget.getAttribute("data-cursor") || "";
+        setCursorLabel(label);
+        gsap.to(reticle, {
+          width: 76,
+          height: 76,
+          backgroundColor: "rgba(237, 235, 230, 0.12)",
+          borderColor: "rgba(237, 235, 230, 0.6)",
+          duration: 0.3,
+          ease: "power2.out",
+        });
+        gsap.to(dot, { opacity: 0, scale: 0, duration: 0.2 });
+      } else if (interactiveTarget) {
+        setCursorLabel("");
+        gsap.to(reticle, {
+          width: 48,
+          height: 48,
+          backgroundColor: "rgba(237, 235, 230, 0.08)",
+          borderColor: "rgba(237, 235, 230, 0.45)",
+          duration: 0.25,
+          ease: "power2.out",
+        });
+        gsap.to(dot, { scale: 1.4, duration: 0.2 });
       } else {
-        setIsHovered(false);
-        setCursorText("");
+        setCursorLabel("");
+        gsap.to(reticle, {
+          width: 34,
+          height: 34,
+          backgroundColor: "transparent",
+          borderColor: "rgba(237, 235, 230, 0.25)",
+          duration: 0.3,
+          ease: "power2.out",
+        });
+        gsap.to(dot, { opacity: 1, scale: 1, duration: 0.2 });
       }
     };
 
-    const animateRing = () => {
-      ringX += (mouseX - ringX) * 0.18;
-      ringY += (mouseY - ringY) * 0.18;
+    const handleMouseOut = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
 
-      if (ringRef.current) {
-        ringRef.current.style.transform = `translate3d(${ringX}px, ${ringY}px, 0)`;
+      const magneticTarget = target.closest("[data-magnetic]") as HTMLElement | null;
+      if (magneticTarget && magneticTarget === currentMagneticEl) {
+        gsap.to(magneticTarget, {
+          x: 0,
+          y: 0,
+          duration: 0.6,
+          ease: "elastic.out(1, 0.4)",
+          overwrite: "auto",
+        });
+        currentMagneticEl = null;
       }
-
-      animId = requestAnimationFrame(animateRing);
     };
 
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    window.addEventListener("mouseover", handleMouseOver, { passive: true });
-    animId = requestAnimationFrame(animateRing);
+    document.addEventListener("mouseover", handleMouseOver, { passive: true });
+    document.addEventListener("mouseout", handleMouseOut, { passive: true });
 
     return () => {
-      clearTimeout(timer);
+      document.body.classList.remove("has-custom-cursor");
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseover", handleMouseOver);
-      cancelAnimationFrame(animId);
+      document.removeEventListener("mouseover", handleMouseOver);
+      document.removeEventListener("mouseout", handleMouseOut);
+      if (currentMagneticEl) {
+        gsap.killTweensOf(currentMagneticEl);
+      }
     };
   }, []);
 
-  if (!enabled) return null;
+  if (!isActive) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[999] overflow-hidden">
-      {/* Center sharp dot */}
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden"
+    >
+      {/* Precision center dot */}
       <div
         ref={dotRef}
-        aria-hidden="true"
-        className="fixed top-0 left-0 -ml-[3px] -mt-[3px] h-[6px] w-[6px] rounded-full bg-[var(--accent)] transition-opacity duration-200"
+        className="fixed top-0 left-0 w-1.5 h-1.5 rounded-full bg-[#edebe6] -translate-x-1/2 -translate-y-1/2"
       />
 
-      {/* Outer fluid morphing ring */}
+      {/* Lagging interactive reticle */}
       <div
-        ref={ringRef}
-        aria-hidden="true"
-        className={`fixed top-0 left-0 flex items-center justify-center rounded-full border transition-all duration-300 ease-out ${
-          isHovered
-            ? cursorText
-              ? "-ml-9 -mt-9 h-[72px] w-[72px] border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]"
-              : "-ml-6 -mt-6 h-12 w-12 border-[var(--accent)] bg-[var(--accent)]/10"
-            : "-ml-4 -mt-4 h-8 w-8 border-white/20 bg-transparent"
-        }`}
+        ref={reticleRef}
+        className="fixed top-0 left-0 w-8 h-8 rounded-full border border-[#edebe6]/25 flex items-center justify-center -translate-x-1/2 -translate-y-1/2 transition-colors duration-200 pointer-events-none"
       >
-        {cursorText && (
-          <span className="font-mono text-[9px] tracking-wider uppercase font-semibold text-[var(--accent)]">
-            {cursorText}
+        {cursorLabel && (
+          <span
+            ref={labelRef}
+            className="font-mono text-label uppercase tracking-widest text-[#edebe6] select-none text-center px-1 font-semibold leading-tight"
+          >
+            {cursorLabel}
           </span>
         )}
       </div>

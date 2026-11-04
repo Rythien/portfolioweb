@@ -41,7 +41,7 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
     canvas.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mouseup", handleMouseUp);
 
-    // MODE 1: WebGL GLSL Shader Ripple
+    // MODE 1: WebGL GLSL Shader Ripple (Two-tone #050505 / #edebe6)
     if (mode === "glsl") {
       const gl = canvas.getContext("webgl");
       if (gl) {
@@ -66,15 +66,16 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
             vec2 diff = st - mouseNorm;
             float dist = length(diff);
 
-            // Ripple equation
+            // 2-tone Ripple equation
             float wave = sin(dist * 40.0 - u_time * 4.5) * exp(-dist * 4.5);
             vec2 uv = st + (diff / (dist + 0.001)) * wave * 0.04;
 
-            // Background darkness & vermilion caustic accents
             float grid = step(0.97, fract(uv.x * 16.0)) + step(0.97, fract(uv.y * 12.0));
-            vec3 col = vec3(0.04, 0.04, 0.06);
-            col += vec3(1.0, 0.23, 0.15) * wave * 2.2;
-            col += vec3(grid * 0.08);
+            vec3 ink = vec3(5.0 / 255.0, 5.0 / 255.0, 5.0 / 255.0);
+            vec3 paper = vec3(237.0 / 255.0, 235.0 / 255.0, 230.0 / 255.0);
+
+            float lum = clamp(wave * 2.0 + grid * 0.12, 0.0, 1.0);
+            vec3 col = mix(ink, paper, lum);
 
             gl_FragColor = vec4(col, 1.0);
           }
@@ -142,7 +143,7 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
     if (!ctx) return;
 
     if (mode === "particles") {
-      // 300 Eulerian curl-noise particles
+      // 280 particles in pure two-tone
       const particles: Array<{
         x: number;
         y: number;
@@ -161,29 +162,26 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
           vy: 0,
           life: Math.random() * 100,
           maxLife: 100,
-          color: Math.random() > 0.8 ? "#ff3b26" : "#f5f5f3",
+          color: Math.random() > 0.8 ? "#edebe6" : "rgba(237, 235, 230, 0.4)",
         });
       }
 
       let time = 0;
       const renderParticles = () => {
         time += 0.01;
-        ctx.fillStyle = "rgba(5, 5, 5, 0.15)";
+        ctx.fillStyle = "rgba(5, 5, 5, 0.18)";
         ctx.fillRect(0, 0, width, height);
 
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
-          // Curl noise angle
           const angle =
             Math.sin(p.x * 0.005 + time) * Math.cos(p.y * 0.005 + time) * Math.PI * 2;
           p.vx += Math.cos(angle) * 0.3;
           p.vy += Math.sin(angle) * 0.3;
 
-          // Drag
           p.vx *= 0.94;
           p.vy *= 0.94;
 
-          // Mouse attraction / repel
           const dx = mouse.x - p.x;
           const dy = mouse.y - p.y;
           const d = Math.hypot(dx, dy);
@@ -209,8 +207,8 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
 
       renderParticles();
     } else if (mode === "physics") {
-      // Kinetic Monospace Glyphs
-      const glyphs = "SEARON·MAHARJAN·KATHMANDU·27.71°N·85.32°E·NEWARI·CRAFT·WEBGL·GSAP·ARCHITECT".split(
+      // Kinetic Monospace Glyphs in Two-tone
+      const glyphs = "SEARON·MAHARJAN·KATHMANDU·27.71°N·85.32°E·DESIGN·BUILD·SHIP·FRONTEND".split(
         ""
       );
       const cols = 22;
@@ -248,22 +246,20 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
       }
 
       const renderPhysics = () => {
-        ctx.fillStyle = "#070709";
+        ctx.fillStyle = "#050505";
         ctx.fillRect(0, 0, width, height);
 
-        ctx.font = "13px monospace";
+        ctx.font = "12px var(--font-mono), monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
         for (let i = 0; i < nodes.length; i++) {
           const n = nodes[i];
-          // Spring force back to baseX, baseY
           const fx = (n.baseX - n.x) * 0.1;
           const fy = (n.baseY - n.y) * 0.1;
           n.vx += fx;
           n.vy += fy;
 
-          // Mouse repel
           const dx = n.x - mouse.x;
           const dy = n.y - mouse.y;
           const dist = Math.hypot(dx, dy);
@@ -279,7 +275,7 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
           n.y += n.vy;
 
           const isStretched = Math.hypot(n.x - n.baseX, n.y - n.baseY) > 6;
-          ctx.fillStyle = isStretched ? "#ff3b26" : "rgba(245, 245, 243, 0.4)";
+          ctx.fillStyle = isStretched ? "#ffffff" : "rgba(237, 235, 230, 0.45)";
           ctx.fillText(n.char, n.x, n.y);
         }
 
@@ -298,12 +294,12 @@ export default function LabShaderCanvas({ mode }: LabShaderCanvasProps) {
   }, [mode]);
 
   return (
-    <div className="relative w-full h-full overflow-hidden border border-white/10 bg-[#08080a]">
+    <div className="relative w-full h-full overflow-hidden border border-white/10 bg-[#050505]">
       <canvas
         ref={canvasRef}
         className="w-full h-[440px] block cursor-crosshair"
       />
-      <div className="absolute bottom-3 left-4 font-mono text-[11px] text-[#8e8e93] tracking-widest uppercase pointer-events-none">
+      <div className="absolute bottom-3 left-4 font-mono text-label text-[#edebe6]/75 tracking-widest uppercase pointer-events-none">
         [ INTERACTIVE SURFACE · DRAG &amp; HOVER ]
       </div>
     </div>
