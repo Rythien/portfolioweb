@@ -59,7 +59,7 @@ export default function Hero() {
       ref={containerRef}
       id="top"
       aria-label="Hero Introduction"
-      className="relative min-h-screen flex flex-col justify-between pt-28 pb-10 sm:pb-14 px-6 sm:px-10 lg:px-16 max-w-7xl mx-auto w-full overflow-hidden select-none"
+      className="relative min-h-screen flex flex-col justify-between pt-28 pb-20 sm:pb-24 px-6 sm:px-10 lg:px-16 max-w-7xl mx-auto w-full overflow-hidden select-none"
     >
       {/* Top Metadata */}
       <div className="relative z-10 flex items-center justify-between font-mono text-label uppercase tracking-widest text-ink-muted pt-4">

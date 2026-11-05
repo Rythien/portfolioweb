@@ -25,6 +25,7 @@ html[data-mode="wake"] {
   --t-ink-faint: #a0a0a8;
   --t-rule: rgba(26, 26, 30, 0.1);
   --t-rule-hover: rgba(26, 26, 30, 0.25);
+  --t-grid: rgba(26, 26, 30, 0.06);
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
@@ -38,6 +39,7 @@ html[data-mode="dream"] {
   --t-ink-faint: #5a5d6b;
   --t-rule: rgba(242, 239, 233, 0.08);
   --t-rule-hover: rgba(242, 239, 233, 0.2);
+  --t-grid: rgba(242, 239, 233, 0.06);
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -222,21 +224,15 @@ textarea:focus-visible {
   max-width: 80rem;
   margin: 0 auto;
   padding: 0 1.5rem;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.grid-overlay[data-visible="true"] {
-  opacity: 1;
 }
 
 .grid-overlay > span {
-  border-left: 1px solid var(--t-rule);
+  border-left: 1px solid var(--t-grid);
   height: 100%;
 }
 
 .grid-overlay > span:last-child {
-  border-right: 1px solid var(--t-rule);
+  border-right: 1px solid var(--t-grid);
 }
 
 @media (min-width: 640px) {

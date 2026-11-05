@@ -69,7 +69,7 @@ export default function Header() {
             className="flex items-center gap-2 hover:opacity-70 transition-opacity py-2"
           >
             <span>Sound</span>
-            <span className="text-white/50">{soundOn ? "On" : "Off"}</span>
+            <span>{soundOn ? "On" : "Off"}</span>
           </button>
 
           {/* Live Clock */}

@@ -97,7 +97,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-[family-name:var(--font-sans)] bg-surface text-ink min-h-screen selection:bg-ink selection:text-surface">
+      <body suppressHydrationWarning className="font-[family-name:var(--font-sans)] bg-surface text-ink min-h-screen selection:bg-ink selection:text-surface">
         <ThemeSync />
         <CustomCursor />
         <GridOverlay />
