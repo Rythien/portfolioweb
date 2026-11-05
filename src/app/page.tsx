@@ -2,6 +2,7 @@ import LenisProvider from "@/components/common/LenisProvider";
 import Header from "@/components/common/Header";
 import Preloader from "@/components/common/Preloader";
 import ModePill from "@/components/chrome/ModePill";
+import TransitionLayer from "@/components/chrome/TransitionLayer";
 
 import Hero from "@/components/sections/Hero";
 import About from "@/components/sections/About";
@@ -32,6 +33,7 @@ export default function Home() {
       </main>
       <Footer />
       <ModePill />
+      <TransitionLayer />
     </LenisProvider>
   );
 }
