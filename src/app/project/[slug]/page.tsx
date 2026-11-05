@@ -148,7 +148,7 @@ export default async function ProjectDetailPage({
                   Key Features
                 </h2>
                 <ul className="list-disc list-inside space-y-2 text-base text-ink/75">
-                  {project.mainFeatures.map((feat, idx) => (
+                  {project.mainFeatures?.map((feat: string, idx: number) => (
                     <li key={idx}>{feat}</li>
                   ))}
                 </ul>
@@ -159,7 +159,7 @@ export default async function ProjectDetailPage({
                   Technical Challenges
                 </h2>
                 <ul className="list-disc list-inside space-y-2 text-base text-ink/75">
-                  {project.technicalChallenges.map((chal, idx) => (
+                  {project.technicalChallenges?.map((chal: string, idx: number) => (
                     <li key={idx}>{chal}</li>
                   ))}
                 </ul>

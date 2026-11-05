@@ -1,17 +1,3 @@
-export interface Project {
-  id: string;
-  counter: string;
-  title: string;
-  category: string;
-  year: string;
-  roles: string[];
-  description: string;
-  link: string;
-  repo?: string;
-  image: string;
-  aspectRatio?: string;
-}
-
 export interface Discipline {
   number: string;
   title: string;
@@ -114,50 +100,6 @@ export const SITE_DATA = {
   works: {
     sectionNum: "(03)",
     title: "Selected Works",
-    projects: [
-      {
-        id: "pixel-plus",
-        counter: "01 / 03",
-        title: "Pixel Plus",
-        category: "Web Application / Full-Stack",
-        year: "2024",
-        roles: ["Frontend Engineering", "UI/UX Design", "REST API & DB Architecture"],
-        description:
-          "A complete full-stack e-commerce web platform designed and built from scratch as a final-year BICT capstone project. Features an interactive product catalog, reactive shopping cart, dynamic checkout validation, and a MongoDB backend.",
-        link: "https://github.com/rythien",
-        repo: "https://github.com/rythien",
-        image: "/opengraph-image",
-        aspectRatio: "aspect-[16/10]",
-      },
-      {
-        id: "4c-iced-coffee",
-        counter: "02 / 03",
-        title: "4C Iced Coffee",
-        category: "3D Commercial Animation",
-        year: "2024",
-        roles: ["3D Product Modeling", "Fluid Dynamics", "Lighting & Camera Motion"],
-        description:
-          "Commercial 3D product animation video produced for 4C Iced Coffee in Blender. Focuses on photorealistic beverage packaging, custom condensation shaders, dynamic fluid splash simulation, and kinetic commercial pacing.",
-        link: "https://github.com/rythien",
-        repo: "https://github.com/rythien",
-        image: "/opengraph-image",
-        aspectRatio: "aspect-[16/10]",
-      },
-      {
-        id: "kinetic-archive",
-        counter: "03 / 03",
-        title: "Kinetic Architecture",
-        category: "Interactive Interface / Mobile",
-        year: "2024",
-        roles: ["Interface Architecture", "Interaction Design", "Prototyping"],
-        description:
-          "An exploratory mobile and web interface investigation into kinetic spatial typography, fluid micro-interactions, and accessible touch geometries designed for next-generation digital archives.",
-        link: "https://github.com/rythien",
-        repo: "https://github.com/rythien",
-        image: "/opengraph-image",
-        aspectRatio: "aspect-[16/10]",
-      },
-    ] as Project[],
   },
 
   recognition: {

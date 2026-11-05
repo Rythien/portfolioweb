@@ -4,12 +4,16 @@ import React, { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SITE_DATA } from "@/content/site";
-import ParallaxGallery from "@/components/ui/ParallaxGallery";
+import { projects } from "@/content/projects";
+import ProjectGallery from "@/components/ui/ProjectGallery";
+import { useThemeStore } from "@/store/useThemeStore";
 
 gsap.registerPlugin(ScrollTrigger);
 
 export default function Works() {
   const sectionRef = useRef<HTMLElement | null>(null);
+  const mode = useThemeStore((s) => s.mode);
+  const isDream = mode === "dream";
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia(
@@ -19,8 +23,8 @@ export default function Works() {
     if (prefersReducedMotion || !sectionRef.current) return;
 
     const ctx = gsap.context(() => {
-      const projects = gsap.utils.toArray<HTMLElement>(".work-block");
-      projects.forEach((proj) => {
+      const blocks = gsap.utils.toArray<HTMLElement>(".work-block");
+      blocks.forEach((proj) => {
         gsap.fromTo(
           proj,
           { opacity: 0, y: 40 },
@@ -52,13 +56,13 @@ export default function Works() {
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div className="flex items-center justify-between border-b border-rule pb-4 mb-20 sm:mb-28 font-mono text-label uppercase tracking-widest text-ink-muted">
           <span>{SITE_DATA.works.sectionNum} · {SITE_DATA.works.title}</span>
-          <span className="tabular-nums">{String(SITE_DATA.works.projects.length).padStart(2, "0")} Projects</span>
+          <span className="tabular-nums">{String(projects.length).padStart(2, "0")} Projects</span>
         </div>
 
         <div className="flex flex-col gap-28 sm:gap-40">
-          {SITE_DATA.works.projects.map((project) => (
+          {projects.map((project) => (
             <article
-              key={project.id}
+              key={project.slug}
               className="work-block flex flex-col gap-8 sm:gap-12 group"
             >
               <div className="flex items-baseline justify-between border-b border-rule pb-4 font-mono text-label uppercase tracking-widest text-ink-muted">
@@ -69,9 +73,7 @@ export default function Works() {
                   <span>·</span>
                   <span>{project.category}</span>
                 </div>
-                <div className="tabular-nums">
-                  {project.year}
-                </div>
+                <div className="tabular-nums">{project.year}</div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-baseline">
@@ -97,20 +99,49 @@ export default function Works() {
                     ))}
                   </div>
 
-                  <p className="font-[family-name:var(--font-sans)] text-body text-ink-muted leading-relaxed [text-wrap:pretty]">
-                    {project.description}
+                  <p className={`font-[family-name:var(--font-sans)] text-body leading-relaxed [text-wrap:pretty] ${isDream ? "text-ink-muted/90 italic" : "text-ink-muted"}`}>
+                    {isDream && project.dreamDescription
+                      ? project.dreamDescription
+                      : project.description}
                   </p>
                 </div>
               </div>
 
+              {isDream && project.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {project.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="font-mono text-[10px] uppercase tracking-widest text-ink-faint border border-rule px-2.5 py-1"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div className="pt-2">
-                <ParallaxGallery
-                  imageSrc={project.image}
+                <ProjectGallery
+                  images={project.images}
                   title={project.title}
                   category={project.category}
                   aspectRatio={project.aspectRatio}
                 />
               </div>
+
+              {isDream && project.stack && (
+                <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+                  {project.stack.frontend.map((t) => (
+                    <span key={t}>{t}</span>
+                  ))}
+                  {project.stack.backend?.map((t) => (
+                    <span key={t}>{t}</span>
+                  ))}
+                  {project.stack.tools?.map((t) => (
+                    <span key={t}>{t}</span>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center justify-between pt-2 font-mono text-label uppercase tracking-widest text-ink-muted">
                 <a

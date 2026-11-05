@@ -1,173 +1,198 @@
-import { z } from "zod";
+export interface ProjectImage {
+  src: string;
+  alt: string;
+  caption?: string;
+}
 
-export const ProjectSchema = z.object({
-  slug: z.string(),
-  title: z.string(),
-  subtitle: z.string(),
-  year: z.string(),
-  type: z.string(),
-  featured: z.boolean(),
-  order: z.number(),
-  placeholder: z.boolean().default(true),
-  summary: z.string(),
-  overview: z.string(),
-  mainFeatures: z.array(z.string()),
-  technicalChallenges: z.array(z.string()),
-  stack: z.object({
-    frontend: z.array(z.string()),
-    backend: z.array(z.string()).optional(),
-    tools: z.array(z.string()).optional(),
-  }),
-  tags: z.array(z.string()),
-  links: z
-    .object({
-      live: z.string().optional(),
-      repo: z.string().optional(),
-    })
-    .optional(),
-  images: z.array(
-    z.object({
-      src: z.string(),
-      alt: z.string(),
-      caption: z.string(),
-    })
-  ),
-  ogImage: z.string(),
-});
-
-export type Project = z.infer<typeof ProjectSchema>;
+export interface Project {
+  slug: string;
+  counter: string;
+  title: string;
+  subtitle?: string;
+  category: string;
+  type?: string;
+  year: string;
+  roles: string[];
+  description: string;
+  dreamDescription?: string;
+  summary?: string;
+  overview?: string;
+  mainFeatures?: string[];
+  technicalChallenges?: string[];
+  placeholder?: boolean;
+  link: string;
+  links?: { live?: string; repo?: string };
+  repo?: string;
+  images: ProjectImage[];
+  aspectRatio?: string;
+  ogImage?: string;
+  stack: {
+    frontend: string[];
+    backend?: string[];
+    tools?: string[];
+  };
+  tags: string[];
+}
 
 export const projects: Project[] = [
   {
-    slug: "ecommerce-capstone",
-    title: "E-commerce website (capstone)",
-    subtitle: "Final-year university capstone online store",
-    year: "2025 [CONFIRM YEAR]",
+    slug: "pixel-plus",
+    counter: "01 / 03",
+    title: "Pixel Plus",
+    subtitle: "Full-stack e-commerce web platform",
+    category: "Web Application / Full-Stack",
     type: "Web design",
-    featured: true,
-    order: 1,
+    year: "2024",
     placeholder: true,
+    roles: ["Frontend Engineering", "UI/UX Design", "REST API & DB Architecture"],
+    description:
+      "A complete full-stack e-commerce web platform designed and built from scratch as a final-year BICT capstone project. Features an interactive product catalog, reactive shopping cart, dynamic checkout validation, and a MongoDB backend.",
     summary:
-      "A complete e-commerce website designed and built from scratch as a final-year BICT capstone project at Asia e University.",
+      "A complete e-commerce website designed and built from scratch as a final-year BICT capstone project.",
     overview:
-      "I designed and built a complete online store as my final-year university project, from planning the pages to the working site. It covers product listing, product pages, cart, checkout, user accounts, and an administration dashboard.",
+      "Designed and built a complete online store as a final-year university project, covering product listing, product pages, cart, checkout, user accounts, and administration.",
     mainFeatures: [
-      "Designed the layout and the shopping flow",
-      "Built the site with [TECH YOU USED]",
-      "[Anything you are proud of: speed, mobile layout, a feature, a grade]",
+      "Interactive product catalog with filtering and search",
+      "Reactive shopping cart with real-time validation",
+      "Dynamic checkout flow with form validation",
     ],
     technicalChallenges: [
       "Handling state synchronization across cart and checkout flows",
       "Maintaining responsive layouts across mobile and desktop viewports",
-      "[CONFIRM specific technical challenge overcome]",
     ],
+    dreamDescription:
+      "A digital storefront sculpted from light and logic—product flows, reactive carts, and checkout choreography woven into a single cohesive architecture.",
+    link: "https://github.com/rythien",
+    repo: "https://github.com/rythien",
+    links: { repo: "https://github.com/rythien" },
+    images: [
+      {
+        src: "/opengraph-image",
+        alt: "Pixel Plus storefront overview",
+        caption: "Storefront and checkout architecture",
+      },
+      {
+        src: "/opengraph-image",
+        alt: "Shopping cart and checkout flow",
+        caption: "Reactive cart and validation interface",
+      },
+    ],
+    aspectRatio: "aspect-[16/10]",
     stack: {
       frontend: ["React", "Next.js", "Tailwind CSS", "TypeScript"],
-      backend: ["[CONFIRM BACKEND / DB, e.g. Node.js, PostgreSQL]"],
+      backend: ["Node.js", "MongoDB"],
       tools: ["Figma", "Git"],
     },
     tags: ["#webdesign", "#ecommerce", "#react", "#capstone"],
-    links: {
-      repo: "https://github.com/searonmaharjan/[REPO]",
-      live: "https://[LIVE-URL-IF-ANY]",
-    },
+  },
+  {
+    slug: "4c-iced-coffee",
+    counter: "02 / 03",
+    title: "4C Iced Coffee",
+    subtitle: "Commercial 3D product animation",
+    category: "3D Commercial Animation",
+    type: "3D / Blender",
+    year: "2024",
+    placeholder: true,
+    roles: ["3D Product Modeling", "Fluid Dynamics", "Lighting & Camera Motion"],
+    description:
+      "Commercial 3D product animation video produced for 4C Iced Coffee in Blender. Focuses on photorealistic beverage packaging, custom condensation shaders, dynamic fluid splash simulation, and kinetic commercial pacing.",
+    summary:
+      "Commercial 3D product animation video produced for 4C Iced Coffee in Blender.",
+    overview:
+      "Produced a commercial-grade 3D product animation focusing on photorealistic beverage packaging, custom condensation shaders, and dynamic fluid splash simulation.",
+    mainFeatures: [
+      "Photorealistic beverage packaging with condensation",
+      "Dynamic fluid splash simulation",
+      "Kinetic commercial camera pacing",
+    ],
+    technicalChallenges: [
+      "Achieving photorealistic glass and liquid materials",
+      "Optimizing fluid simulation for render performance",
+    ],
+    dreamDescription:
+      "Frozen condensation and fluid dynamics captured in 3D—photorealistic glass, kinetic splashes, and cinematic pacing rendered for a commercial audience.",
+    link: "https://github.com/rythien",
+    repo: "https://github.com/rythien",
+    links: { repo: "https://github.com/rythien" },
     images: [
       {
         src: "/opengraph-image",
-        alt: "E-commerce capstone website preview",
-        caption: "Overview of the storefront and checkout architecture",
+        alt: "4C Iced Coffee hero render",
+        caption: "Photorealistic beverage packaging render",
       },
       {
         src: "/opengraph-image",
-        alt: "Shopping flow wireframes",
-        caption: "Mobile and desktop responsive cart interface",
+        alt: "Fluid splash simulation",
+        caption: "Dynamic fluid dynamics and condensation",
       },
     ],
-    ogImage: "/opengraph-image",
+    aspectRatio: "aspect-[16/10]",
+    stack: {
+      frontend: ["Blender", "EEVEE / Cycles"],
+      tools: ["Blender", "After Effects"],
+    },
+    tags: ["#3d", "#blender", "#commercial", "#animation"],
   },
   {
-    slug: "project-two",
-    title: "[PROJECT TWO]",
-    subtitle: "Mobile application",
-    year: "[YEAR]",
+    slug: "kinetic-archive",
+    counter: "03 / 03",
+    title: "Kinetic Architecture",
+    subtitle: "Kinetic spatial typography interface",
+    category: "Interactive Interface / Mobile",
     type: "App design",
-    featured: true,
-    order: 2,
+    year: "2024",
     placeholder: true,
+    roles: ["Interface Architecture", "Interaction Design", "Prototyping"],
+    description:
+      "An exploratory mobile and web interface investigation into kinetic spatial typography, fluid micro-interactions, and accessible touch geometries designed for next-generation digital archives.",
     summary:
-      "Mobile app screens and user journeys designed for high usability and intuitive navigation.",
+      "An exploratory interface investigation into kinetic spatial typography and fluid micro-interactions.",
     overview:
-      "[OVERVIEW FOR PROJECT TWO: Describe the app, its audience, and the problem it solves.]",
+      "An exploratory mobile and web interface investigation into kinetic spatial typography, fluid micro-interactions, and accessible touch geometries.",
     mainFeatures: [
-      "User flows and wireframes",
-      "Interactive clickable prototypes",
-      "Platform-native iOS and Android conventions",
+      "Kinetic spatial typography system",
+      "Fluid micro-interactions and touch gestures",
+      "Accessible touch geometries for mobile",
     ],
     technicalChallenges: [
-      "[Technical or UX challenge 1]",
-      "[Technical or UX challenge 2]",
+      "Balancing animation fluidity with accessible interaction patterns",
+      "Touch geometry optimization for diverse device sizes",
     ],
+    dreamDescription:
+      "Spatial typography drifting through fluid micro-interactions—an interface experiment in kinetic geometry and accessible touch language.",
+    link: "https://github.com/rythien",
+    repo: "https://github.com/rythien",
+    links: { repo: "https://github.com/rythien" },
+    images: [
+      {
+        src: "/opengraph-image",
+        alt: "Kinetic Architecture interface",
+        caption: "Kinetic spatial typography prototype",
+      },
+      {
+        src: "/opengraph-image",
+        alt: "Mobile touch interaction patterns",
+        caption: "Accessible touch geometries",
+      },
+    ],
+    aspectRatio: "aspect-[16/10]",
     stack: {
-      frontend: ["React Native", "TypeScript"],
+      frontend: ["React", "Framer Motion", "TypeScript"],
       tools: ["Figma"],
     },
-    tags: ["#appdesign", "#mobile", "#uiux"],
-    images: [
-      {
-        src: "/opengraph-image",
-        alt: "Project two app screens",
-        caption: "Key app screens and navigation structure",
-      },
-    ],
-    ogImage: "/opengraph-image",
-  },
-  {
-    slug: "project-three",
-    title: "[PROJECT THREE]",
-    subtitle: "3D product visuals and renders",
-    year: "[YEAR]",
-    type: "3D / Blender",
-    featured: true,
-    order: 3,
-    placeholder: true,
-    summary:
-      "3D models and renders created in Blender for product visualization and digital interfaces.",
-    overview:
-      "[OVERVIEW FOR PROJECT THREE: Describe the 3D models, textures, lighting, and renders created in Blender.]",
-    mainFeatures: [
-      "Precision 3D modeling",
-      "Realistic materials and studio lighting",
-      "Optimized assets for web and interface use",
-    ],
-    technicalChallenges: [
-      "Balancing polygon density and real-time render performance",
-      "[Challenge 2]",
-    ],
-    stack: {
-      frontend: ["Blender", "WebGL"],
-      tools: ["Blender"],
-    },
-    tags: ["#3d", "#blender", "#rendering"],
-    images: [
-      {
-        src: "/opengraph-image",
-        alt: "Project three 3D render preview",
-        caption: "High-resolution studio render produced in Blender",
-      },
-    ],
-    ogImage: "/opengraph-image",
+    tags: ["#interface", "#mobile", "#kinetic", "#archive"],
   },
 ];
 
-// Validate all projects at build time
 export function getProjects(): Project[] {
-  return projects.map((p) => ProjectSchema.parse(p));
+  return projects;
 }
 
 export function getFeaturedProjects(): Project[] {
-  return getProjects().filter((p) => p.featured);
+  return projects;
 }
 
 export function getProjectBySlug(slug: string): Project | undefined {
-  return getProjects().find((p) => p.slug === slug);
+  return projects.find((p) => p.slug === slug);
 }

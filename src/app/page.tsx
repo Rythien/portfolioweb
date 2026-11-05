@@ -23,7 +23,7 @@ export default function Home() {
         Skip to main content
       </a>
       <Header />
-      <main id="main-content" className="relative block w-full">
+      <main id="main-content" className="relative z-[1] block w-full">
         <Hero />
         <About />
         <Disciplines />
