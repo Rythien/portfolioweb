@@ -45,38 +45,32 @@ export default function Disciplines() {
       ref={sectionRef}
       id="disciplines"
       aria-label="Disciplines and Expertise"
-      className="py-28 sm:py-36 border-t border-white/[0.08]"
+      className="scroll-mt-24 py-28 sm:py-36 border-t border-rule"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
-        {/* Section Header */}
-        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 mb-16 sm:mb-20 font-mono text-label uppercase tracking-widest text-[#8b8e99]">
+        <div className="flex items-center justify-between border-b border-rule pb-4 mb-16 sm:mb-20 font-mono text-label uppercase tracking-widest text-ink-muted">
           <span>{SITE_DATA.disciplines.sectionNum} · {SITE_DATA.disciplines.title}</span>
-          <span>CAPABILITIES</span>
         </div>
 
-        {/* 6 Numbered Rows */}
         <div
           ref={rowsRef}
-          className="divide-y divide-white/[0.08] border-b border-white/[0.08]"
+          className="divide-y divide-rule border-b border-rule"
         >
           {SITE_DATA.disciplines.items.map((item) => (
             <div
               key={item.number}
               data-cursor="Discipline"
-              className="discipline-row group py-8 sm:py-10 grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 items-baseline transition-all duration-300 hover:bg-white/[0.015] px-2 sm:px-4 -mx-2 sm:-mx-4"
+              className="discipline-row group py-8 sm:py-10 grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 items-baseline transition-all duration-300 hover:bg-ink/[0.03] px-2 sm:px-4 -mx-2 sm:-mx-4"
             >
-              {/* Number: Highlights on hover */}
-              <div className="md:col-span-2 font-mono text-label uppercase tracking-widest text-[#8b8e99] group-hover:text-[#f2efe9] transition-colors tabular-nums">
+              <div className="md:col-span-2 font-mono text-label uppercase tracking-widest text-ink-muted group-hover:text-ink transition-colors tabular-nums">
                 ({item.number})
               </div>
 
-              {/* Title: Row shifts slightly horizontally */}
-              <div className="md:col-span-4 font-[family-name:var(--font-display)] text-h3 sm:text-2xl font-light text-[#f2efe9] transition-transform duration-300 group-hover:translate-x-2">
+              <div className="md:col-span-4 font-[family-name:var(--font-display)] text-h3 sm:text-2xl font-light text-ink transition-transform duration-300 group-hover:translate-x-2">
                 {item.title}
               </div>
 
-              {/* One-line Description */}
-              <div className="md:col-span-6 font-[family-name:var(--font-sans)] text-body text-[#8b8e99] leading-relaxed group-hover:text-[#f2efe9]/80 transition-colors [text-wrap:pretty]">
+              <div className="md:col-span-6 font-[family-name:var(--font-sans)] text-body text-ink-muted leading-relaxed group-hover:text-ink/80 transition-colors [text-wrap:pretty]">
                 {item.description}
               </div>
             </div>

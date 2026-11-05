@@ -3,6 +3,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 
+function getInkColor(): string {
+  if (typeof window === "undefined") return "#1a1a1e";
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue("--t-ink")
+    .trim() || "#1a1a1e";
+}
+
 export default function CustomCursor() {
   const dotRef = useRef<HTMLDivElement | null>(null);
   const reticleRef = useRef<HTMLDivElement | null>(null);
@@ -11,39 +18,26 @@ export default function CustomCursor() {
   const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
-    // Check fine pointer and reduced motion preference
     const isFinePointer = window.matchMedia("(pointer: fine)").matches;
     const isReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    if (!isFinePointer || isReducedMotion) {
-      return;
-    }
+    if (!isFinePointer || isReducedMotion) return;
 
     const dot = dotRef.current;
     const reticle = reticleRef.current;
     if (!dot || !reticle) return;
 
-    // Enable custom cursor styles on body
     document.body.classList.add("has-custom-cursor");
     setIsActive(true);
 
-    // Initial positioning off-screen
     gsap.set([dot, reticle], { xPercent: -50, yPercent: -50, x: -100, y: -100 });
 
-    // GSAP quickTo for two different speeds (snappy dot, lagging reticle)
     const xDot = gsap.quickTo(dot, "x", { duration: 0.08, ease: "power3.out" });
     const yDot = gsap.quickTo(dot, "y", { duration: 0.08, ease: "power3.out" });
-
-    const xReticle = gsap.quickTo(reticle, "x", {
-      duration: 0.38,
-      ease: "power3.out",
-    });
-    const yReticle = gsap.quickTo(reticle, "y", {
-      duration: 0.38,
-      ease: "power3.out",
-    });
+    const xReticle = gsap.quickTo(reticle, "x", { duration: 0.38, ease: "power3.out" });
+    const yReticle = gsap.quickTo(reticle, "y", { duration: 0.38, ease: "power3.out" });
 
     let currentMagneticEl: HTMLElement | null = null;
 
@@ -54,7 +48,6 @@ export default function CustomCursor() {
       xReticle(mx);
       yReticle(my);
 
-      // Magnetic handling if hovering over an element with data-magnetic
       if (currentMagneticEl) {
         const rect = currentMagneticEl.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
@@ -76,13 +69,10 @@ export default function CustomCursor() {
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
-      // Check magnetic target
+      const ink = getInkColor();
       const magneticTarget = target.closest("[data-magnetic]") as HTMLElement | null;
-      if (magneticTarget) {
-        currentMagneticEl = magneticTarget;
-      }
+      if (magneticTarget) currentMagneticEl = magneticTarget;
 
-      // Check cursor label
       const cursorTarget = target.closest("[data-cursor]") as HTMLElement | null;
       const interactiveTarget = target.closest("a, button, [role='button']");
 
@@ -92,8 +82,8 @@ export default function CustomCursor() {
         gsap.to(reticle, {
           width: 76,
           height: 76,
-          backgroundColor: "rgba(237, 235, 230, 0.12)",
-          borderColor: "rgba(237, 235, 230, 0.6)",
+          backgroundColor: `color-mix(in srgb, ${ink} 12%, transparent)`,
+          borderColor: `color-mix(in srgb, ${ink} 60%, transparent)`,
           duration: 0.3,
           ease: "power2.out",
         });
@@ -103,8 +93,8 @@ export default function CustomCursor() {
         gsap.to(reticle, {
           width: 48,
           height: 48,
-          backgroundColor: "rgba(237, 235, 230, 0.08)",
-          borderColor: "rgba(237, 235, 230, 0.45)",
+          backgroundColor: `color-mix(in srgb, ${ink} 8%, transparent)`,
+          borderColor: `color-mix(in srgb, ${ink} 45%, transparent)`,
           duration: 0.25,
           ease: "power2.out",
         });
@@ -115,7 +105,7 @@ export default function CustomCursor() {
           width: 34,
           height: 34,
           backgroundColor: "transparent",
-          borderColor: "rgba(237, 235, 230, 0.25)",
+          borderColor: `color-mix(in srgb, ${ink} 25%, transparent)`,
           duration: 0.3,
           ease: "power2.out",
         });
@@ -149,9 +139,7 @@ export default function CustomCursor() {
       window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseover", handleMouseOver);
       document.removeEventListener("mouseout", handleMouseOut);
-      if (currentMagneticEl) {
-        gsap.killTweensOf(currentMagneticEl);
-      }
+      if (currentMagneticEl) gsap.killTweensOf(currentMagneticEl);
     };
   }, []);
 
@@ -162,21 +150,18 @@ export default function CustomCursor() {
       aria-hidden="true"
       className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden"
     >
-      {/* Precision center dot */}
       <div
         ref={dotRef}
-        className="fixed top-0 left-0 w-1.5 h-1.5 rounded-full bg-[#edebe6] -translate-x-1/2 -translate-y-1/2"
+        className="fixed top-0 left-0 w-1.5 h-1.5 rounded-full bg-ink -translate-x-1/2 -translate-y-1/2"
       />
-
-      {/* Lagging interactive reticle */}
       <div
         ref={reticleRef}
-        className="fixed top-0 left-0 w-8 h-8 rounded-full border border-[#edebe6]/25 flex items-center justify-center -translate-x-1/2 -translate-y-1/2 transition-colors duration-200 pointer-events-none"
+        className="fixed top-0 left-0 w-8 h-8 rounded-full border border-ink/25 flex items-center justify-center -translate-x-1/2 -translate-y-1/2 transition-colors duration-200 pointer-events-none"
       >
         {cursorLabel && (
           <span
             ref={labelRef}
-            className="font-mono text-label uppercase tracking-widest text-[#edebe6] select-none text-center px-1 font-semibold leading-tight"
+            className="font-mono text-label uppercase tracking-widest text-ink select-none text-center px-1 font-semibold leading-tight"
           >
             {cursorLabel}
           </span>

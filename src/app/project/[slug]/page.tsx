@@ -30,16 +30,15 @@ export default async function ProjectDetailPage({
 
   return (
     <LenisProvider>
-      <div className="min-h-screen bg-[#050505] text-[#edebe6] flex flex-col justify-between selection:bg-[#edebe6] selection:text-[#050505]">
+      <div className="min-h-screen flex flex-col justify-between">
         <Header />
 
         <main className="max-w-5xl mx-auto px-6 sm:px-10 py-28 sm:py-36 w-full flex-1">
-          {/* Top Bar with Back Link */}
-          <div className="flex items-center justify-between border-b border-white/[0.1] pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-[#edebe6]/60">
+          <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/projects"
               data-magnetic
-              className="hover:text-white flex items-center gap-2"
+              className="hover:text-ink flex items-center gap-2"
             >
               <span>←</span>
               <span>All Projects</span>
@@ -49,25 +48,23 @@ export default async function ProjectDetailPage({
             </span>
           </div>
 
-          {/* Project Title Header */}
           <header className="mb-14">
-            <div className="font-mono text-xs uppercase tracking-widest text-[#edebe6]/50 mb-3">
-              CASE STUDY // 0{currentIndex + 1}
+            <div className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+              Case Study // 0{currentIndex + 1}
             </div>
-            <h1 className="font-[family-name:var(--font-display)] text-5xl sm:text-7xl font-light text-[#edebe6] tracking-tight">
+            <h1 className="font-[family-name:var(--font-display)] text-5xl sm:text-7xl font-light text-ink tracking-tight">
               {project.title}
             </h1>
-            <p className="mt-4 font-[family-name:var(--font-sans)] text-xl sm:text-2xl text-[#edebe6]/80 font-normal leading-relaxed">
+            <p className="mt-4 font-[family-name:var(--font-sans)] text-xl sm:text-2xl text-ink/80 font-normal leading-relaxed">
               {project.subtitle}
             </p>
             {project.placeholder && (
-              <div className="mt-4 inline-block font-mono text-xs text-[#edebe6]/50 border border-white/10 px-3 py-1 bg-white/[0.02]">
-                [CONFIRM CASE STUDY DETAILS]
+              <div className="mt-4 inline-block font-mono text-xs text-ink-faint border border-rule px-3 py-1 bg-ink/[0.02]">
+                Details pending
               </div>
             )}
           </header>
 
-          {/* Hero Media Preview with Bayer Dither & Color Peek */}
           <div className="mb-16">
             <PixelImage
               src={project.images[0]?.src || "/opengraph-image"}
@@ -78,31 +75,29 @@ export default async function ProjectDetailPage({
             />
           </div>
 
-          {/* Project Details Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 mb-16 border-b border-white/[0.08] pb-16">
-            {/* Left Column: Stack & Metadata */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 mb-16 border-b border-rule pb-16">
             <div className="lg:col-span-4 flex flex-col gap-6 font-mono text-xs">
               <div>
-                <span className="text-[#edebe6]/40 uppercase tracking-widest block mb-2">
+                <span className="text-ink-faint uppercase tracking-widest block mb-2">
                   Timeline
                 </span>
-                <span className="text-[#edebe6]">{project.year}</span>
+                <span className="text-ink">{project.year}</span>
               </div>
               <div>
-                <span className="text-[#edebe6]/40 uppercase tracking-widest block mb-2">
+                <span className="text-ink-faint uppercase tracking-widest block mb-2">
                   Discipline
                 </span>
-                <span className="text-[#edebe6]">{project.type}</span>
+                <span className="text-ink">{project.type}</span>
               </div>
               <div>
-                <span className="text-[#edebe6]/40 uppercase tracking-widest block mb-2">
+                <span className="text-ink-faint uppercase tracking-widest block mb-2">
                   Frontend Stack
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {project.stack.frontend.map((tech) => (
                     <span
                       key={tech}
-                      className="border border-white/10 px-2 py-0.5 text-[#edebe6]/80"
+                      className="border border-rule px-2 py-0.5 text-ink/80"
                     >
                       {tech}
                     </span>
@@ -111,14 +106,14 @@ export default async function ProjectDetailPage({
               </div>
               {project.stack.tools && (
                 <div>
-                  <span className="text-[#edebe6]/40 uppercase tracking-widest block mb-2">
+                  <span className="text-ink-faint uppercase tracking-widest block mb-2">
                     Tools
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {project.stack.tools.map((tool) => (
                       <span
                         key={tool}
-                        className="border border-white/10 px-2 py-0.5 text-[#edebe6]/80"
+                        className="border border-rule px-2 py-0.5 text-ink/80"
                       >
                         {tool}
                       </span>
@@ -132,7 +127,7 @@ export default async function ProjectDetailPage({
                     href={project.links.repo}
                     target="_blank"
                     rel="noreferrer"
-                    className="underline text-[#edebe6] hover:text-white"
+                    className="underline text-ink hover:text-ink"
                   >
                     Repository Link →
                   </a>
@@ -140,20 +135,19 @@ export default async function ProjectDetailPage({
               )}
             </div>
 
-            {/* Right Column: Overview Narrative & Features */}
-            <div className="lg:col-span-8 flex flex-col gap-8 font-[family-name:var(--font-sans)] text-base sm:text-lg text-[#edebe6]/80 leading-relaxed">
+            <div className="lg:col-span-8 flex flex-col gap-8 font-[family-name:var(--font-sans)] text-base sm:text-lg text-ink-muted leading-relaxed">
               <div>
-                <h2 className="font-mono text-xs uppercase tracking-widest text-[#edebe6]/50 mb-3">
-                  OVERVIEW
+                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+                  Overview
                 </h2>
                 <p>{project.overview}</p>
               </div>
 
               <div>
-                <h2 className="font-mono text-xs uppercase tracking-widest text-[#edebe6]/50 mb-3">
-                  KEY FEATURES
+                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+                  Key Features
                 </h2>
-                <ul className="list-disc list-inside space-y-2 text-base text-[#edebe6]/75">
+                <ul className="list-disc list-inside space-y-2 text-base text-ink/75">
                   {project.mainFeatures.map((feat, idx) => (
                     <li key={idx}>{feat}</li>
                   ))}
@@ -161,10 +155,10 @@ export default async function ProjectDetailPage({
               </div>
 
               <div>
-                <h2 className="font-mono text-xs uppercase tracking-widest text-[#edebe6]/50 mb-3">
-                  TECHNICAL CHALLENGES
+                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+                  Technical Challenges
                 </h2>
-                <ul className="list-disc list-inside space-y-2 text-base text-[#edebe6]/75">
+                <ul className="list-disc list-inside space-y-2 text-base text-ink/75">
                   {project.technicalChallenges.map((chal, idx) => (
                     <li key={idx}>{chal}</li>
                   ))}
@@ -173,7 +167,6 @@ export default async function ProjectDetailPage({
             </div>
           </div>
 
-          {/* Second Image if available */}
           {project.images[1] && (
             <div className="mb-16">
               <PixelImage
@@ -186,19 +179,18 @@ export default async function ProjectDetailPage({
             </div>
           )}
 
-          {/* Next Project Footer Link */}
-          <div className="pt-12 border-t border-white/[0.1] flex items-center justify-between font-mono text-xs uppercase tracking-widest">
+          <div className="pt-12 border-t border-rule flex items-center justify-between font-mono text-xs uppercase tracking-widest">
             <Link
               href="/projects"
               data-magnetic
-              className="text-[#edebe6]/60 hover:text-white"
+              className="text-ink-muted hover:text-ink"
             >
               ← Back to all projects
             </Link>
             <Link
               href={`/project/${nextProject.slug}`}
               data-magnetic
-              className="text-[#edebe6] hover:text-white flex items-center gap-2"
+              className="text-ink hover:text-ink flex items-center gap-2"
             >
               <span>Next: {nextProject.title}</span>
               <span>→</span>

@@ -13,7 +13,6 @@ interface PixelImageProps {
 
 const RESOLUTION_STEPS = [32, 16, 8, 4, 2, 1];
 
-// 8x8 Bayer matrix values normalized (0 to 63)
 const BAYER_8X8 = [
   0, 32, 8, 40, 2, 34, 10, 42,
   48, 16, 56, 24, 50, 18, 58, 26,
@@ -70,7 +69,6 @@ export default function PixelImage({
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    // Check if image is placeholder
     const isPlaceholder =
       !src ||
       src.trim() === "" ||
@@ -85,38 +83,16 @@ export default function PixelImage({
       canvas.width = w;
       canvas.height = h;
 
-      // Dark #0B0B0B intentional background
-      ctx.fillStyle = "#0b0b0b";
+      const style = getComputedStyle(document.documentElement);
+      const surfaceEl = style.getPropertyValue("--t-surface-el").trim() || "#dfdcd6";
+      const inkMuted = style.getPropertyValue("--t-ink-muted").trim() || "#6b6b76";
+
+      ctx.fillStyle = surfaceEl;
       ctx.fillRect(0, 0, w, h);
 
-      // Subtle two-tone Bayer dither gradient
-      const imgData = ctx.getImageData(0, 0, w, h);
-      const data = imgData.data;
-
-      for (let y = 0; y < h; y++) {
-        const ny = y / h;
-        for (let x = 0; x < w; x++) {
-          const nx = x / w;
-          const idx = (y * w + x) * 4;
-
-          // Subtle diagonal dark gradient
-          const grad = 0.05 + 0.08 * (1 - (nx * 0.6 + ny * 0.4));
-          const bayerThreshold = (BAYER_8X8[(y % 8) * 8 + (x % 8)] + 0.5) / 64;
-
-          if (grad > bayerThreshold * 0.35) {
-            data[idx] = 32;     // R
-            data[idx + 1] = 32; // G
-            data[idx + 2] = 32; // B
-          }
-        }
-      }
-      ctx.putImageData(imgData, 0, 0);
-
-      // Subtle architectural grid overlay
-      ctx.strokeStyle = "rgba(237, 235, 230, 0.06)";
+      ctx.strokeStyle = inkMuted + "18";
       ctx.lineWidth = 1;
 
-      // Center crosshair
       const cx = Math.floor(w / 2);
       const cy = Math.floor(h / 2);
       ctx.beginPath();
@@ -126,21 +102,17 @@ export default function PixelImage({
       ctx.lineTo(cx, cy + 24);
       ctx.stroke();
 
-      // Corner ticks
       const inset = 16;
       ctx.beginPath();
       ctx.moveTo(inset, inset + 8);
       ctx.lineTo(inset, inset);
       ctx.lineTo(inset + 8, inset);
-
       ctx.moveTo(w - inset - 8, inset);
       ctx.lineTo(w - inset, inset);
       ctx.lineTo(w - inset, inset + 8);
-
       ctx.moveTo(inset, h - inset - 8);
       ctx.lineTo(inset, h - inset);
       ctx.lineTo(inset + 8, h - inset);
-
       ctx.moveTo(w - inset - 8, h - inset);
       ctx.lineTo(w - inset, h - inset);
       ctx.lineTo(w - inset, h - inset - 8);
@@ -156,7 +128,6 @@ export default function PixelImage({
       return () => window.removeEventListener("resize", renderProceduralPlaceholder);
     }
 
-    // Real image loading & resolving
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = src;
@@ -184,7 +155,6 @@ export default function PixelImage({
       const imgData = offCtx.getImageData(0, 0, scaledW, scaledH);
       const data = imgData.data;
 
-      // 8x8 Bayer ordered dithering
       for (let y = 0; y < scaledH; y++) {
         for (let x = 0; x < scaledW; x++) {
           const idx = (y * scaledW + x) * 4;
@@ -192,7 +162,6 @@ export default function PixelImage({
             (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) / 255;
           const bayerThreshold = (BAYER_8X8[(y % 8) * 8 + (x % 8)] + 0.5) / 64;
 
-          // Pure two-tone #050505 or #edebe6
           const isOn = lum > bayerThreshold;
           const val = isOn ? 237 : 11;
           data[idx] = val;
@@ -227,7 +196,7 @@ export default function PixelImage({
               stepIndex++;
               if (stepIndex >= RESOLUTION_STEPS.length) {
                 clearInterval(stepTimer);
-                renderDither(1); // Ends at full resolution (1px)
+                renderDither(1);
                 setIsResolved(true);
                 if (window.matchMedia("(pointer: coarse)").matches) {
                   setPeekRadius(800);
@@ -288,16 +257,14 @@ export default function PixelImage({
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         data-cursor={hasRealImage ? (isResolved ? "Inspect" : "Resolving") : undefined}
-        className={`relative w-full ${aspectRatio} overflow-hidden bg-[#0b0b0b] border border-white/[0.12] rounded-sm select-none group`}
+        className={`relative w-full ${aspectRatio} overflow-hidden bg-surface-elevated border border-rule rounded-sm select-none group`}
       >
-        {/* Canvas Layer for 2-Tone Bayer Dither */}
         <canvas
           ref={canvasRef}
           aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover block"
         />
 
-        {/* Original Color Layer revealed only when real image exists */}
         {hasRealImage && (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
@@ -314,17 +281,15 @@ export default function PixelImage({
           />
         )}
 
-        {/* Hover hint badge only shown when real image exists */}
         {hasRealImage && (
-          <div className="absolute bottom-3 right-3 pointer-events-none bg-[#050505]/80 backdrop-blur-sm border border-white/[0.1] px-2 py-0.5 font-mono text-label uppercase tracking-widest text-[#edebe6]/75 transition-opacity duration-300 group-hover:opacity-0">
+          <div className="absolute bottom-3 right-3 pointer-events-none bg-surface/80 backdrop-blur-sm border border-rule px-2 py-0.5 font-mono text-label uppercase tracking-widest text-ink-muted transition-opacity duration-300 group-hover:opacity-0">
             {isTouchDevice ? "Dithered preview" : "Hover for colour"}
           </div>
         )}
       </div>
 
-      {/* Short Plain Caption */}
       {caption && (
-        <figcaption className="font-mono text-label uppercase tracking-wider text-[#edebe6]/75 px-0.5">
+        <figcaption className="font-mono text-label uppercase tracking-wider text-ink-muted px-0.5">
           {caption}
         </figcaption>
       )}

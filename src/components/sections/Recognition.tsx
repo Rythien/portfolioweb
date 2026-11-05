@@ -46,53 +46,45 @@ export default function Recognition() {
       ref={sectionRef}
       id="recognition"
       aria-label="Awards and Recognition"
-      className="py-28 sm:py-36 border-t border-white/[0.08]"
+      className="scroll-mt-24 py-28 sm:py-36 border-t border-rule"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
-        {/* Section Header */}
-        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 mb-16 sm:mb-24 font-mono text-label uppercase tracking-widest text-[#8b8e99]">
+        <div className="flex items-center justify-between border-b border-rule pb-4 mb-16 sm:mb-24 font-mono text-label uppercase tracking-widest text-ink-muted">
           <span>{SITE_DATA.recognition.sectionNum} · {SITE_DATA.recognition.title}</span>
-          <span>ACCOLADES & MILESTONES</span>
         </div>
 
-        {/* Counter Number Block */}
         <div className="mb-16 sm:mb-24 flex flex-col sm:flex-row items-baseline gap-6 sm:gap-12">
-          <div className="font-mono text-display sm:text-8xl font-light text-[#f2efe9] tabular-nums tracking-tighter">
+          <div className="font-mono text-display sm:text-8xl font-light text-ink tabular-nums tracking-tighter">
             <Counter value={parseInt(SITE_DATA.recognition.totalAccolades, 10)} padDigits={2} />
           </div>
-          <div className="font-mono text-label uppercase tracking-widest text-[#8b8e99] max-w-xs">
+          <div className="font-mono text-label uppercase tracking-widest text-ink-muted max-w-xs">
             {SITE_DATA.recognition.accoladesLabel}
           </div>
         </div>
 
-        {/* Recognition List Grouped by Year and Project */}
         <div
           ref={rowsRef}
-          className="divide-y divide-white/[0.08] border-b border-white/[0.08]"
+          className="divide-y divide-rule border-b border-rule"
         >
           {SITE_DATA.recognition.items.map((item, idx) => (
             <div
               key={idx}
               data-cursor="Honors"
-              className="recognition-row group py-6 sm:py-8 grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-6 items-baseline transition-all duration-300 hover:bg-white/[0.015] px-2 sm:px-4 -mx-2 sm:-mx-4"
+              className="recognition-row group py-6 sm:py-8 grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-6 items-baseline transition-all duration-300 hover:bg-ink/[0.03] px-2 sm:px-4 -mx-2 sm:-mx-4"
             >
-              {/* Year */}
-              <div className="md:col-span-2 font-mono text-label uppercase tracking-wider text-[#8b8e99] group-hover:text-[#f2efe9] transition-colors tabular-nums">
+              <div className="md:col-span-2 font-mono text-label uppercase tracking-wider text-ink-muted group-hover:text-ink transition-colors tabular-nums">
                 {item.year}
               </div>
 
-              {/* Project / Institution */}
-              <div className="md:col-span-4 font-[family-name:var(--font-display)] text-xl font-light text-[#f2efe9]">
+              <div className="md:col-span-4 font-[family-name:var(--font-display)] text-xl font-light text-ink">
                 {item.project}
               </div>
 
-              {/* Award / Distinction Name */}
-              <div className="md:col-span-4 font-[family-name:var(--font-sans)] text-body text-[#8b8e99] group-hover:text-[#f2efe9]/90 transition-colors">
+              <div className="md:col-span-4 font-[family-name:var(--font-sans)] text-body text-ink-muted group-hover:text-ink/90 transition-colors">
                 {item.honor}
               </div>
 
-              {/* Result */}
-              <div className="md:col-span-2 md:text-right font-mono text-label uppercase tracking-widest text-[#8b8e99] group-hover:text-white transition-colors">
+              <div className="md:col-span-2 md:text-right font-mono text-label uppercase tracking-widest text-ink-muted group-hover:text-ink transition-colors">
                 {item.result}
               </div>
             </div>

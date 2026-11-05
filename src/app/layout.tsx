@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Newsreader, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import CustomCursor from "@/components/common/CustomCursor";
-import { DreamModeProvider } from "@/contexts/DreamModeContext";
+import ThemeSync from "@/components/chrome/ThemeSync";
+import GridOverlay from "@/components/chrome/GridOverlay";
 import { SITE_DATA } from "@/content/site";
 
 const newsreader = Newsreader({
@@ -29,7 +30,7 @@ const geistMono = Geist_Mono({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#08080a",
+  themeColor: "#E9E7E2",
   width: "device-width",
   initialScale: 1,
 };
@@ -85,6 +86,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-mode="wake"
       className={`${newsreader.variable} ${geist.variable} ${geistMono.variable} antialiased`}
     >
       <head>
@@ -95,11 +97,11 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-[family-name:var(--font-sans)] bg-[#08080a] text-[#f2efe9] min-h-screen selection:bg-[#f2efe9] selection:text-[#08080a]">
+      <body className="font-[family-name:var(--font-sans)] bg-surface text-ink min-h-screen selection:bg-ink selection:text-surface">
+        <ThemeSync />
         <CustomCursor />
-        <DreamModeProvider>
-          {children}
-        </DreamModeProvider>
+        <GridOverlay />
+        {children}
       </body>
     </html>
   );

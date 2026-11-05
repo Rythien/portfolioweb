@@ -160,18 +160,8 @@ export const SITE_DATA = {
     ] as Project[],
   },
 
-  dreamMode: {
-    sectionNum: "(04)",
-    title: "Alternate Dimension",
-    headline: "There is another way to see this archive.",
-    description:
-      "A spatial real-time 3D universe built with React Three Fiber is currently being prepared for Phase 2. Step into a floating world of artifacts, geometry, and light.",
-    buttonLabel: "Enter Dream Mode (Phase 2)",
-    route: "#dream-mode",
-  },
-
   recognition: {
-    sectionNum: "(05)",
+    sectionNum: "(04)",
     title: "Recognition",
     totalAccolades: "06",
     accoladesLabel: "Total Distinctions & Milestones",
@@ -216,7 +206,7 @@ export const SITE_DATA = {
   },
 
   contact: {
-    sectionNum: "(06)",
+    sectionNum: "(05)",
     title: "Contact",
     heading: "Say hello.",
     subtext:

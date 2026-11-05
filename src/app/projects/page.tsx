@@ -20,37 +20,34 @@ export default function ProjectsIndexPage() {
 
   return (
     <LenisProvider>
-      <div className="min-h-screen bg-[#050505] text-[#edebe6] flex flex-col justify-between selection:bg-[#edebe6] selection:text-[#050505]">
+      <div className="min-h-screen flex flex-col justify-between">
         <Header />
 
         <main className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 py-28 sm:py-36 w-full flex-1">
-          {/* Top Bar with Back Link */}
-          <div className="flex items-center justify-between border-b border-white/[0.1] pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-[#edebe6]/60">
+          <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/"
               data-magnetic
-              className="hover:text-white flex items-center gap-2"
+              className="hover:text-ink flex items-center gap-2"
             >
               <span>←</span>
               <span>Back to home</span>
             </Link>
             <span>
-              TOTAL ARCHIVE · {projects.length.toString().padStart(2, "0")}
+              {projects.length.toString().padStart(2, "0")} Projects
             </span>
           </div>
 
-          {/* Heading */}
           <div className="mb-14">
-            <h1 className="font-[family-name:var(--font-display)] text-5xl sm:text-7xl font-light text-[#edebe6] tracking-tight">
+            <h1 className="font-[family-name:var(--font-display)] text-5xl sm:text-7xl font-light text-ink tracking-tight">
               Selected Projects.
             </h1>
-            <p className="mt-4 font-[family-name:var(--font-sans)] text-base sm:text-lg text-[#edebe6]/70 max-w-xl">
+            <p className="mt-4 font-[family-name:var(--font-sans)] text-base sm:text-lg text-ink-muted max-w-xl">
               Case studies in website design, mobile apps, and 3D modeling from Kathmandu, Nepal.
             </p>
           </div>
 
-          {/* Type Filter Tabs */}
-          <div className="flex flex-wrap gap-2 mb-12 border-b border-white/[0.08] pb-4 font-mono text-xs uppercase tracking-wider">
+          <div className="flex flex-wrap gap-2 mb-12 border-b border-rule pb-4 font-mono text-xs uppercase tracking-wider">
             {TYPES.map((type) => (
               <button
                 key={type}
@@ -58,8 +55,8 @@ export default function ProjectsIndexPage() {
                 onClick={() => setSelectedType(type)}
                 className={`px-3 py-1.5 rounded-sm transition-colors ${
                   selectedType === type
-                    ? "bg-[#edebe6] text-[#050505] font-semibold"
-                    : "text-[#edebe6]/60 hover:text-[#edebe6] border border-white/10"
+                    ? "bg-ink text-surface font-semibold"
+                    : "text-ink-muted hover:text-ink border border-rule"
                 }`}
               >
                 {type}
@@ -67,12 +64,11 @@ export default function ProjectsIndexPage() {
             ))}
           </div>
 
-          {/* Projects Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filtered.map((project, idx) => (
               <article
                 key={project.slug}
-                className="border border-white/[0.1] bg-white/[0.015] p-6 rounded-sm flex flex-col justify-between hover:border-white/30 transition-colors group"
+                className="border border-rule bg-ink/[0.02] p-6 rounded-sm flex flex-col justify-between hover:border-rule-hover transition-colors group"
               >
                 <div>
                   <Link
@@ -89,23 +85,23 @@ export default function ProjectsIndexPage() {
                     />
                   </Link>
 
-                  <div className="flex items-center justify-between font-mono text-label uppercase tracking-wider text-[#edebe6]/75 mb-2 tabular-nums">
+                  <div className="flex items-center justify-between font-mono text-label uppercase tracking-wider text-ink-muted mb-2 tabular-nums">
                     <span>{project.type}</span>
                     <span>{project.year}</span>
                   </div>
 
-                  <h2 className="font-[family-name:var(--font-display)] text-2xl font-light text-[#edebe6] group-hover:text-white transition-colors">
+                  <h2 className="font-[family-name:var(--font-display)] text-2xl font-light text-ink group-hover:text-ink transition-colors">
                     <Link href={`/project/${project.slug}`}>
                       {project.title}
                     </Link>
                   </h2>
 
-                  <p className="mt-2 font-[family-name:var(--font-sans)] text-sm text-[#edebe6]/70 leading-relaxed line-clamp-2">
+                  <p className="mt-2 font-[family-name:var(--font-sans)] text-sm text-ink-muted leading-relaxed line-clamp-2">
                     {project.summary}
                   </p>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between font-mono text-xs uppercase tracking-widest text-[#edebe6]/80">
+                <div className="mt-6 pt-4 border-t border-rule flex items-center justify-between font-mono text-xs uppercase tracking-widest text-ink/80">
                   <Link
                     href={`/project/${project.slug}`}
                     data-magnetic
@@ -115,8 +111,8 @@ export default function ProjectsIndexPage() {
                     <span>→</span>
                   </Link>
                   {project.placeholder && (
-                    <span className="text-label text-[#edebe6]/60">
-                      [PLACEHOLDER]
+                    <span className="text-label text-ink-faint">
+                      Pending
                     </span>
                   )}
                 </div>

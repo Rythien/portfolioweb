@@ -8,7 +8,7 @@ import LenisProvider from "@/components/common/LenisProvider";
 export default function JourneyPreviewPage() {
   return (
     <LenisProvider>
-      <div className="bg-[#050505] min-h-screen text-[#edebe6] flex flex-col justify-center">
+      <div className="min-h-screen flex flex-col justify-center">
         <Header />
         <main className="pt-20">
           <Journey />

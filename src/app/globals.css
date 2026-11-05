@@ -4,41 +4,57 @@
   --font-display: var(--font-display), "Newsreader", Georgia, serif;
   --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, monospace;
-  --color-void: #050505;
-  --color-paper: #edebe6;
+
+  --color-surface: var(--t-surface);
+  --color-surface-elevated: var(--t-surface-el);
+  --color-ink: var(--t-ink);
+  --color-ink-muted: var(--t-ink-muted);
+  --color-ink-faint: var(--t-ink-faint);
+  --color-rule: var(--t-rule);
+  --color-rule-hover: var(--t-rule-hover);
 }
 
-:root {
-  --bg-color: #050505;
-  --text-color: #edebe6;
-  --text-muted: rgba(237, 235, 230, 0.75);
-  --border-subtle: rgba(237, 235, 230, 0.12);
-  --border-hover: rgba(237, 235, 230, 0.35);
-  --accent: #edebe6;
+/* ── Theme tokens ─────────────────────────────────────────────── */
+
+:root,
+html[data-mode="wake"] {
+  --t-surface: #E9E7E2;
+  --t-surface-el: #dfdcd6;
+  --t-ink: #1a1a1e;
+  --t-ink-muted: #6b6b76;
+  --t-ink-faint: #a0a0a8;
+  --t-rule: rgba(26, 26, 30, 0.1);
+  --t-rule-hover: rgba(26, 26, 30, 0.25);
+
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
 }
 
-html[data-theme="inverted"] {
-  --bg-color: #edebe6;
-  --text-color: #050505;
-  --text-muted: rgba(5, 5, 5, 0.55);
-  --border-subtle: rgba(5, 5, 5, 0.12);
-  --border-hover: rgba(5, 5, 5, 0.35);
-  --accent: #050505;
+html[data-mode="dream"] {
+  --t-surface: #07062B;
+  --t-surface-el: #0f0e3a;
+  --t-ink: #f2efe9;
+  --t-ink-muted: #8b8e99;
+  --t-ink-faint: #5a5d6b;
+  --t-rule: rgba(242, 239, 233, 0.08);
+  --t-rule-hover: rgba(242, 239, 233, 0.2);
 }
+
+/* ── Base ──────────────────────────────────────────────────────── */
 
 @layer base {
   html {
     scroll-behavior: initial;
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    transition: background-color 0.4s var(--ease-out-expo), color 0.4s var(--ease-out-expo);
+    background-color: var(--t-surface);
+    color: var(--t-ink);
+    transition:
+      background-color 0.6s var(--ease-out-expo),
+      color 0.6s var(--ease-out-expo);
   }
 
   body {
-    background-color: var(--bg-color);
-    color: var(--text-color);
+    background-color: var(--t-surface);
+    color: var(--t-ink);
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -54,12 +70,13 @@ html[data-theme="inverted"] {
   }
 
   ::selection {
-    background: var(--text-color);
-    color: var(--bg-color);
+    background: var(--t-ink);
+    color: var(--t-surface);
   }
 }
 
-/* Typography Token Utilities (Fluid scale with rem anchor for WCAG 1.4.4 zoom compliance) */
+/* ── Typography tokens (fluid scale) ──────────────────────────── */
+
 @utility text-display {
   font-size: clamp(3.75rem, 2.5rem + 5vw, 7.5rem);
   line-height: 1.05;
@@ -103,7 +120,7 @@ html[data-theme="inverted"] {
 }
 
 @utility text-label {
-  font-size: 0.75rem; /* 12px minimum floor */
+  font-size: 0.75rem;
   line-height: 1.4;
   letter-spacing: 0.06em;
 }
@@ -113,25 +130,27 @@ html[data-theme="inverted"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Custom Scrollbar for Lenis */
+/* ── Scrollbar ────────────────────────────────────────────────── */
+
 ::-webkit-scrollbar {
   width: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-color);
+  background: var(--t-surface);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
+  background: var(--t-rule);
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-hover);
+  background: var(--t-rule-hover);
 }
 
-/* Lenis CSS integration */
+/* ── Lenis ────────────────────────────────────────────────────── */
+
 html.lenis, html.lenis body {
   height: auto;
 }
@@ -148,23 +167,26 @@ html.lenis, html.lenis body {
   overflow: hidden;
 }
 
-/* Accessible Focus States */
+/* ── Focus states ─────────────────────────────────────────────── */
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  outline: 1.5px solid var(--text-color);
+  outline: 1.5px solid var(--t-ink);
   outline-offset: 4px;
 }
 
-/* View Transition support for negative mode */
+/* ── View transitions ─────────────────────────────────────────── */
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-/* Cursor overrides when custom cursor is active on desktop */
+/* ── Custom cursor ────────────────────────────────────────────── */
+
 @media (pointer: fine) and (prefers-reduced-motion: no-preference) {
   body.has-custom-cursor,
   body.has-custom-cursor a,
@@ -176,12 +198,55 @@ textarea:focus-visible {
   }
 }
 
-/* Reduced motion standard */
+/* ── Reduced motion ───────────────────────────────────────────── */
+
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01s !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ── Grid overlay ─────────────────────────────────────────────── */
+
+.grid-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0;
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.grid-overlay[data-visible="true"] {
+  opacity: 1;
+}
+
+.grid-overlay > span {
+  border-left: 1px solid var(--t-rule);
+  height: 100%;
+}
+
+.grid-overlay > span:last-child {
+  border-right: 1px solid var(--t-rule);
+}
+
+@media (min-width: 640px) {
+  .grid-overlay {
+    padding: 0 2.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid-overlay {
+    padding: 0 4rem;
   }
 }
