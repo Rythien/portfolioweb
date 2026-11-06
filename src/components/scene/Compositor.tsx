@@ -23,20 +23,20 @@ const brushFragmentShader = /* glsl */ `
 
   uniform sampler2D uPrevFrame;
   uniform float uDecay;
-  uniform vec2 uBrushPos;      // normalized 0-1
-  uniform float uBrushRadius;  // normalized
+  uniform vec2 uBrushPos;
+  uniform float uBrushRadius;
   uniform float uBrushStrength;
   uniform float uTime;
   uniform vec2 uResolution;
   uniform int uStampCount;
-  uniform vec2 uStamps[16];    // interpolated positions
-  uniform float uFloodRadius;  // expanding radius for toggle flood
-  uniform vec2 uFloodCenter;   // origin of flood in normalized coords
-  uniform float uFloodActive;  // 1.0 = flooding, -1.0 = draining, 0.0 = off
+  uniform vec2 uStamps[16];
+  uniform float uFloodRadius;
+  uniform vec2 uFloodCenter;
+  uniform float uFloodActive;  // 1.0 = filling, -1.0 = draining, 0.0 = off
+  uniform float uRestMode;     // 0.0 = wake at rest, 1.0 = dream at rest
 
   varying vec2 vUv;
 
-  // FBM noise for organic edge distortion
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
@@ -69,47 +69,46 @@ const brushFragmentShader = /* glsl */ `
     float aspect = uResolution.x / uResolution.y;
     vec2 aspectUv = uv * vec2(aspect, 1.0);
 
-    // Read previous frame and decay
-    float prev = texture2D(uPrevFrame, uv).r * uDecay;
+    // ── Flood mode: mask is purely from the expanding circle ────
+    if (abs(uFloodActive) > 0.5) {
+      vec2 floodPos = uFloodCenter * vec2(aspect, 1.0);
+      float floodDist = length(aspectUv - floodPos);
+      float floodNoise = fbm(aspectUv * 6.0 + uTime * 0.8) * 0.04;
+      float circle = smoothstep(
+        uFloodRadius + 0.02 + floodNoise,
+        uFloodRadius - 0.04 + floodNoise,
+        floodDist
+      );
 
-    // Stamp brush at interpolated positions
+      float result = uFloodActive > 0.5 ? circle : 1.0 - circle;
+      gl_FragColor = vec4(result, result, result, 1.0);
+      return;
+    }
+
+    // ── Normal brush mode ──────────────────────────────────────
+    float restValue = step(0.5, uRestMode);
+    float prev = texture2D(uPrevFrame, uv).r;
+    prev = prev + (restValue - prev) * (1.0 - uDecay);
+
     float brush = 0.0;
     for (int i = 0; i < 16; i++) {
       if (i >= uStampCount) break;
       vec2 stampPos = uStamps[i] * vec2(aspect, 1.0);
       float dist = length(aspectUv - stampPos);
-
-      // FBM distortion on the edge
       float noiseOffset = fbm(aspectUv * 8.0 + uTime * 0.5) * 0.02;
       dist += noiseOffset;
-
-      // Soft circular brush
       float stamp = smoothstep(uBrushRadius, uBrushRadius * 0.3, dist);
       brush = max(brush, stamp * uBrushStrength);
     }
 
-    float result = max(prev, brush);
-
-    // Flood fill from pill click
-    if (uFloodActive > 0.5) {
-      // Filling: expanding circle from flood center
-      vec2 floodPos = uFloodCenter * vec2(aspect, 1.0);
-      float floodDist = length(aspectUv - floodPos);
-      float floodNoise = fbm(aspectUv * 6.0 + uTime * 0.8) * 0.04;
-      float flood = smoothstep(uFloodRadius + 0.02 + floodNoise, uFloodRadius - 0.04 + floodNoise, floodDist);
-      result = max(result, flood);
-    } else if (uFloodActive < -0.5) {
-      // Draining: shrinking circle from flood center
-      vec2 floodPos = uFloodCenter * vec2(aspect, 1.0);
-      float floodDist = length(aspectUv - floodPos);
-      float floodNoise = fbm(aspectUv * 6.0 + uTime * 0.8) * 0.04;
-      float drain = smoothstep(uFloodRadius - 0.04 + floodNoise, uFloodRadius + 0.02 + floodNoise, floodDist);
-      result = min(result, 1.0 - drain);
+    float result;
+    if (uRestMode > 0.5) {
+      result = min(prev, 1.0 - brush);
+    } else {
+      result = max(prev, brush);
     }
 
-    result = clamp(result, 0.0, 1.0);
-
-    gl_FragColor = vec4(result, result, result, 1.0);
+    gl_FragColor = vec4(clamp(result, 0.0, 1.0), clamp(result, 0.0, 1.0), clamp(result, 0.0, 1.0), 1.0);
   }
 `;
 
@@ -139,17 +138,14 @@ const compositeFragmentShader = /* glsl */ `
 
     float mask = texture2D(uBrushMask, uv).r;
 
-    // Smooth the mask edge
     float reveal = smoothstep(0.05, 0.5, mask);
 
-    // Chromatic aberration at the boundary
     float edgeStrength = smoothstep(0.05, 0.25, mask) - smoothstep(0.25, 0.5, mask);
     float aberration = edgeStrength * 0.004;
 
     vec4 wake = texture2D(uWakeScene, uv);
     vec4 dream = texture2D(uDreamScene, uv);
 
-    // Sample with offset for chromatic split at edge
     float dreamR = texture2D(uDreamScene, uv + vec2(aberration, 0.0)).r;
     float dreamB = texture2D(uDreamScene, uv - vec2(aberration, 0.0)).b;
     vec3 dreamChroma = vec3(dreamR, dream.g, dreamB);
@@ -158,16 +154,13 @@ const compositeFragmentShader = /* glsl */ `
     float wakeB = texture2D(uWakeScene, uv - vec2(aberration * 0.5, 0.0)).b;
     vec3 wakeChroma = vec3(wakeR, wake.g, wakeB);
 
-    // Blend between normal and chromatic versions based on edge proximity
     vec3 finalWake = mix(wake.rgb, wakeChroma, edgeStrength);
     vec3 finalDream = mix(dream.rgb, dreamChroma, edgeStrength);
 
-    // Glowing white rim at mask edge
     float edgeMask = smoothstep(0.1, 0.3, mask) - smoothstep(0.3, 0.5, mask);
     float outerHalo = smoothstep(0.0, 0.15, mask) - smoothstep(0.15, 0.4, mask);
     float rim = edgeMask * 0.8 + outerHalo * 0.3;
 
-    // Composite wake + dream
     vec3 result = mix(finalWake, finalDream, reveal);
     result += vec3(1.0) * rim;
 
@@ -195,6 +188,7 @@ const brushMaterial = new THREE.ShaderMaterial({
     uFloodRadius: { value: 0 },
     uFloodCenter: { value: new THREE.Vector2(0.5, 0.5) },
     uFloodActive: { value: 0 },
+    uRestMode: { value: 0 },
   },
   depthTest: false,
   depthWrite: false,
@@ -237,29 +231,24 @@ interface CompositorProps {
 export default function Compositor({ reducedMotion, isMobile }: CompositorProps) {
   const { gl, size } = useThree();
 
-  // Keep FBO camera aspect updated
   useEffect(() => {
     fboCamera.aspect = size.width / size.height;
     fboCamera.updateProjectionMatrix();
   }, [size]);
 
-  // Scenes for portal rendering
   const wakeScene = useMemo(() => new THREE.Scene(), []);
   const dreamScene = useMemo(() => new THREE.Scene(), []);
 
-  // FBO for wake scene
   const wakeTarget = useFBO(size.width, size.height, {
     depthBuffer: true,
     stencilBuffer: false,
   });
 
-  // FBO for dream scene
   const dreamTarget = useFBO(size.width, size.height, {
     depthBuffer: true,
     stencilBuffer: false,
   });
 
-  // Ping-pong brush buffer at half resolution
   const brushRes = useMemo(
     () => ({
       w: Math.max(64, Math.floor(size.width * 0.5)),
@@ -283,18 +272,26 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
 
   const pingPongRef = useRef(0);
 
-  // Clear brush buffers to black on init
+  // Clear brush buffers to match initial mode
   const brushInitRef = useRef(false);
   useEffect(() => {
     if (brushInitRef.current) return;
     brushInitRef.current = true;
+    const initMode = useThemeStore.getState().mode;
+    const clearColor = initMode === "dream" ? "#ffffff" : "#000000";
     gl.setRenderTarget(brushTargetA);
-    gl.setClearColor("#000000", 1);
+    gl.setClearColor(clearColor, 1);
     gl.clear();
     gl.setRenderTarget(brushTargetB);
     gl.clear();
     gl.setRenderTarget(null);
     gl.setClearColor("#000000", 0);
+
+    const f = floodRef.current;
+    f.level = initMode === "dream" ? 1 : 0;
+    f.target = f.level;
+    f.dataMode = initMode;
+    brushMaterial.uniforms.uRestMode.value = f.level;
   }, [gl, brushTargetA, brushTargetB]);
 
   // Brush state
@@ -303,7 +300,6 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
   const smoothMouseRef = useRef({ x: 0.5, y: 0.5 });
   const mouseActiveRef = useRef(false);
 
-  // Touch support
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       mouseRef.current.x = e.clientX / window.innerWidth;
@@ -337,7 +333,6 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     };
   }, []);
 
-  // Dispose FBO targets on unmount
   useEffect(() => {
     return () => {
       wakeTarget.dispose();
@@ -347,18 +342,17 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     };
   }, [wakeTarget, dreamTarget, brushTargetA, brushTargetB]);
 
-  // Composite quad
   const compositeQuadRef = useRef<THREE.Mesh>(null);
 
-  // Flood animation state (driven by theme store transitions)
+  // Flood animation state — spring-driven level (0 = wake, 1 = dream)
   const floodRef = useRef({
     active: false,
-    direction: 1 as 1 | -1,
-    startTime: 0,
+    level: 0,
+    target: 0,
     centerX: 0.5,
     centerY: 0.5,
     maxRadius: 2.0,
-    themeSwitched: false,
+    dataMode: "wake" as Mode,
   });
 
   const transitioning = useThemeStore((s) => s.transitioning);
@@ -367,29 +361,35 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
   const setMode = useThemeStore((s) => s.setMode);
 
   useEffect(() => {
-    if (transitioning && clickOrigin) {
-      const currentMode = useThemeStore.getState().mode;
-      const f = floodRef.current;
+    if (!transitioning || !clickOrigin) return;
+    const f = floodRef.current;
+
+    if (f.active) {
+      // Mid-animation reversal: flip target, keep center for smooth retract
+      f.target = f.target === 1 ? 0 : 1;
+    } else {
+      // Fresh start
       f.active = true;
-      f.direction = currentMode === "wake" ? 1 : -1;
-      f.startTime = performance.now();
       f.centerX = clickOrigin.x / window.innerWidth;
       f.centerY = 1 - clickOrigin.y / window.innerHeight;
-      f.themeSwitched = false;
-      // Compute max radius needed to cover entire screen from click point
+      f.target = f.level < 0.5 ? 1 : 0;
+
       const aspect = window.innerWidth / window.innerHeight;
       const cx = f.centerX * aspect;
       const cy = f.centerY;
-      f.maxRadius = Math.max(
-        Math.hypot(cx, cy),
-        Math.hypot(cx - aspect, cy),
-        Math.hypot(cx, cy - 1),
-        Math.hypot(cx - aspect, cy - 1)
-      ) * 1.2;
+      f.maxRadius =
+        Math.max(
+          Math.hypot(cx, cy),
+          Math.hypot(cx - aspect, cy),
+          Math.hypot(cx, cy - 1),
+          Math.hypot(cx - aspect, cy - 1)
+        ) * 1.2;
     }
-  }, [transitioning, clickOrigin]);
 
-  // Interpolate stamps between previous and current mouse position
+    // Acknowledge the signal so the next click can fire
+    endTransition();
+  }, [transitioning, clickOrigin, endTransition]);
+
   const getStamps = useCallback(() => {
     const sx = smoothMouseRef.current.x;
     const sy = smoothMouseRef.current.y;
@@ -412,50 +412,62 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     return stamps;
   }, []);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const time = state.clock.elapsedTime;
 
-    // Lerp mouse position for smooth brush trailing
     const lerpFactor = 0.15;
     smoothMouseRef.current.x +=
       (mouseRef.current.x - smoothMouseRef.current.x) * lerpFactor;
     smoothMouseRef.current.y +=
       (mouseRef.current.y - smoothMouseRef.current.y) * lerpFactor;
 
-    // Compute brush radius based on cursor velocity
     const dx = smoothMouseRef.current.x - prevMouseRef.current.x;
     const dy = smoothMouseRef.current.y - prevMouseRef.current.y;
     const vel = Math.sqrt(dx * dx + dy * dy);
     const baseRadius = isMobile ? 0.06 : 0.08;
     const dynamicRadius = baseRadius + Math.min(vel * 2.0, 0.04);
 
-    // ── Flood animation ─────────────────────────────────────────
+    // ── Flood animation (spring toward target) ──────────────────
     const f = floodRef.current;
     if (f.active) {
-      const elapsed = (performance.now() - f.startTime) / 1200;
-      const t = Math.min(elapsed, 1);
-      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const rate = 3.5;
+      f.level += (f.target - f.level) * (1 - Math.exp(-rate * delta));
 
-      brushMaterial.uniforms.uFloodCenter.value.set(f.centerX, f.centerY);
-
-      if (f.direction === 1) {
-        brushMaterial.uniforms.uFloodRadius.value = eased * f.maxRadius;
-        brushMaterial.uniforms.uFloodActive.value = 1.0;
-      } else {
-        brushMaterial.uniforms.uFloodRadius.value = (1 - eased) * f.maxRadius;
-        brushMaterial.uniforms.uFloodActive.value = -1.0;
-      }
-
-      if (!f.themeSwitched && t >= 0.45) {
-        f.themeSwitched = true;
-        const target: Mode = f.direction === 1 ? "dream" : "wake";
-        setMode(target);
-      }
-
-      if (t >= 1) {
+      // Snap when visually complete
+      if (Math.abs(f.level - f.target) < 0.003) {
+        f.level = f.target;
         f.active = false;
+
+        // Write final state to both buffers
+        const finalColor = f.target === 1 ? "#ffffff" : "#000000";
+        gl.setRenderTarget(brushTargetA);
+        gl.setClearColor(finalColor, 1);
+        gl.clear();
+        gl.setRenderTarget(brushTargetB);
+        gl.clear();
+        gl.setRenderTarget(null);
+        gl.setClearColor("#000000", 0);
+        pingPongRef.current = 0;
+
         brushMaterial.uniforms.uFloodActive.value = 0.0;
-        endTransition();
+        brushMaterial.uniforms.uRestMode.value = f.target;
+      } else {
+        brushMaterial.uniforms.uFloodRadius.value = f.level * f.maxRadius;
+        brushMaterial.uniforms.uFloodActive.value = f.target === 1 ? 1.0 : -1.0;
+        brushMaterial.uniforms.uFloodCenter.value.set(f.centerX, f.centerY);
+      }
+
+      // Switch data-mode when crossing 0.5
+      if (f.level >= 0.5 && f.dataMode === "wake") {
+        f.dataMode = "dream";
+        setMode("dream");
+      } else if (f.level < 0.5 && f.dataMode === "dream") {
+        f.dataMode = "wake";
+        setMode("wake");
+      }
+
+      if (typeof window !== "undefined") {
+        (window as any).__modeDebug = { floodProgress: f.level };
       }
     }
 
@@ -477,13 +489,12 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     const writeTarget =
       pingPongRef.current === 0 ? brushTargetB : brushTargetA;
 
-    // Set brush uniforms
     brushMaterial.uniforms.uPrevFrame.value = readTarget.texture;
     brushMaterial.uniforms.uDecay.value = f.active ? 1.0 : 0.985;
     brushMaterial.uniforms.uTime.value = time;
     brushMaterial.uniforms.uResolution.value.set(brushRes.w, brushRes.h);
 
-    if (mouseActiveRef.current && !reducedMotion) {
+    if (mouseActiveRef.current && !reducedMotion && !f.active) {
       brushMaterial.uniforms.uBrushRadius.value = dynamicRadius;
       brushMaterial.uniforms.uBrushStrength.value = 1.0;
 
@@ -494,8 +505,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       for (let i = 0; i < stamps.length && i < 16; i++) {
         stampUniforms[i].copy(stamps[i]);
       }
-    } else if (reducedMotion) {
-      // Simple circular reveal on hover
+    } else if (reducedMotion && !f.active) {
       brushMaterial.uniforms.uBrushRadius.value = 0.1;
       brushMaterial.uniforms.uBrushStrength.value = mouseActiveRef.current
         ? 1.0
@@ -520,30 +530,26 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     compositeMaterial.uniforms.uResolution.value.set(size.width, size.height);
     compositeMaterial.uniforms.uTime.value = time;
 
-    // Reset clear color and render to screen
     gl.setClearColor("#000000", 0);
     gl.setRenderTarget(null);
 
-    // Store previous mouse for next frame interpolation
     prevMouseRef.current.x = smoothMouseRef.current.x;
     prevMouseRef.current.y = smoothMouseRef.current.y;
   });
 
   return (
     <>
-      {/* Wake scene rendered to FBO via portal */}
       {createPortal(
         <WakeScene reducedMotion={reducedMotion} isMobile={isMobile} />,
-        wakeScene
+        wakeScene,
+        { camera: fboCamera }
       )}
 
-      {/* Dream scene rendered to FBO via portal */}
       {createPortal(
         <DreamScene reducedMotion={reducedMotion} isMobile={isMobile} />,
         dreamScene
       )}
 
-      {/* Full-screen composite quad rendered to screen */}
       <mesh ref={compositeQuadRef} frustumCulled={false}>
         <planeGeometry args={[2, 2]} />
         <primitive object={compositeMaterial} attach="material" />

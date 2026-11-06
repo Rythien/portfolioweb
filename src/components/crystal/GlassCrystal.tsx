@@ -187,8 +187,13 @@ export function useGlassCrystalShards(detail = 5): ShardData[] {
 
 /* ── Component: assembled glass crystal ────────────────────────── */
 
-const GlassCrystal = forwardRef<THREE.Group>(function GlassCrystal(_, ref) {
-  const shards = useGlassCrystalShards(5);
+interface GlassCrystalProps {
+  buffer?: THREE.Texture;
+  detail?: number;
+}
+
+const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(function GlassCrystal({ buffer, detail = 5 }, ref) {
+  const shards = useGlassCrystalShards(detail);
 
   return (
     <group ref={ref}>
@@ -199,6 +204,7 @@ const GlassCrystal = forwardRef<THREE.Group>(function GlassCrystal(_, ref) {
           position={shard.centroid.toArray() as [number, number, number]}
         >
           <MeshTransmissionMaterial
+            buffer={buffer}
             thickness={2.0}
             chromaticAberration={0.4}
             anisotropicBlur={0.3}

@@ -2,12 +2,12 @@
 
 import { useRef, useMemo, useEffect, useCallback } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Text, MeshTransmissionMaterial, Environment } from "@react-three/drei";
+import { Text, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
-import { useGlassCrystalShards } from "@/components/crystal/GlassCrystal";
+import GlassCrystal from "@/components/crystal/GlassCrystal";
 
 /* ── Seeded PRNG (for pixel gem sparkles) ──────────────────────── */
 
@@ -146,13 +146,14 @@ function MarqueeText({
     groupRef.current.position.y = -scrollY;
 
     const fade = heroScroll < 0.2 ? 1 : 1 - (heroScroll - 0.2) / 0.8;
+    const fading = fade < 0.999;
     const children = groupRef.current.children;
     for (let i = 0; i < children.length; i++) {
       const mat = (children[i] as THREE.Mesh).material as THREE.Material & {
         opacity: number;
       };
       if (mat) {
-        mat.transparent = true;
+        mat.transparent = fading;
         mat.opacity = fade;
       }
     }
@@ -193,6 +194,12 @@ function MarqueeText({
           color="#1a1a1e"
           anchorX="center"
           anchorY="middle"
+          onSync={(troika: any) => {
+            if (troika.material) {
+              troika.material.transparent = false;
+              troika.material.alphaTest = 0.5;
+            }
+          }}
         >
           {SITE_DATA.hero.headlineLine1}
         </Text>
@@ -212,7 +219,13 @@ function MarqueeText({
           color="#1a1a1e"
           anchorX="left"
           anchorY="middle"
-          onSync={i === 0 ? measureTile : undefined}
+          onSync={(troika: any) => {
+            if (i === 0) measureTile();
+            if (troika.material) {
+              troika.material.transparent = false;
+              troika.material.alphaTest = 0.5;
+            }
+          }}
         >
           {HEADLINE_TILE}
         </Text>
@@ -251,8 +264,6 @@ function scrollScaleAt(scales: number[], t: number) {
 
 /* ── Pre-fractured crystal (18 shards, assembled at scroll 0) ──── */
 
-const shardMeshRefs: THREE.Mesh[] = [];
-
 function WakeCrystal({
   reducedMotion,
   isMobile,
@@ -261,17 +272,9 @@ function WakeCrystal({
   isMobile: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const shards = useGlassCrystalShards(isMobile ? 3 : 5);
   const mouseRef = useRef({ x: 0, y: 0 });
   const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
   const dampedScale = useRef(1);
-
-  const shardRefCb = useCallback(
-    (index: number) => (el: THREE.Mesh | null) => {
-      if (el) shardMeshRefs[index] = el;
-    },
-    []
-  );
 
   useEffect(() => {
     if (isMobile || reducedMotion) return;
@@ -288,7 +291,6 @@ function WakeCrystal({
     const elapsed = state.clock.elapsedTime;
     const { progress } = useScrollStore.getState();
 
-    // Spline position + scale follow scroll
     const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
     const targetScale = scrollScaleAt(
       crystalScaleSpline,
@@ -307,68 +309,19 @@ function WakeCrystal({
     groupRef.current.position.copy(dampedPos.current);
     groupRef.current.scale.setScalar(dampedScale.current);
 
-    // Idle rotation + mouse parallax
     groupRef.current.rotation.y = elapsed * 0.15;
     groupRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
     if (!isMobile) {
       groupRef.current.rotation.y += mouseRef.current.x * 0.15;
       groupRef.current.rotation.x += mouseRef.current.y * 0.1;
     }
-
-    for (let i = 0; i < shards.length; i++) {
-      const mesh = shardMeshRefs[i];
-      if (!mesh) continue;
-      const s = shards[i];
-      mesh.position.copy(s.centroid);
-      mesh.rotation.set(0, 0, 0);
-    }
-
-    // Debug: expose crystal state to the DOM overlay
-    if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-      const g = groupRef.current;
-      const worldPos = new THREE.Vector3();
-      g.getWorldPosition(worldPos);
-      const firstMesh = shardMeshRefs[0];
-      const rt = (state.gl as any).__currentRenderTarget;
-      (window as any).__crystalDebug = {
-        mounted: true,
-        visible: g.visible,
-        scale: `${g.scale.x.toFixed(3)}`,
-        worldPos: `${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}`,
-        materialType: firstMesh?.material
-          ? (firstMesh.material as any).type || firstMesh.material.constructor.name
-          : "none",
-        parentSceneUuid: g.parent?.uuid ?? "?",
-        rootSceneUuid: state.scene.uuid,
-        renderTargetActive: rt ? `yes (${rt.width}x${rt.height})` : "no (null)",
-        shardCount: shards.length,
-      };
-    }
   });
 
   return (
-    <group ref={groupRef}>
-      {shards.map((shard, i) => (
-        <mesh key={i} ref={shardRefCb(i)} geometry={shard.geometry} position={shard.centroid.toArray() as [number, number, number]}>
-          <MeshTransmissionMaterial
-            thickness={2.0}
-            chromaticAberration={0.4}
-            anisotropicBlur={0.3}
-            roughness={0.08}
-            distortion={0.3}
-            distortionScale={0.25}
-            temporalDistortion={0.08}
-            transmission={1}
-            ior={1.3}
-            samples={8}
-            resolution={1024}
-            color="#f0f4fa"
-            backside
-            backsideThickness={0.6}
-          />
-        </mesh>
-      ))}
-    </group>
+    <GlassCrystal
+      ref={groupRef}
+      detail={isMobile ? 3 : 5}
+    />
   );
 }
 
