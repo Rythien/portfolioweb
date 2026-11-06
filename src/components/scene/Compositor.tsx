@@ -32,7 +32,7 @@ const brushFragmentShader = /* glsl */ `
   uniform vec2 uStamps[16];
   uniform float uFloodRadius;
   uniform vec2 uFloodCenter;
-  uniform float uFloodActive;  // 1.0 = filling, -1.0 = draining, 0.0 = off
+  uniform float uFloodActive;  // 1.0 = active, 0.0 = off
   uniform float uRestMode;     // 0.0 = wake at rest, 1.0 = dream at rest
 
   varying vec2 vUv;
@@ -74,13 +74,11 @@ const brushFragmentShader = /* glsl */ `
       vec2 floodPos = uFloodCenter * vec2(aspect, 1.0);
       float floodDist = length(aspectUv - floodPos);
       float floodNoise = fbm(aspectUv * 6.0 + uTime * 0.8) * 0.04;
-      float circle = smoothstep(
-        uFloodRadius + 0.02 + floodNoise,
-        uFloodRadius - 0.04 + floodNoise,
-        floodDist
-      );
+      float R = uFloodRadius;
+      float n = floodNoise;
+      float circle = 1.0 - smoothstep(R - 0.04 + n, R + 0.02 + n, floodDist);
 
-      float result = uFloodActive > 0.5 ? circle : 1.0 - circle;
+      float result = circle;
       gl_FragColor = vec4(result, result, result, 1.0);
       return;
     }
@@ -165,6 +163,7 @@ const compositeFragmentShader = /* glsl */ `
     result += vec3(1.0) * rim;
 
     gl_FragColor = vec4(result, 1.0);
+    #include <colorspace_fragment>
   }
 `;
 
@@ -453,7 +452,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
         brushMaterial.uniforms.uRestMode.value = f.target;
       } else {
         brushMaterial.uniforms.uFloodRadius.value = f.level * f.maxRadius;
-        brushMaterial.uniforms.uFloodActive.value = f.target === 1 ? 1.0 : -1.0;
+        brushMaterial.uniforms.uFloodActive.value = 1.0;
         brushMaterial.uniforms.uFloodCenter.value.set(f.centerX, f.centerY);
       }
 
