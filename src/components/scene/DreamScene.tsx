@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
+import GlassCrystal from "@/components/crystal/GlassCrystal";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -16,177 +17,6 @@ function seededRandom(seed: number) {
     s = (s * 16807) % 2147483647;
     return (s - 1) / 2147483646;
   };
-}
-
-/* ── 3D value noise for crystal displacement ───────────────────── */
-
-function hash(n: number) {
-  const s = Math.sin(n) * 43758.5453;
-  return s - Math.floor(s);
-}
-
-function noise3(x: number, y: number, z: number) {
-  const ix = Math.floor(x),
-    iy = Math.floor(y),
-    iz = Math.floor(z);
-  const fx = x - ix,
-    fy = y - iy,
-    fz = z - iz;
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  const uz = fz * fz * (3 - 2 * fz);
-  const n = ix + iy * 157 + iz * 113;
-  return (
-    hash(n) * (1 - ux) * (1 - uy) * (1 - uz) +
-    hash(n + 1) * ux * (1 - uy) * (1 - uz) +
-    hash(n + 157) * (1 - ux) * uy * (1 - uz) +
-    hash(n + 158) * ux * uy * (1 - uz) +
-    hash(n + 113) * (1 - ux) * (1 - uy) * uz +
-    hash(n + 114) * ux * (1 - uy) * uz +
-    hash(n + 270) * (1 - ux) * uy * uz +
-    hash(n + 271) * ux * uy * uz
-  );
-}
-
-/* ── Crystal geometry + Voronoi fracture ──────────────────────── */
-
-interface ShardData {
-  geometry: THREE.BufferGeometry;
-  centroid: THREE.Vector3;
-  direction: THREE.Vector3;
-  delay: number;
-}
-
-function useCrystalShards(
-  detail: number,
-  shardCount: number,
-  isMobile: boolean
-): ShardData[] {
-  return useMemo(() => {
-    const d = isMobile ? Math.max(2, detail - 2) : detail;
-    const geo = new THREE.IcosahedronGeometry(1.4, d);
-    const pos = geo.attributes.position;
-    const v = new THREE.Vector3();
-
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i);
-      const dir = v.clone().normalize();
-      const n1 = noise3(dir.x * 1.8, dir.y * 1.8, dir.z * 1.8);
-      const raw = noise3(
-        dir.x * 4.5 + 7.3,
-        dir.y * 4.5 + 3.1,
-        dir.z * 4.5 + 1.7
-      );
-      const ridged = 1 - Math.abs(raw * 2 - 1);
-      const displacement = (n1 - 0.5) * 0.35 + ridged * 0.12;
-      v.copy(dir).multiplyScalar(1.4 + displacement);
-      pos.setXYZ(i, v.x, v.y, v.z);
-    }
-    geo.computeVertexNormals();
-
-    const rng = seededRandom(4242);
-    const seeds: THREE.Vector3[] = [];
-    for (let i = 0; i < shardCount; i++) {
-      const theta = Math.acos(2 * rng() - 1);
-      const phi = 2 * Math.PI * rng();
-      seeds.push(
-        new THREE.Vector3(
-          Math.sin(theta) * Math.cos(phi),
-          Math.sin(theta) * Math.sin(phi),
-          Math.cos(theta)
-        )
-      );
-    }
-
-    const triCount = pos.count / 3;
-    const assignments = new Int32Array(triCount);
-    const centA = new THREE.Vector3();
-    const centB = new THREE.Vector3();
-    const centC = new THREE.Vector3();
-    const triCenter = new THREE.Vector3();
-
-    for (let t = 0; t < triCount; t++) {
-      const base = t * 3;
-      centA.fromBufferAttribute(pos, base);
-      centB.fromBufferAttribute(pos, base + 1);
-      centC.fromBufferAttribute(pos, base + 2);
-      triCenter
-        .copy(centA)
-        .add(centB)
-        .add(centC)
-        .divideScalar(3)
-        .normalize();
-
-      let best = 0;
-      let bestDist = Infinity;
-      for (let s = 0; s < seeds.length; s++) {
-        const dist = triCenter.distanceToSquared(seeds[s]);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = s;
-        }
-      }
-      assignments[t] = best;
-    }
-
-    const srcNormals = geo.attributes.normal;
-    const shards: ShardData[] = [];
-
-    for (let s = 0; s < shardCount; s++) {
-      const verts: number[] = [];
-      const norms: number[] = [];
-
-      for (let t = 0; t < triCount; t++) {
-        if (assignments[t] !== s) continue;
-        const base = t * 3;
-        for (let vi = 0; vi < 3; vi++) {
-          const idx = base + vi;
-          verts.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
-          norms.push(
-            srcNormals.getX(idx),
-            srcNormals.getY(idx),
-            srcNormals.getZ(idx)
-          );
-        }
-      }
-
-      if (verts.length === 0) continue;
-
-      const centroid = new THREE.Vector3();
-      const vertCount = verts.length / 3;
-      for (let i = 0; i < verts.length; i += 3) {
-        centroid.x += verts[i];
-        centroid.y += verts[i + 1];
-        centroid.z += verts[i + 2];
-      }
-      centroid.divideScalar(vertCount);
-
-      // Re-center around centroid so rotation pivots correctly
-      for (let i = 0; i < verts.length; i += 3) {
-        verts[i] -= centroid.x;
-        verts[i + 1] -= centroid.y;
-        verts[i + 2] -= centroid.z;
-      }
-
-      const shardGeo = new THREE.BufferGeometry();
-      shardGeo.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(verts, 3)
-      );
-      shardGeo.setAttribute(
-        "normal",
-        new THREE.Float32BufferAttribute(norms, 3)
-      );
-
-      const direction = centroid.clone().normalize();
-      const delay = rng() * 0.3;
-
-      shards.push({ geometry: shardGeo, centroid, direction, delay });
-    }
-
-    geo.dispose();
-    return shards;
-  }, [detail, shardCount, isMobile]);
 }
 
 /* ── Spline paths for dream crystal scroll choreography ────────── */
@@ -209,12 +39,7 @@ function scrollScaleAt(scales: number[], t: number) {
   return scales[lo] + (scales[hi] - scales[lo]) * frac;
 }
 
-/* ── Crystal with fracture ────────────────────────────────────── */
-
-const SHARD_COUNT = 16;
-const FRACTURE_END = 0.35;
-
-const shardMeshes: THREE.Mesh[] = [];
+/* ── Crystal wrapper (scroll + mouse, delegates to shared GlassCrystal) ── */
 
 function DreamCrystal({
   reducedMotion,
@@ -224,21 +49,9 @@ function DreamCrystal({
   isMobile: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const shards = useCrystalShards(4, SHARD_COUNT, isMobile);
   const mouseRef = useRef({ x: 0, y: 0 });
   const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
   const dampedScale = useRef(1);
-  const dampedFracture = useRef<number[]>(
-    new Array(SHARD_COUNT).fill(0)
-  );
-  const dampedVelKick = useRef({ v: 0 });
-
-  const shardRefCb = useCallback(
-    (index: number) => (el: THREE.Mesh | null) => {
-      if (el) shardMeshes[index] = el;
-    },
-    []
-  );
 
   useEffect(() => {
     if (isMobile || reducedMotion) return;
@@ -253,12 +66,12 @@ function DreamCrystal({
   useFrame((state, delta) => {
     if (!groupRef.current || reducedMotion) return;
     const elapsed = state.clock.elapsedTime;
-    const { progress, velocity } = useScrollStore.getState();
+    const { progress } = useScrollStore.getState();
 
     const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
     const targetScale = scrollScaleAt(
       crystalScaleSpline,
-      Math.min(progress, 1)
+      Math.min(progress, 1),
     );
 
     damp(dampedPos.current, "x", targetPos.x, 0.25, delta);
@@ -267,7 +80,7 @@ function DreamCrystal({
     dampedScale.current = THREE.MathUtils.lerp(
       dampedScale.current,
       targetScale,
-      1 - Math.exp(-4 * delta)
+      1 - Math.exp(-4 * delta),
     );
 
     groupRef.current.position.copy(dampedPos.current);
@@ -279,69 +92,9 @@ function DreamCrystal({
       groupRef.current.rotation.y += mouseRef.current.x * 0.12;
       groupRef.current.rotation.x += mouseRef.current.y * 0.08;
     }
-
-    const rawFrac = Math.min(progress / FRACTURE_END, 1);
-    const easedFrac = 1 - Math.pow(1 - rawFrac, 3);
-
-    damp(dampedVelKick.current, "v", velocity * 0.0006, 0.3, delta);
-    const velBoost = dampedVelKick.current.v;
-
-    for (let i = 0; i < shards.length; i++) {
-      const mesh = shardMeshes[i];
-      if (!mesh) continue;
-      const s = shards[i];
-
-      const delayed =
-        Math.max(0, easedFrac - s.delay) / (1 - s.delay);
-      const targetF = delayed + velBoost * 0.5;
-
-      if (!dampedFracture.current[i]) dampedFracture.current[i] = 0;
-      dampedFracture.current[i] = THREE.MathUtils.lerp(
-        dampedFracture.current[i],
-        targetF,
-        1 - Math.exp(-6 * delta)
-      );
-      const f = dampedFracture.current[i];
-
-      const dist = (1 + s.delay * 2) * f * 2.5;
-      mesh.position.set(
-        s.centroid.x + s.direction.x * dist,
-        s.centroid.y + s.direction.y * dist,
-        s.centroid.z + s.direction.z * dist
-      );
-
-      const tumble = f * (1 + s.delay) * 0.8;
-      mesh.rotation.set(
-        s.direction.y * tumble,
-        s.direction.z * tumble,
-        s.direction.x * tumble
-      );
-    }
   });
 
-  return (
-    <group ref={groupRef}>
-      {shards.map((shard, i) => (
-        <mesh key={i} ref={shardRefCb(i)} geometry={shard.geometry}>
-          <meshPhysicalMaterial
-            color="#c4b5fd"
-            roughness={0.04}
-            metalness={0}
-            transmission={1}
-            thickness={1.5}
-            ior={1.35}
-            dispersion={0.15}
-            attenuationColor="#b4a0e8"
-            attenuationDistance={3.0}
-            envMapIntensity={1.0}
-            emissive="#4c1d95"
-            emissiveIntensity={0.15}
-            transparent
-          />
-        </mesh>
-      ))}
-    </group>
-  );
+  return <GlassCrystal ref={groupRef} variant="dream" />;
 }
 
 /* ── Drifting dust particles ──────────────────────────────────── */
@@ -467,7 +220,7 @@ function GhostedTitle({
         ? Math.min(
             (worksP - titleStart) / 0.08,
             (titleEnd - worksP) / 0.08,
-            1
+            1,
           )
         : 0;
 
@@ -563,8 +316,6 @@ function DreamMarquee({
     }
     groupRef.current.visible = true;
 
-    // heroP ≈ 0.5 at rest (section visible but not scrolled).
-    // Remap so rest = 0 offset, fully scrolled out = full offset.
     const heroScroll = Math.max(0, (heroP - 0.5) / 0.5);
     const scrollY = heroScroll * visHeight * 0.85;
     groupRef.current.position.y = -scrollY;

@@ -76,7 +76,7 @@ function MarqueeText() {
   );
 }
 
-function LabCrystal({ seed, position, variant = "rock" as const }: { seed: number; position: [number, number, number]; variant?: "rock" | "quartz" }) {
+function LabCrystal({ seed, position }: { seed: number; position: [number, number, number] }) {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
@@ -88,17 +88,16 @@ function LabCrystal({ seed, position, variant = "rock" as const }: { seed: numbe
 
   return (
     <group position={position}>
-      <GlassCrystal ref={groupRef} seed={seed} variant={variant} />
+      <GlassCrystal ref={groupRef} seed={seed} />
     </group>
   );
 }
 
-const VARIANTS: { seed: number; variant: "rock" | "quartz"; label: string }[] = [
-  { seed: 3131, variant: "rock", label: "A" },
-  { seed: 7654, variant: "rock", label: "B" },
-  { seed: 4209, variant: "rock", label: "C" },
-  { seed: 8888, variant: "rock", label: "D" },
-  { seed: 1, variant: "quartz", label: "Q" },
+const VARIANTS: { seed: number; label: string }[] = [
+  { seed: 3131, label: "A" },
+  { seed: 7654, label: "B" },
+  { seed: 4209, label: "C" },
+  { seed: 8888, label: "D" },
 ];
 
 export default function LabCanvas() {
@@ -118,7 +117,7 @@ export default function LabCanvas() {
         <color attach="background" args={["#E9E7E2"]} />
         <MarqueeText />
         {VARIANTS.map((v, i) => (
-          <LabCrystal key={v.label} seed={v.seed} variant={v.variant} position={[(i - 2) * 3.5, 0, 0]} />
+          <LabCrystal key={v.label} seed={v.seed} position={[(i - 1.5) * 4, 0, 0]} />
         ))}
         <Environment background={false} resolution={512}>
           <color attach="background" args={["#000000"]} />

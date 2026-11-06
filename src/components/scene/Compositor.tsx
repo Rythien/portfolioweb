@@ -546,7 +546,8 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
 
       {createPortal(
         <DreamScene reducedMotion={reducedMotion} isMobile={isMobile} />,
-        dreamScene
+        dreamScene,
+        { camera: fboCamera }
       )}
 
       <mesh ref={compositeQuadRef} frustumCulled={false}>

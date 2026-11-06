@@ -4,6 +4,7 @@ import { forwardRef, useMemo } from "react";
 import { MeshTransmissionMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
+import { useFractureStore } from "@/store/useFractureStore";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -17,8 +18,15 @@ function seededRandom(seed: number) {
 
 /* ── Types ─────────────────────────────────────────────────────── */
 
-const SHARD_COUNT = 18;
 const DEFAULT_SEED = 3131;
+const SHARD_COUNT = 16;
+const R = 1.4;
+const SCALE = new THREE.Vector3(1.2, 1.0, 0.9);
+
+interface HalfPlane {
+  n: THREE.Vector3;
+  d: number;
+}
 
 export interface ShardData {
   geometry: THREE.BufferGeometry;
@@ -28,343 +36,294 @@ export interface ShardData {
   delay: number;
 }
 
-/* ── Build convex-hull crystal geometry ────────────────────────── */
+/* ── 3×3 Cramer solve: n_i · p = d_i for three planes ────────── */
 
-function clipByPlane(
-  geo: THREE.BufferGeometry,
-  plane: THREE.Plane,
-): THREE.BufferGeometry {
-  const pos = geo.attributes.position;
-  const nrm = geo.attributes.normal;
-  const outV: number[] = [];
-  const outN: number[] = [];
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  const na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3();
-
-  for (let t = 0; t < pos.count / 3; t++) {
-    const base = t * 3;
-    a.fromBufferAttribute(pos, base);
-    b.fromBufferAttribute(pos, base + 1);
-    c.fromBufferAttribute(pos, base + 2);
-    if (plane.distanceToPoint(a) > 0 && plane.distanceToPoint(b) > 0 && plane.distanceToPoint(c) > 0) continue;
-    na.fromBufferAttribute(nrm, base);
-    nb.fromBufferAttribute(nrm, base + 1);
-    nc.fromBufferAttribute(nrm, base + 2);
-    outV.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-    outN.push(na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z);
-  }
-
-  const kept = new THREE.BufferGeometry();
-  kept.setAttribute("position", new THREE.Float32BufferAttribute(outV, 3));
-  kept.setAttribute("normal", new THREE.Float32BufferAttribute(outN, 3));
-
-  // Cap: collect vertices on the positive side of the plane to form a cap face
-  const capPts: THREE.Vector3[] = [];
-  for (let i = 0; i < outV.length; i += 3) {
-    const p = new THREE.Vector3(outV[i], outV[i+1], outV[i+2]);
-    if (Math.abs(plane.distanceToPoint(p)) < 0.15) capPts.push(p);
-  }
-
-  if (capPts.length >= 3) {
-    // Project cap points to plane, re-hull as fan from centroid
-    const center = new THREE.Vector3();
-    for (const p of capPts) center.add(p);
-    center.divideScalar(capPts.length);
-
-    const planeNormal = plane.normal.clone();
-    const up = Math.abs(planeNormal.y) < 0.9
-      ? new THREE.Vector3(0, 1, 0)
-      : new THREE.Vector3(1, 0, 0);
-    const tangent = new THREE.Vector3().crossVectors(planeNormal, up).normalize();
-    const bitangent = new THREE.Vector3().crossVectors(planeNormal, tangent);
-
-    const sorted = capPts
-      .map(p => {
-        const d = p.clone().sub(center);
-        return { p, angle: Math.atan2(d.dot(bitangent), d.dot(tangent)) };
-      })
-      .sort((a, b) => a.angle - b.angle);
-
-    const capV: number[] = [];
-    const capN: number[] = [];
-    for (let i = 1; i < sorted.length - 1; i++) {
-      const p0 = sorted[0].p, p1 = sorted[i].p, p2 = sorted[i+1].p;
-      capV.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
-      capN.push(
-        -planeNormal.x, -planeNormal.y, -planeNormal.z,
-        -planeNormal.x, -planeNormal.y, -planeNormal.z,
-        -planeNormal.x, -planeNormal.y, -planeNormal.z,
-      );
-    }
-
-    const combined = new THREE.BufferGeometry();
-    const allV = new Float32Array(outV.length + capV.length);
-    allV.set(outV); allV.set(capV, outV.length);
-    const allN = new Float32Array(outN.length + capN.length);
-    allN.set(outN); allN.set(capN, outN.length);
-    combined.setAttribute("position", new THREE.BufferAttribute(allV, 3));
-    combined.setAttribute("normal", new THREE.BufferAttribute(allN, 3));
-    geo.dispose();
-    kept.dispose();
-    return combined;
-  }
-
-  geo.dispose();
-  return kept;
+function solve3x3(
+  n0: THREE.Vector3, d0: number,
+  n1: THREE.Vector3, d1: number,
+  n2: THREE.Vector3, d2: number,
+): THREE.Vector3 | null {
+  const det =
+    n0.x * (n1.y * n2.z - n1.z * n2.y) -
+    n0.y * (n1.x * n2.z - n1.z * n2.x) +
+    n0.z * (n1.x * n2.y - n1.y * n2.x);
+  if (Math.abs(det) < 1e-10) return null;
+  const inv = 1 / det;
+  return new THREE.Vector3(
+    (d0 * (n1.y * n2.z - n1.z * n2.y) - n0.y * (d1 * n2.z - n1.z * d2) + n0.z * (d1 * n2.y - n1.y * d2)) * inv,
+    (n0.x * (d1 * n2.z - n1.z * d2) - d0 * (n1.x * n2.z - n1.z * n2.x) + n0.z * (n1.x * d2 - d1 * n2.x)) * inv,
+    (n0.x * (n1.y * d2 - d1 * n2.y) - n0.y * (n1.x * d2 - d1 * n2.x) + d0 * (n1.x * n2.y - n1.y * n2.x)) * inv,
+  );
 }
 
-function buildCrystalGeo(seed: number): THREE.BufferGeometry {
+/* ── Half-space intersection: vertices of ∩{ n_k·p ≤ d_k } ──── */
+
+function solveHalfSpaces(planes: HalfPlane[]): THREE.Vector3[] {
+  const N = planes.length;
+  const EPS = 1e-5;
+  const verts: THREE.Vector3[] = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < N - 2; i++) {
+    for (let j = i + 1; j < N - 1; j++) {
+      for (let k = j + 1; k < N; k++) {
+        const p = solve3x3(
+          planes[i].n, planes[i].d,
+          planes[j].n, planes[j].d,
+          planes[k].n, planes[k].d,
+        );
+        if (!p) continue;
+
+        let valid = true;
+        for (let m = 0; m < N; m++) {
+          if (planes[m].n.dot(p) > planes[m].d + EPS) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) continue;
+
+        const key = `${Math.round(p.x * 1e4)},${Math.round(p.y * 1e4)},${Math.round(p.z * 1e4)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        verts.push(p);
+      }
+    }
+  }
+
+  return verts;
+}
+
+/* ── Generate deterministic rock planes from seed ────────────── */
+
+function buildRockPlanes(seed: number): HalfPlane[] {
   const rng = seededRandom(seed);
-  const SX = 1.25, SY = 1.0, SZ = 0.9;
-  const BASE_R = 1.4;
-  const points: THREE.Vector3[] = [];
+  const count = 16 + Math.floor(rng() * 7);
+  const planes: HalfPlane[] = [];
 
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < count; i++) {
     const theta = Math.acos(2 * rng() - 1);
     const phi = 2 * Math.PI * rng();
-    const jitter = 0.8 + rng() * 0.4;
-    const r = BASE_R * jitter;
-    points.push(new THREE.Vector3(
-      r * Math.sin(theta) * Math.cos(phi) * SX,
-      r * Math.sin(theta) * Math.sin(phi) * SY,
-      r * Math.cos(theta) * SZ,
-    ));
+    const n = new THREE.Vector3(
+      Math.sin(theta) * Math.cos(phi),
+      Math.sin(theta) * Math.sin(phi),
+      Math.cos(theta),
+    );
+    const isCleavage = i < 3;
+    const d = isCleavage
+      ? R * (0.55 + rng() * 0.1)
+      : R * (0.85 + rng() * 0.25);
+    planes.push({ n, d });
   }
 
-  for (let i = 0; i < 4; i++) {
-    const theta = Math.acos(2 * rng() - 1);
-    const phi = 2 * Math.PI * rng();
-    const r = BASE_R * (0.5 + rng() * 0.3);
-    points.push(new THREE.Vector3(
-      r * Math.sin(theta) * Math.cos(phi) * SX,
-      r * Math.sin(theta) * Math.sin(phi) * SY,
-      r * Math.cos(theta) * SZ,
-    ));
-  }
-
-  const tilt = new THREE.Quaternion().setFromAxisAngle(
-    new THREE.Vector3(0, 0, 1), 0.08 + rng() * 0.1
-  );
-  for (const p of points) p.applyQuaternion(tilt);
-
-  const convex = new ConvexGeometry(points);
-  let geo = convex.toNonIndexed();
-  convex.dispose();
-
-  // 2 cleavage planes shave corners to create large flat faces
-  for (let i = 0; i < 2; i++) {
-    const nx = rng() - 0.5, ny = rng() - 0.5, nz = rng() - 0.5;
-    const normal = new THREE.Vector3(nx, ny, nz).normalize();
-    const offset = 1.3 + rng() * 0.25;
-    const plane = new THREE.Plane(normal, -offset);
-    geo = clipByPlane(geo, plane);
-  }
-
-  geo.computeVertexNormals();
-  return geo;
+  return planes;
 }
 
-function buildQuartzGeo(): THREE.BufferGeometry {
-  const points: THREE.Vector3[] = [];
-  const R = 1.0, H = 1.8, tipH = 1.0;
+/* ── Build merged rock geometry ──────────────────────────────── */
 
-  // Hexagonal prism vertices (6 sides, top and bottom rings)
-  for (let ring = 0; ring < 2; ring++) {
-    const y = ring === 0 ? -H : H;
-    for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2 + 0.15;
-      const jitter = 0.92 + (Math.sin(i * 7.3 + ring * 3.1) * 0.5 + 0.5) * 0.16;
-      points.push(new THREE.Vector3(
-        Math.cos(angle) * R * jitter,
-        y,
-        Math.sin(angle) * R * jitter,
-      ));
-    }
+function buildRockGeo(seed: number): THREE.BufferGeometry {
+  const planes = buildRockPlanes(seed);
+  const verts = solveHalfSpaces(planes);
+
+  if (verts.length < 4) {
+    const fb = new THREE.IcosahedronGeometry(1.2, 1);
+    const g = fb.toNonIndexed();
+    fb.dispose();
+    g.computeVertexNormals();
+    return g;
   }
 
-  // Pointed top: 6 tip vertices converging
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2 + 0.15;
-    const between = ((i + 0.5) / 6) * Math.PI * 2 + 0.15;
-    const tipR = 0.15 + Math.sin(i * 4.7) * 0.08;
-    points.push(new THREE.Vector3(
-      Math.cos(between) * tipR,
-      H + tipH * (0.7 + Math.sin(i * 2.3) * 0.3),
-      Math.sin(between) * tipR,
-    ));
-  }
-  // Apex
-  points.push(new THREE.Vector3(0.05, H + tipH, -0.03));
+  for (const v of verts) v.multiply(SCALE);
 
-  // Bottom flat (just a center point below)
-  points.push(new THREE.Vector3(0, -H - 0.15, 0));
-
-  const tilt = new THREE.Quaternion().setFromAxisAngle(
-    new THREE.Vector3(0.3, 0, 1).normalize(), 0.25
-  );
-  for (const p of points) p.applyQuaternion(tilt);
-
-  const convex = new ConvexGeometry(points);
+  const convex = new ConvexGeometry(verts);
   const geo = convex.toNonIndexed();
   convex.dispose();
   geo.computeVertexNormals();
   return geo;
 }
 
-/* ── Hook: generate Voronoi-fractured shards ───────────────────── */
+/* ── Build Voronoi shards from bisector planes ───────────────── */
 
-export function useGlassCrystalShards(seed = DEFAULT_SEED, variant: "rock" | "quartz" = "rock"): ShardData[] {
-  return useMemo(() => {
-    const geo = variant === "quartz" ? buildQuartzGeo() : buildCrystalGeo(seed);
+function buildShards(seed: number): ShardData[] {
+  const planes = buildRockPlanes(seed);
+  const rng = seededRandom(seed + 5555);
+
+  const shardSeeds: THREE.Vector3[] = [];
+  for (let i = 0; i < SHARD_COUNT; i++) {
+    const theta = Math.acos(2 * rng() - 1);
+    const phi = 2 * Math.PI * rng();
+    const r = 0.2 + rng() * 0.5;
+    shardSeeds.push(
+      new THREE.Vector3(
+        r * Math.sin(theta) * Math.cos(phi),
+        r * Math.sin(theta) * Math.sin(phi),
+        r * Math.cos(theta),
+      ),
+    );
+  }
+
+  const shards: ShardData[] = [];
+
+  for (let i = 0; i < SHARD_COUNT; i++) {
+    const shardPlanes: HalfPlane[] = planes.map((p) => ({
+      n: p.n.clone(),
+      d: p.d,
+    }));
+
+    for (let j = 0; j < SHARD_COUNT; j++) {
+      if (i === j) continue;
+      const diff = new THREE.Vector3().subVectors(shardSeeds[j], shardSeeds[i]);
+      const len = diff.length();
+      if (len < 1e-10) continue;
+      const n = diff.clone().divideScalar(len);
+      const mid = new THREE.Vector3()
+        .addVectors(shardSeeds[i], shardSeeds[j])
+        .multiplyScalar(0.5);
+      const d = n.dot(mid);
+      shardPlanes.push({ n, d });
+    }
+
+    const verts = solveHalfSpaces(shardPlanes);
+    if (verts.length < 4) continue;
+
+    for (const v of verts) v.multiply(SCALE);
+
+    const convex = new ConvexGeometry(verts);
+    const geo = convex.toNonIndexed();
+    convex.dispose();
+    geo.computeVertexNormals();
+
     const pos = geo.attributes.position;
-    const srcNormals = geo.attributes.normal;
+    const centroid = new THREE.Vector3();
+    for (let v = 0; v < pos.count; v++) {
+      centroid.x += pos.getX(v);
+      centroid.y += pos.getY(v);
+      centroid.z += pos.getZ(v);
+    }
+    centroid.divideScalar(pos.count);
 
-    const rng = seededRandom(seed + 7777);
-    const seeds: THREE.Vector3[] = [];
-    for (let i = 0; i < SHARD_COUNT; i++) {
-      const theta = Math.acos(2 * rng() - 1);
-      const phi = 2 * Math.PI * rng();
-      seeds.push(
-        new THREE.Vector3(
-          Math.sin(theta) * Math.cos(phi),
-          Math.sin(theta) * Math.sin(phi),
-          Math.cos(theta)
-        )
+    for (let v = 0; v < pos.count; v++) {
+      pos.setXYZ(
+        v,
+        pos.getX(v) - centroid.x,
+        pos.getY(v) - centroid.y,
+        pos.getZ(v) - centroid.z,
       );
     }
+    pos.needsUpdate = true;
 
-    const triCount = pos.count / 3;
-    const assignments = new Int32Array(triCount);
-    const va = new THREE.Vector3();
-    const vb = new THREE.Vector3();
-    const vc = new THREE.Vector3();
-    const triCenter = new THREE.Vector3();
+    const direction = centroid.clone().normalize();
+    const tumbleAxis = new THREE.Vector3(
+      rng() - 0.5,
+      rng() - 0.5,
+      rng() - 0.5,
+    ).normalize();
+    const delay = rng() * 0.3;
 
-    for (let t = 0; t < triCount; t++) {
-      const base = t * 3;
-      va.fromBufferAttribute(pos, base);
-      vb.fromBufferAttribute(pos, base + 1);
-      vc.fromBufferAttribute(pos, base + 2);
-      triCenter.copy(va).add(vb).add(vc).divideScalar(3).normalize();
+    shards.push({ geometry: geo, centroid, direction, tumbleAxis, delay });
+  }
 
-      let best = 0;
-      let bestDist = Infinity;
-      for (let s = 0; s < seeds.length; s++) {
-        const d = triCenter.distanceToSquared(seeds[s]);
-        if (d < bestDist) {
-          bestDist = d;
-          best = s;
-        }
-      }
-      assignments[t] = best;
-    }
-
-    const shards: ShardData[] = [];
-
-    for (let s = 0; s < SHARD_COUNT; s++) {
-      const verts: number[] = [];
-      const norms: number[] = [];
-
-      for (let t = 0; t < triCount; t++) {
-        if (assignments[t] !== s) continue;
-        const base = t * 3;
-        for (let vi = 0; vi < 3; vi++) {
-          const idx = base + vi;
-          verts.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
-          norms.push(
-            srcNormals.getX(idx),
-            srcNormals.getY(idx),
-            srcNormals.getZ(idx)
-          );
-        }
-      }
-
-      if (verts.length === 0) continue;
-
-      const centroid = new THREE.Vector3();
-      const vertCount = verts.length / 3;
-      for (let i = 0; i < verts.length; i += 3) {
-        centroid.x += verts[i];
-        centroid.y += verts[i + 1];
-        centroid.z += verts[i + 2];
-      }
-      centroid.divideScalar(vertCount);
-
-      for (let i = 0; i < verts.length; i += 3) {
-        verts[i] -= centroid.x;
-        verts[i + 1] -= centroid.y;
-        verts[i + 2] -= centroid.z;
-      }
-
-      const shardGeo = new THREE.BufferGeometry();
-      shardGeo.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(verts, 3)
-      );
-      shardGeo.setAttribute(
-        "normal",
-        new THREE.Float32BufferAttribute(norms, 3)
-      );
-
-      const direction = centroid.clone().normalize();
-      const tumbleAxis = new THREE.Vector3(
-        rng() - 0.5,
-        rng() - 0.5,
-        rng() - 0.5
-      ).normalize();
-      const delay = rng() * 0.3;
-
-      shards.push({ geometry: shardGeo, centroid, direction, tumbleAxis, delay });
-    }
-
-    geo.dispose();
-    return shards;
-  }, [seed, variant]);
+  return shards;
 }
 
-/* ── Component: assembled glass crystal ────────────────────────── */
+/* ── Hooks ───────────────────────────────────────────────────── */
+
+export function useRockGeo(seed = DEFAULT_SEED) {
+  return useMemo(() => buildRockGeo(seed), [seed]);
+}
+
+export function useRockShards(seed = DEFAULT_SEED) {
+  return useMemo(() => buildShards(seed), [seed]);
+}
+
+/* ── Material presets per variant ─────────────────────────────── */
+
+const WAKE_TINT = {
+  color: "#ffffff",
+  attenuationColor: "#eaf0f6",
+  envMapIntensity: 0.8,
+} as const;
+
+const DREAM_TINT = {
+  color: "#c4b5fd",
+  attenuationColor: "#b4a0e8",
+  envMapIntensity: 1.0,
+} as const;
+
+/* ── Component ───────────────────────────────────────────────── */
 
 interface GlassCrystalProps {
   buffer?: THREE.Texture;
   seed?: number;
-  variant?: "rock" | "quartz";
+  variant?: "wake" | "dream";
 }
 
-const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(function GlassCrystal({ buffer, seed = DEFAULT_SEED, variant = "rock" }, ref) {
-  const shards = useGlassCrystalShards(seed, variant);
+const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
+  function GlassCrystal({ buffer, seed = DEFAULT_SEED, variant = "wake" }, ref) {
+    const geo = useRockGeo(seed);
+    const shards = useRockShards(seed);
+    const burst = useFractureStore((s) => s.burst);
+    const tint = variant === "dream" ? DREAM_TINT : WAKE_TINT;
 
-  return (
-    <group ref={ref}>
-      {shards.map((shard, i) => (
-        <mesh
-          key={i}
-          geometry={shard.geometry}
-          position={shard.centroid.toArray() as [number, number, number]}
-        >
-          <MeshTransmissionMaterial
-            buffer={buffer}
-            thickness={0.6}
-            chromaticAberration={0.03}
-            anisotropicBlur={0.4}
-            roughness={0.03}
-            distortion={0}
-            distortionScale={0}
-            temporalDistortion={0}
-            transmission={1}
-            ior={1.15}
-            samples={16}
-            resolution={1024}
-            color="#ffffff"
-            attenuationColor="#eaf0f6"
-            attenuationDistance={6}
-            backside
-            backsideThickness={0.2}
-            envMapIntensity={0.8}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-});
+    return (
+      <group ref={ref}>
+        {!burst && (
+          <mesh geometry={geo}>
+            <MeshTransmissionMaterial
+              buffer={buffer}
+              thickness={1.5}
+              chromaticAberration={0.06}
+              anisotropicBlur={0.1}
+              roughness={0.03}
+              distortion={0.15}
+              distortionScale={0.2}
+              temporalDistortion={0}
+              transmission={1}
+              ior={1.3}
+              samples={8}
+              resolution={768}
+              color={tint.color}
+              attenuationColor={tint.attenuationColor}
+              attenuationDistance={4}
+              backside
+              backsideThickness={0.3}
+              envMapIntensity={tint.envMapIntensity}
+            />
+          </mesh>
+        )}
+        {burst &&
+          shards.map((shard, i) => (
+            <mesh
+              key={i}
+              geometry={shard.geometry}
+              position={shard.centroid.toArray() as [number, number, number]}
+            >
+              <MeshTransmissionMaterial
+                buffer={buffer}
+                thickness={1.0}
+                chromaticAberration={0.04}
+                anisotropicBlur={0.08}
+                roughness={0.04}
+                distortion={0.1}
+                distortionScale={0.15}
+                temporalDistortion={0}
+                transmission={1}
+                ior={1.3}
+                samples={4}
+                resolution={512}
+                color={tint.color}
+                attenuationColor={tint.attenuationColor}
+                attenuationDistance={4}
+                backside
+                backsideThickness={0.2}
+                envMapIntensity={tint.envMapIntensity}
+              />
+            </mesh>
+          ))}
+      </group>
+    );
+  },
+);
 
 export default GlassCrystal;
