@@ -2,7 +2,7 @@
 
 import { useRef, useMemo, useEffect, useCallback } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Text, Environment } from "@react-three/drei";
+import { Text, Environment, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
 import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
@@ -320,7 +320,6 @@ function WakeCrystal({
   return (
     <GlassCrystal
       ref={groupRef}
-      detail={isMobile ? 3 : 5}
     />
   );
 }
@@ -519,9 +518,14 @@ export default function WakeScene({
   return (
     <>
       <color attach="background" args={["#E9E7E2"]} />
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 5, 5]} intensity={0.8} />
-      <Environment preset="studio" />
+      <Environment background={false} resolution={512}>
+        <color attach="background" args={["#000000"]} />
+        <Lightformer form="rect" intensity={3} position={[4, 5, -3]} scale={[4, 1, 1]} rotation-x={Math.PI / 4} color="#ffffff" />
+        <Lightformer form="rect" intensity={2.5} position={[-5, 3, 2]} scale={[3, 0.6, 1]} rotation-y={Math.PI / 3} color="#ffffff" />
+        <Lightformer form="rect" intensity={1.8} position={[0, -4, 4]} scale={[6, 0.8, 1]} color="#ffffff" />
+        <Lightformer form="rect" intensity={0.1} position={[2, 0, -5]} scale={[8, 8, 1]} color="#111111" />
+        <Lightformer form="rect" intensity={0.1} position={[-3, -2, 3]} scale={[6, 6, 1]} color="#0a0a0a" />
+      </Environment>
       <MarqueeText isMobile={isMobile} reducedMotion={reducedMotion} />
       <WakeCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
       <OrbitRing reducedMotion={reducedMotion} />

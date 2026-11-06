@@ -2,7 +2,7 @@
 
 import { useRef, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Text, Environment } from "@react-three/drei";
+import { Text, Environment, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 
@@ -76,7 +76,7 @@ function MarqueeText() {
   );
 }
 
-function LabCrystal() {
+function LabCrystal({ seed, position, variant = "rock" as const }: { seed: number; position: [number, number, number]; variant?: "rock" | "quartz" }) {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
@@ -86,8 +86,20 @@ function LabCrystal() {
     groupRef.current.rotation.x = Math.sin(t * 0.1) * 0.2;
   });
 
-  return <GlassCrystal ref={groupRef} />;
+  return (
+    <group position={position}>
+      <GlassCrystal ref={groupRef} seed={seed} variant={variant} />
+    </group>
+  );
 }
+
+const VARIANTS: { seed: number; variant: "rock" | "quartz"; label: string }[] = [
+  { seed: 3131, variant: "rock", label: "A" },
+  { seed: 7654, variant: "rock", label: "B" },
+  { seed: 4209, variant: "rock", label: "C" },
+  { seed: 8888, variant: "rock", label: "D" },
+  { seed: 1, variant: "quartz", label: "Q" },
+];
 
 export default function LabCanvas() {
   return (
@@ -99,16 +111,23 @@ export default function LabCanvas() {
       }}
     >
       <Canvas
-        camera={{ position: [0, 0, 6], fov: 50 }}
+        camera={{ position: [0, 0, 14], fov: 50 }}
         gl={{ antialias: true }}
         style={{ width: "100%", height: "100%" }}
       >
         <color attach="background" args={["#E9E7E2"]} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[5, 5, 5]} intensity={1.2} />
         <MarqueeText />
-        <LabCrystal />
-        <Environment preset="studio" />
+        {VARIANTS.map((v, i) => (
+          <LabCrystal key={v.label} seed={v.seed} variant={v.variant} position={[(i - 2) * 3.5, 0, 0]} />
+        ))}
+        <Environment background={false} resolution={512}>
+          <color attach="background" args={["#000000"]} />
+          <Lightformer form="rect" intensity={3} position={[4, 5, -3]} scale={[4, 1, 1]} rotation-x={Math.PI / 4} color="#ffffff" />
+          <Lightformer form="rect" intensity={2.5} position={[-5, 3, 2]} scale={[3, 0.6, 1]} rotation-y={Math.PI / 3} color="#ffffff" />
+          <Lightformer form="rect" intensity={1.8} position={[0, -4, 4]} scale={[6, 0.8, 1]} color="#ffffff" />
+          <Lightformer form="rect" intensity={0.1} position={[2, 0, -5]} scale={[8, 8, 1]} color="#111111" />
+          <Lightformer form="rect" intensity={0.1} position={[-3, -2, 3]} scale={[6, 6, 1]} color="#0a0a0a" />
+        </Environment>
       </Canvas>
     </div>
   );

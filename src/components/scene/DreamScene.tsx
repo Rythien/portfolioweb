@@ -2,7 +2,7 @@
 
 import { useRef, useMemo, useEffect, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { MeshTransmissionMaterial, Environment, Text } from "@react-three/drei";
+import { Environment, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
@@ -152,6 +152,22 @@ function useCrystalShards(
 
       if (verts.length === 0) continue;
 
+      const centroid = new THREE.Vector3();
+      const vertCount = verts.length / 3;
+      for (let i = 0; i < verts.length; i += 3) {
+        centroid.x += verts[i];
+        centroid.y += verts[i + 1];
+        centroid.z += verts[i + 2];
+      }
+      centroid.divideScalar(vertCount);
+
+      // Re-center around centroid so rotation pivots correctly
+      for (let i = 0; i < verts.length; i += 3) {
+        verts[i] -= centroid.x;
+        verts[i + 1] -= centroid.y;
+        verts[i + 2] -= centroid.z;
+      }
+
       const shardGeo = new THREE.BufferGeometry();
       shardGeo.setAttribute(
         "position",
@@ -161,14 +177,6 @@ function useCrystalShards(
         "normal",
         new THREE.Float32BufferAttribute(norms, 3)
       );
-
-      const centroid = new THREE.Vector3();
-      for (let i = 0; i < verts.length; i += 3) {
-        centroid.x += verts[i];
-        centroid.y += verts[i + 1];
-        centroid.z += verts[i + 2];
-      }
-      centroid.divideScalar(verts.length / 3);
 
       const direction = centroid.clone().normalize();
       const delay = rng() * 0.3;
@@ -315,37 +323,21 @@ function DreamCrystal({
     <group ref={groupRef}>
       {shards.map((shard, i) => (
         <mesh key={i} ref={shardRefCb(i)} geometry={shard.geometry}>
-          {isMobile ? (
-            <meshPhysicalMaterial
-              color="#c4b5fd"
-              emissive="#4c1d95"
-              emissiveIntensity={0.3}
-              roughness={0.12}
-              metalness={0.08}
-              transparent
-              opacity={0.8}
-              transmission={0.6}
-              ior={1.35}
-              thickness={1.2}
-            />
-          ) : (
-            <MeshTransmissionMaterial
-              thickness={2.2}
-              chromaticAberration={0.5}
-              anisotropicBlur={0.35}
-              roughness={0.06}
-              distortion={0.35}
-              distortionScale={0.3}
-              temporalDistortion={0.1}
-              transmission={1}
-              ior={1.35}
-              samples={8}
-              resolution={1024}
-              color="#c4b5fd"
-              backside
-              backsideThickness={0.8}
-            />
-          )}
+          <meshPhysicalMaterial
+            color="#c4b5fd"
+            roughness={0.04}
+            metalness={0}
+            transmission={1}
+            thickness={1.5}
+            ior={1.35}
+            dispersion={0.15}
+            attenuationColor="#b4a0e8"
+            attenuationDistance={3.0}
+            envMapIntensity={1.0}
+            emissive="#4c1d95"
+            emissiveIntensity={0.15}
+            transparent
+          />
         </mesh>
       ))}
     </group>
