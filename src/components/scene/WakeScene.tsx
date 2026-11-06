@@ -7,8 +7,9 @@ import * as THREE from "three";
 import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
+import { useGlassCrystalShards } from "@/components/crystal/GlassCrystal";
 
-/* ── Seeded PRNG ───────────────────────────────────────────────── */
+/* ── Seeded PRNG (for pixel gem sparkles) ──────────────────────── */
 
 function seededRandom(seed: number) {
   let s = seed;
@@ -16,65 +17,6 @@ function seededRandom(seed: number) {
     s = (s * 16807) % 2147483647;
     return (s - 1) / 2147483646;
   };
-}
-
-/* ── 3D value noise for crystal displacement ───────────────────── */
-
-function hash(n: number) {
-  const s = Math.sin(n) * 43758.5453;
-  return s - Math.floor(s);
-}
-
-function noise3(x: number, y: number, z: number) {
-  const ix = Math.floor(x),
-    iy = Math.floor(y),
-    iz = Math.floor(z);
-  const fx = x - ix,
-    fy = y - iy,
-    fz = z - iz;
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  const uz = fz * fz * (3 - 2 * fz);
-  const n = ix + iy * 157 + iz * 113;
-  return (
-    hash(n) * (1 - ux) * (1 - uy) * (1 - uz) +
-    hash(n + 1) * ux * (1 - uy) * (1 - uz) +
-    hash(n + 157) * (1 - ux) * uy * (1 - uz) +
-    hash(n + 158) * ux * uy * (1 - uz) +
-    hash(n + 113) * (1 - ux) * (1 - uy) * uz +
-    hash(n + 114) * ux * (1 - uy) * uz +
-    hash(n + 270) * (1 - ux) * uy * uz +
-    hash(n + 271) * ux * uy * uz
-  );
-}
-
-/* ── Solid crystal geometry (detail 5, icy faceted) ────────────── */
-
-function useCrystalGeometry(isMobile: boolean) {
-  return useMemo(() => {
-    const d = isMobile ? 3 : 5;
-    const geo = new THREE.IcosahedronGeometry(1.4, d);
-    const pos = geo.attributes.position;
-    const v = new THREE.Vector3();
-
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i);
-      const dir = v.clone().normalize();
-      const n1 = noise3(dir.x * 1.8, dir.y * 1.8, dir.z * 1.8);
-      const raw = noise3(
-        dir.x * 4.5 + 7.3,
-        dir.y * 4.5 + 3.1,
-        dir.z * 4.5 + 1.7
-      );
-      const ridged = 1 - Math.abs(raw * 2 - 1);
-      const displacement = (n1 - 0.5) * 0.35 + ridged * 0.12;
-      v.copy(dir).multiplyScalar(1.4 + displacement);
-      pos.setXYZ(i, v.x, v.y, v.z);
-    }
-
-    geo.computeVertexNormals();
-    return geo;
-  }, [isMobile]);
 }
 
 /* ── Pixel gem canvas texture ────────────────────────────────────── */
@@ -199,8 +141,6 @@ function MarqueeText({
     }
     groupRef.current.visible = true;
 
-    // heroP ≈ 0.5 at rest (section visible but not scrolled).
-    // Remap so rest → 0 offset, fully scrolled out → full offset.
     const heroScroll = Math.max(0, (heroP - 0.5) / 0.5);
     const scrollY = heroScroll * visHeight * 0.85;
     groupRef.current.position.y = -scrollY;
@@ -309,20 +249,29 @@ function scrollScaleAt(scales: number[], t: number) {
   return scales[lo] + (scales[hi] - scales[lo]) * frac;
 }
 
-/* ── Solid crystal ───────────────────────────────────────────────── */
+/* ── Pre-fractured crystal (18 shards, assembled at scroll 0) ──── */
 
-function Crystal({
+const shardMeshRefs: THREE.Mesh[] = [];
+
+function WakeCrystal({
   reducedMotion,
   isMobile,
 }: {
   reducedMotion: boolean;
   isMobile: boolean;
 }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const geo = useCrystalGeometry(isMobile);
+  const groupRef = useRef<THREE.Group>(null);
+  const shards = useGlassCrystalShards(isMobile ? 3 : 5);
   const mouseRef = useRef({ x: 0, y: 0 });
   const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
   const dampedScale = useRef(1);
+
+  const shardRefCb = useCallback(
+    (index: number) => (el: THREE.Mesh | null) => {
+      if (el) shardMeshRefs[index] = el;
+    },
+    []
+  );
 
   useEffect(() => {
     if (isMobile || reducedMotion) return;
@@ -335,10 +284,11 @@ function Crystal({
   }, [isMobile, reducedMotion]);
 
   useFrame((state, delta) => {
-    if (!meshRef.current || reducedMotion) return;
+    if (!groupRef.current || reducedMotion) return;
     const elapsed = state.clock.elapsedTime;
     const { progress } = useScrollStore.getState();
 
+    // Spline position + scale follow scroll
     const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
     const targetScale = scrollScaleAt(
       crystalScaleSpline,
@@ -354,49 +304,71 @@ function Crystal({
       1 - Math.exp(-4 * delta)
     );
 
-    meshRef.current.position.copy(dampedPos.current);
-    meshRef.current.scale.setScalar(dampedScale.current);
+    groupRef.current.position.copy(dampedPos.current);
+    groupRef.current.scale.setScalar(dampedScale.current);
 
-    meshRef.current.rotation.y = elapsed * 0.15;
-    meshRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
+    // Idle rotation + mouse parallax
+    groupRef.current.rotation.y = elapsed * 0.15;
+    groupRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
     if (!isMobile) {
-      meshRef.current.rotation.y += mouseRef.current.x * 0.15;
-      meshRef.current.rotation.x += mouseRef.current.y * 0.1;
+      groupRef.current.rotation.y += mouseRef.current.x * 0.15;
+      groupRef.current.rotation.x += mouseRef.current.y * 0.1;
+    }
+
+    for (let i = 0; i < shards.length; i++) {
+      const mesh = shardMeshRefs[i];
+      if (!mesh) continue;
+      const s = shards[i];
+      mesh.position.copy(s.centroid);
+      mesh.rotation.set(0, 0, 0);
+    }
+
+    // Debug: expose crystal state to the DOM overlay
+    if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+      const g = groupRef.current;
+      const worldPos = new THREE.Vector3();
+      g.getWorldPosition(worldPos);
+      const firstMesh = shardMeshRefs[0];
+      const rt = (state.gl as any).__currentRenderTarget;
+      (window as any).__crystalDebug = {
+        mounted: true,
+        visible: g.visible,
+        scale: `${g.scale.x.toFixed(3)}`,
+        worldPos: `${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}`,
+        materialType: firstMesh?.material
+          ? (firstMesh.material as any).type || firstMesh.material.constructor.name
+          : "none",
+        parentSceneUuid: g.parent?.uuid ?? "?",
+        rootSceneUuid: state.scene.uuid,
+        renderTargetActive: rt ? `yes (${rt.width}x${rt.height})` : "no (null)",
+        shardCount: shards.length,
+      };
     }
   });
 
   return (
-    <mesh ref={meshRef} geometry={geo}>
-      {isMobile ? (
-        <meshPhysicalMaterial
-          color="#f0f4fa"
-          roughness={0.1}
-          metalness={0.05}
-          transparent
-          opacity={0.85}
-          transmission={0.7}
-          ior={1.3}
-          thickness={1.0}
-        />
-      ) : (
-        <MeshTransmissionMaterial
-          thickness={2.0}
-          chromaticAberration={0.4}
-          anisotropicBlur={0.3}
-          roughness={0.08}
-          distortion={0.3}
-          distortionScale={0.25}
-          temporalDistortion={0.08}
-          transmission={1}
-          ior={1.3}
-          samples={8}
-          resolution={1024}
-          color="#f0f4fa"
-          backside
-          backsideThickness={0.6}
-        />
-      )}
-    </mesh>
+    <group ref={groupRef}>
+      {shards.map((shard, i) => (
+        <mesh key={i} ref={shardRefCb(i)} geometry={shard.geometry} position={shard.centroid.toArray() as [number, number, number]}>
+          <MeshTransmissionMaterial
+            thickness={2.0}
+            chromaticAberration={0.4}
+            anisotropicBlur={0.3}
+            roughness={0.08}
+            distortion={0.3}
+            distortionScale={0.25}
+            temporalDistortion={0.08}
+            transmission={1}
+            ior={1.3}
+            samples={8}
+            resolution={1024}
+            color="#f0f4fa"
+            backside
+            backsideThickness={0.6}
+          />
+        </mesh>
+      ))}
+    </group>
   );
 }
 
@@ -598,7 +570,7 @@ export default function WakeScene({
       <directionalLight position={[5, 5, 5]} intensity={0.8} />
       <Environment preset="studio" />
       <MarqueeText isMobile={isMobile} reducedMotion={reducedMotion} />
-      <Crystal reducedMotion={reducedMotion} isMobile={isMobile} />
+      <WakeCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
       <OrbitRing reducedMotion={reducedMotion} />
       <PixelGem reducedMotion={reducedMotion} isMobile={isMobile} />
     </>
