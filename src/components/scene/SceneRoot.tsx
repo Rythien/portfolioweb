@@ -98,7 +98,7 @@ export default function SceneRoot() {
   return (
     <div aria-hidden="true" className="fixed inset-0 z-0 pointer-events-none">
       <Canvas
-        dpr={[1, 1.75]}
+        dpr={[1, 1.5]}
         orthographic
         camera={{ left: -1, right: 1, top: 1, bottom: -1, near: 0, far: 1 }}
         gl={{

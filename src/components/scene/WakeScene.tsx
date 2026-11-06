@@ -8,6 +8,7 @@ import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
+import { useCrystalPose, getCrystalPose } from "@/hooks/useCrystalPose";
 
 /* ── Seeded PRNG (for pixel gem sparkles) ──────────────────────── */
 
@@ -234,97 +235,29 @@ function MarqueeText({
   );
 }
 
-/* ── Spline paths for scroll choreography ────────────────────────── */
-
-const crystalSpline = new THREE.CatmullRomCurve3([
-  new THREE.Vector3(0, 0, 0),
-  new THREE.Vector3(-1.5, -0.8, -1),
-  new THREE.Vector3(1.2, -1.5, -2),
-  new THREE.Vector3(2.0, -0.5, -1),
-  new THREE.Vector3(0.5, 0.8, -0.5),
-]);
-
-const crystalScaleSpline = [1.0, 0.85, 0.65, 0.55, 0.45];
-
-const orbitSpline = new THREE.CatmullRomCurve3([
-  new THREE.Vector3(0, 0, 0),
-  new THREE.Vector3(0.8, -1.2, -0.5),
-  new THREE.Vector3(-1.0, -2.0, -1.5),
-  new THREE.Vector3(1.5, -1.0, -1.0),
-  new THREE.Vector3(0, 0.5, -0.5),
-]);
-
-function scrollScaleAt(scales: number[], t: number) {
-  const idx = t * (scales.length - 1);
-  const lo = Math.floor(idx);
-  const hi = Math.min(lo + 1, scales.length - 1);
-  const frac = idx - lo;
-  return scales[lo] + (scales[hi] - scales[lo]) * frac;
-}
-
-/* ── Pre-fractured crystal (18 shards, assembled at scroll 0) ──── */
+/* ── Crystal (uses shared pose) ─────────────────────────────────── */
 
 function WakeCrystal({
   reducedMotion,
-  isMobile,
 }: {
   reducedMotion: boolean;
   isMobile: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const mouseRef = useRef({ x: 0, y: 0 });
-  const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
-  const dampedScale = useRef(1);
+  const pose = useCrystalPose();
 
-  useEffect(() => {
-    if (isMobile || reducedMotion) return;
-    const onMove = (e: MouseEvent) => {
-      mouseRef.current.x = (e.clientX / window.innerWidth - 0.5) * 2;
-      mouseRef.current.y = (e.clientY / window.innerHeight - 0.5) * 2;
-    };
-    window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [isMobile, reducedMotion]);
-
-  useFrame((state, delta) => {
+  useFrame(() => {
     if (!groupRef.current || reducedMotion) return;
-    const elapsed = state.clock.elapsedTime;
-    const { progress } = useScrollStore.getState();
-
-    const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
-    const targetScale = scrollScaleAt(
-      crystalScaleSpline,
-      Math.min(progress, 1)
-    );
-
-    damp(dampedPos.current, "x", targetPos.x, 0.25, delta);
-    damp(dampedPos.current, "y", targetPos.y, 0.25, delta);
-    damp(dampedPos.current, "z", targetPos.z, 0.25, delta);
-    dampedScale.current = THREE.MathUtils.lerp(
-      dampedScale.current,
-      targetScale,
-      1 - Math.exp(-4 * delta)
-    );
-
-    groupRef.current.position.copy(dampedPos.current);
-    groupRef.current.scale.setScalar(dampedScale.current);
-
-    groupRef.current.rotation.y = elapsed * 0.15;
-    groupRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
-    if (!isMobile) {
-      groupRef.current.rotation.y += mouseRef.current.x * 0.15;
-      groupRef.current.rotation.x += mouseRef.current.y * 0.1;
-    }
+    groupRef.current.position.set(pose.x, pose.y, pose.z);
+    groupRef.current.scale.setScalar(pose.scale);
+    groupRef.current.rotation.y = pose.rotY;
+    groupRef.current.rotation.x = pose.rotX;
   });
 
-  return (
-    <GlassCrystal
-      ref={groupRef}
-    />
-  );
+  return <GlassCrystal ref={groupRef} />;
 }
 
-/* ── Orbit ring ──────────────────────────────────────────────────── */
+/* ── Orbit ring (follows crystal pose) ──────────────────────────── */
 
 function createOrbitTexture() {
   const w = 2048,
@@ -368,23 +301,32 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
   useFrame((state, delta) => {
     if (!meshRef.current || reducedMotion) return;
     const elapsed = state.clock.elapsedTime;
-    const { progress } = useScrollStore.getState();
+    const pose = getCrystalPose();
 
-    const targetPos = orbitSpline.getPointAt(Math.min(progress, 1));
-    damp(dampedPos.current, "x", targetPos.x, 0.3, delta);
-    damp(dampedPos.current, "y", targetPos.y, 0.3, delta);
-    damp(dampedPos.current, "z", targetPos.z, 0.3, delta);
+    damp(dampedPos.current, "x", pose.x, 0.3, delta);
+    damp(dampedPos.current, "y", pose.y, 0.3, delta);
+    damp(dampedPos.current, "z", pose.z, 0.3, delta);
 
     meshRef.current.position.copy(dampedPos.current);
     meshRef.current.rotation.x = 0.5 + Math.sin(elapsed * 0.06) * 0.1;
     meshRef.current.rotation.y = elapsed * 0.08;
-    meshRef.current.rotation.z = 0.2 + progress * 0.4;
+
+    const scrollP = useScrollStore.getState().progress;
+    meshRef.current.rotation.z = 0.2 + scrollP * 0.4;
 
     texRef.current!.offset.x = elapsed * 0.02;
 
-    const targetOpacity = progress < 0.6 ? 0.45 : 0.45 * (1 - (progress - 0.6) / 0.4);
-    dampedOpacity.current = THREE.MathUtils.lerp(dampedOpacity.current, targetOpacity, 1 - Math.exp(-4 * delta));
-    (meshRef.current.material as THREE.MeshBasicMaterial).opacity = dampedOpacity.current;
+    // Fade out as crystal breaks
+    const breakFade = Math.max(0, 1 - pose.breakVal * 3);
+    const scrollFade = scrollP < 0.6 ? 1 : 1 - (scrollP - 0.6) / 0.4;
+    const targetOpacity = 0.45 * Math.min(breakFade, scrollFade);
+    dampedOpacity.current = THREE.MathUtils.lerp(
+      dampedOpacity.current,
+      targetOpacity,
+      1 - Math.exp(-4 * delta),
+    );
+    (meshRef.current.material as THREE.MeshBasicMaterial).opacity =
+      dampedOpacity.current;
   });
 
   return (
@@ -441,7 +383,7 @@ function PixelGem({
       const ndc = new THREE.Vector3(
         (e.clientX / size.width) * 2 - 1,
         -(e.clientY / size.height) * 2 + 1,
-        0.5
+        0.5,
       );
       ndc.unproject(camera);
       const dir = ndc.sub(camera.position).normalize();
@@ -473,7 +415,7 @@ function PixelGem({
         i,
         currentPos.current.x + s.offsetX * s.life,
         currentPos.current.y + s.offsetY * s.life + s.life * 0.3,
-        currentPos.current.z
+        currentPos.current.z,
       );
     }
     posAttr.needsUpdate = true;

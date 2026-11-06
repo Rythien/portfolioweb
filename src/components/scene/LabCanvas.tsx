@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Text, Environment, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
+import { useFractureStore } from "@/store/useFractureStore";
 
 const HEADLINE = "Designing interfaces that breathe with life.";
 const FONT_URL = "/fonts/inter-tight-bold.ttf";
@@ -101,6 +102,10 @@ const VARIANTS: { seed: number; label: string }[] = [
 ];
 
 export default function LabCanvas() {
+  useEffect(() => {
+    useFractureStore.setState({ breakVal: 0 });
+  }, []);
+
   return (
     <div
       style={{

@@ -8,6 +8,7 @@ import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
+import { useCrystalPose } from "@/hooks/useCrystalPose";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -19,79 +20,23 @@ function seededRandom(seed: number) {
   };
 }
 
-/* ── Spline paths for dream crystal scroll choreography ────────── */
-
-const crystalSpline = new THREE.CatmullRomCurve3([
-  new THREE.Vector3(0, 0, 0),
-  new THREE.Vector3(1.2, -0.6, -0.8),
-  new THREE.Vector3(-1.0, -1.2, -1.5),
-  new THREE.Vector3(-1.8, -0.3, -0.8),
-  new THREE.Vector3(0.3, 0.6, -0.3),
-]);
-
-const crystalScaleSpline = [1.0, 0.9, 0.7, 0.6, 0.5];
-
-function scrollScaleAt(scales: number[], t: number) {
-  const idx = t * (scales.length - 1);
-  const lo = Math.floor(idx);
-  const hi = Math.min(lo + 1, scales.length - 1);
-  const frac = idx - lo;
-  return scales[lo] + (scales[hi] - scales[lo]) * frac;
-}
-
-/* ── Crystal wrapper (scroll + mouse, delegates to shared GlassCrystal) ── */
+/* ── Crystal wrapper (shared pose) ─────────────────────────────── */
 
 function DreamCrystal({
   reducedMotion,
-  isMobile,
 }: {
   reducedMotion: boolean;
   isMobile: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const mouseRef = useRef({ x: 0, y: 0 });
-  const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
-  const dampedScale = useRef(1);
+  const pose = useCrystalPose();
 
-  useEffect(() => {
-    if (isMobile || reducedMotion) return;
-    const onMove = (e: MouseEvent) => {
-      mouseRef.current.x = (e.clientX / window.innerWidth - 0.5) * 2;
-      mouseRef.current.y = (e.clientY / window.innerHeight - 0.5) * 2;
-    };
-    window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [isMobile, reducedMotion]);
-
-  useFrame((state, delta) => {
+  useFrame(() => {
     if (!groupRef.current || reducedMotion) return;
-    const elapsed = state.clock.elapsedTime;
-    const { progress } = useScrollStore.getState();
-
-    const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
-    const targetScale = scrollScaleAt(
-      crystalScaleSpline,
-      Math.min(progress, 1),
-    );
-
-    damp(dampedPos.current, "x", targetPos.x, 0.25, delta);
-    damp(dampedPos.current, "y", targetPos.y, 0.25, delta);
-    damp(dampedPos.current, "z", targetPos.z, 0.25, delta);
-    dampedScale.current = THREE.MathUtils.lerp(
-      dampedScale.current,
-      targetScale,
-      1 - Math.exp(-4 * delta),
-    );
-
-    groupRef.current.position.copy(dampedPos.current);
-    groupRef.current.scale.setScalar(dampedScale.current);
-
-    groupRef.current.rotation.y = elapsed * 0.12;
-    groupRef.current.rotation.x = Math.sin(elapsed * 0.08) * 0.25;
-    if (!isMobile) {
-      groupRef.current.rotation.y += mouseRef.current.x * 0.12;
-      groupRef.current.rotation.x += mouseRef.current.y * 0.08;
-    }
+    groupRef.current.position.set(pose.x, pose.y, pose.z);
+    groupRef.current.scale.setScalar(pose.scale);
+    groupRef.current.rotation.y = pose.rotY;
+    groupRef.current.rotation.x = pose.rotX;
   });
 
   return <GlassCrystal ref={groupRef} variant="dream" />;

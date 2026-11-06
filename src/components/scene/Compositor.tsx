@@ -7,6 +7,7 @@ import * as THREE from "three";
 import WakeScene from "./WakeScene";
 import DreamScene from "./DreamScene";
 import { useThemeStore, type Mode } from "@/store/useThemeStore";
+import { crystalEvents } from "@/hooks/useCrystalPose";
 
 /* ── Brush stamp shader (renders into brush buffer) ───────────── */
 
@@ -128,6 +129,7 @@ const compositeFragmentShader = /* glsl */ `
   uniform sampler2D uBrushMask;
   uniform vec2 uResolution;
   uniform float uTime;
+  uniform float uFlash;
 
   varying vec2 vUv;
 
@@ -161,6 +163,7 @@ const compositeFragmentShader = /* glsl */ `
 
     vec3 result = mix(finalWake, finalDream, reveal);
     result += vec3(1.0) * rim;
+    result += vec3(uFlash);
 
     gl_FragColor = vec4(result, 1.0);
     #include <colorspace_fragment>
@@ -202,6 +205,7 @@ const compositeMaterial = new THREE.ShaderMaterial({
     uBrushMask: { value: null },
     uResolution: { value: new THREE.Vector2(1, 1) },
     uTime: { value: 0 },
+    uFlash: { value: 0 },
   },
   depthTest: false,
   depthWrite: false,
@@ -470,6 +474,13 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       }
     }
 
+    // ── Camera shake ─────────────────────────────────────────────
+    fboCamera.position.set(
+      crystalEvents.shakeOffsetX,
+      crystalEvents.shakeOffsetY,
+      6,
+    );
+
     // ── Render wake scene to FBO ────────────────────────────────
     gl.setRenderTarget(wakeTarget);
     gl.setClearColor("#E9E7E2", 1);
@@ -481,6 +492,9 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     gl.setClearColor("#07062B", 1);
     gl.clear();
     gl.render(dreamScene, fboCamera);
+
+    // Restore camera
+    fboCamera.position.set(0, 0, 6);
 
     // ── Render brush buffer (ping-pong) ─────────────────────────
     const readTarget =
@@ -528,6 +542,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     compositeMaterial.uniforms.uBrushMask.value = writeTarget.texture;
     compositeMaterial.uniforms.uResolution.value.set(size.width, size.height);
     compositeMaterial.uniforms.uTime.value = time;
+    compositeMaterial.uniforms.uFlash.value = crystalEvents.flashOpacity;
 
     gl.setClearColor("#000000", 0);
     gl.setRenderTarget(null);
