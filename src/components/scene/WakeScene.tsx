@@ -50,25 +50,32 @@ function noise3(x: number, y: number, z: number) {
 
 /* ── Displaced icosahedron geometry ────────────────────────────── */
 
-function useDisplacedIcosahedron(
-  detail: number,
-  displace: number,
-  seed: number
-) {
+function useCrystalGeometry(detail: number, isMobile: boolean) {
   return useMemo(() => {
-    const geo = new THREE.IcosahedronGeometry(1.4, detail);
+    const d = isMobile ? Math.max(2, detail - 2) : detail;
+    const geo = new THREE.IcosahedronGeometry(1.4, d);
     const pos = geo.attributes.position;
-    const rng = seededRandom(seed);
     const v = new THREE.Vector3();
+
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
-      const n2 = noise3(v.x * 2 + rng() * 0.5, v.y * 2, v.z * 2);
-      v.normalize().multiplyScalar(1.4 + (n2 - 0.5) * displace);
+      const dir = v.clone().normalize();
+
+      // Octave 1: large low-frequency lumps
+      const n1 = noise3(dir.x * 1.8, dir.y * 1.8, dir.z * 1.8);
+      // Octave 2: sharper ridged noise for icy facets
+      const raw = noise3(dir.x * 4.5 + 7.3, dir.y * 4.5 + 3.1, dir.z * 4.5 + 1.7);
+      const ridged = 1 - Math.abs(raw * 2 - 1);
+      // Combine: broad shape + sharp ridges
+      const displacement = (n1 - 0.5) * 0.35 + ridged * 0.12;
+
+      v.copy(dir).multiplyScalar(1.4 + displacement);
       pos.setXYZ(i, v.x, v.y, v.z);
     }
+
     geo.computeVertexNormals();
     return geo;
-  }, [detail, displace, seed]);
+  }, [detail, isMobile]);
 }
 
 /* ── Pixel gem canvas texture ──────────────────────────────────── */
@@ -313,7 +320,7 @@ function Crystal({
   isMobile: boolean;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const geo = useDisplacedIcosahedron(1, 0.6, 1337);
+  const geo = useCrystalGeometry(4, isMobile);
   const mouseRef = useRef({ x: 0, y: 0 });
   const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
   const dampedScale = useRef(1);
@@ -333,15 +340,17 @@ function Crystal({
     const elapsed = state.clock.elapsedTime;
     const { progress } = useScrollStore.getState();
 
-    // Sample spline at scroll progress
     const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
     const targetScale = scrollScaleAt(crystalScaleSpline, Math.min(progress, 1));
 
-    // Damp toward target
     damp(dampedPos.current, "x", targetPos.x, 0.25, delta);
     damp(dampedPos.current, "y", targetPos.y, 0.25, delta);
     damp(dampedPos.current, "z", targetPos.z, 0.25, delta);
-    dampedScale.current = THREE.MathUtils.lerp(dampedScale.current, targetScale, 1 - Math.exp(-4 * delta));
+    dampedScale.current = THREE.MathUtils.lerp(
+      dampedScale.current,
+      targetScale,
+      1 - Math.exp(-4 * delta)
+    );
 
     meshRef.current.position.copy(dampedPos.current);
     meshRef.current.scale.setScalar(dampedScale.current);
@@ -358,31 +367,31 @@ function Crystal({
     <mesh ref={meshRef} geometry={geo}>
       {isMobile ? (
         <meshPhysicalMaterial
-          color="#e8e4de"
-          roughness={0.08}
-          metalness={0.1}
+          color="#f0f2f8"
+          roughness={0.1}
+          metalness={0.05}
           transparent
-          opacity={0.85}
-          transmission={0.6}
-          ior={1.5}
-          thickness={0.8}
+          opacity={0.8}
+          transmission={0.7}
+          ior={1.3}
+          thickness={1.0}
         />
       ) : (
         <MeshTransmissionMaterial
-          thickness={1.2}
-          chromaticAberration={0.3}
-          anisotropicBlur={0.4}
+          thickness={2.0}
+          chromaticAberration={0.4}
+          anisotropicBlur={0.3}
           roughness={0.08}
           distortion={0.3}
-          distortionScale={0.3}
-          temporalDistortion={0.1}
+          distortionScale={0.25}
+          temporalDistortion={0.08}
           transmission={1}
-          ior={1.5}
-          samples={6}
-          resolution={512}
-          color="#e8e4de"
+          ior={1.3}
+          samples={8}
+          resolution={1024}
+          color="#f0f4fa"
           backside
-          backsideThickness={0.4}
+          backsideThickness={0.6}
         />
       )}
     </mesh>
@@ -586,7 +595,7 @@ export default function WakeScene({
       <color attach="background" args={["#E9E7E2"]} />
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 5, 5]} intensity={0.8} />
-      <Environment preset="city" />
+      <Environment preset="studio" />
       <MarqueeText isMobile={isMobile} reducedMotion={reducedMotion} />
       <Crystal reducedMotion={reducedMotion} isMobile={isMobile} />
       <OrbitRing reducedMotion={reducedMotion} />
