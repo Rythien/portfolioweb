@@ -137,12 +137,30 @@ const compositeFragmentShader = /* glsl */ `
   void main() {
     vec2 uv = vUv;
 
-    vec4 wake = texture2D(uWakeScene, uv);
-    vec4 dream = texture2D(uDreamScene, uv);
     float mask = texture2D(uBrushMask, uv).r;
 
     // Smooth the mask edge
     float reveal = smoothstep(0.05, 0.5, mask);
+
+    // Chromatic aberration at the boundary
+    float edgeStrength = smoothstep(0.05, 0.25, mask) - smoothstep(0.25, 0.5, mask);
+    float aberration = edgeStrength * 0.004;
+
+    vec4 wake = texture2D(uWakeScene, uv);
+    vec4 dream = texture2D(uDreamScene, uv);
+
+    // Sample with offset for chromatic split at edge
+    float dreamR = texture2D(uDreamScene, uv + vec2(aberration, 0.0)).r;
+    float dreamB = texture2D(uDreamScene, uv - vec2(aberration, 0.0)).b;
+    vec3 dreamChroma = vec3(dreamR, dream.g, dreamB);
+
+    float wakeR = texture2D(uWakeScene, uv + vec2(aberration * 0.5, 0.0)).r;
+    float wakeB = texture2D(uWakeScene, uv - vec2(aberration * 0.5, 0.0)).b;
+    vec3 wakeChroma = vec3(wakeR, wake.g, wakeB);
+
+    // Blend between normal and chromatic versions based on edge proximity
+    vec3 finalWake = mix(wake.rgb, wakeChroma, edgeStrength);
+    vec3 finalDream = mix(dream.rgb, dreamChroma, edgeStrength);
 
     // Glowing white rim at mask edge
     float edgeMask = smoothstep(0.1, 0.3, mask) - smoothstep(0.3, 0.5, mask);
@@ -150,7 +168,7 @@ const compositeFragmentShader = /* glsl */ `
     float rim = edgeMask * 0.8 + outerHalo * 0.3;
 
     // Composite wake + dream
-    vec3 result = mix(wake.rgb, dream.rgb, reveal);
+    vec3 result = mix(finalWake, finalDream, reveal);
     result += vec3(1.0) * rim;
 
     gl_FragColor = vec4(result, 1.0);

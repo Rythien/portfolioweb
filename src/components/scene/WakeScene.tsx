@@ -18,7 +18,7 @@ function seededRandom(seed: number) {
   };
 }
 
-/* ── Simple 3D noise (value noise for vertex displacement) ──── */
+/* ── 3D value noise for crystal displacement ───────────────────── */
 
 function hash(n: number) {
   const s = Math.sin(n) * 43758.5453;
@@ -48,22 +48,11 @@ function noise3(x: number, y: number, z: number) {
   );
 }
 
-/* ── Crystal geometry + Voronoi fracture ──────────────────────── */
+/* ── Solid crystal geometry (detail 5, icy faceted) ────────────── */
 
-interface ShardData {
-  geometry: THREE.BufferGeometry;
-  centroid: THREE.Vector3;
-  direction: THREE.Vector3;
-  delay: number;
-}
-
-function useCrystalShards(
-  detail: number,
-  shardCount: number,
-  isMobile: boolean
-): ShardData[] {
+function useCrystalGeometry(isMobile: boolean) {
   return useMemo(() => {
-    const d = isMobile ? Math.max(2, detail - 2) : detail;
+    const d = isMobile ? 3 : 5;
     const geo = new THREE.IcosahedronGeometry(1.4, d);
     const pos = geo.attributes.position;
     const v = new THREE.Vector3();
@@ -82,110 +71,13 @@ function useCrystalShards(
       v.copy(dir).multiplyScalar(1.4 + displacement);
       pos.setXYZ(i, v.x, v.y, v.z);
     }
+
     geo.computeVertexNormals();
-
-    // Generate Voronoi seed points on the unit sphere
-    const rng = seededRandom(4242);
-    const seeds: THREE.Vector3[] = [];
-    for (let i = 0; i < shardCount; i++) {
-      const theta = Math.acos(2 * rng() - 1);
-      const phi = 2 * Math.PI * rng();
-      seeds.push(
-        new THREE.Vector3(
-          Math.sin(theta) * Math.cos(phi),
-          Math.sin(theta) * Math.sin(phi),
-          Math.cos(theta)
-        )
-      );
-    }
-
-    // Assign each triangle to nearest seed (Voronoi on sphere)
-    const triCount = pos.count / 3;
-    const assignments = new Int32Array(triCount);
-    const centA = new THREE.Vector3();
-    const centB = new THREE.Vector3();
-    const centC = new THREE.Vector3();
-    const triCenter = new THREE.Vector3();
-
-    for (let t = 0; t < triCount; t++) {
-      const base = t * 3;
-      centA.fromBufferAttribute(pos, base);
-      centB.fromBufferAttribute(pos, base + 1);
-      centC.fromBufferAttribute(pos, base + 2);
-      triCenter
-        .copy(centA)
-        .add(centB)
-        .add(centC)
-        .divideScalar(3)
-        .normalize();
-
-      let best = 0;
-      let bestDist = Infinity;
-      for (let s = 0; s < seeds.length; s++) {
-        const dist = triCenter.distanceToSquared(seeds[s]);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = s;
-        }
-      }
-      assignments[t] = best;
-    }
-
-    // Build per-shard geometries
-    const srcNormals = geo.attributes.normal;
-    const shards: ShardData[] = [];
-
-    for (let s = 0; s < shardCount; s++) {
-      const verts: number[] = [];
-      const norms: number[] = [];
-
-      for (let t = 0; t < triCount; t++) {
-        if (assignments[t] !== s) continue;
-        const base = t * 3;
-        for (let vi = 0; vi < 3; vi++) {
-          const idx = base + vi;
-          verts.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
-          norms.push(
-            srcNormals.getX(idx),
-            srcNormals.getY(idx),
-            srcNormals.getZ(idx)
-          );
-        }
-      }
-
-      if (verts.length === 0) continue;
-
-      const shardGeo = new THREE.BufferGeometry();
-      shardGeo.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(verts, 3)
-      );
-      shardGeo.setAttribute(
-        "normal",
-        new THREE.Float32BufferAttribute(norms, 3)
-      );
-
-      // Compute centroid
-      const centroid = new THREE.Vector3();
-      for (let i = 0; i < verts.length; i += 3) {
-        centroid.x += verts[i];
-        centroid.y += verts[i + 1];
-        centroid.z += verts[i + 2];
-      }
-      centroid.divideScalar(verts.length / 3);
-
-      const direction = centroid.clone().normalize();
-      const delay = rng() * 0.3;
-
-      shards.push({ geometry: shardGeo, centroid, direction, delay });
-    }
-
-    geo.dispose();
-    return shards;
-  }, [detail, shardCount, isMobile]);
+    return geo;
+  }, [isMobile]);
 }
 
-/* ── Pixel gem canvas texture ──────────────────────────────────── */
+/* ── Pixel gem canvas texture ────────────────────────────────────── */
 
 function usePixelGemTexture() {
   return useMemo(() => {
@@ -239,7 +131,7 @@ function usePixelGemTexture() {
   }, []);
 }
 
-/* ── Sparkle particle texture ──────────────────────────────────── */
+/* ── Sparkle particle texture ────────────────────────────────────── */
 
 function useSparkleTexture() {
   return useMemo(() => {
@@ -256,7 +148,7 @@ function useSparkleTexture() {
   }, []);
 }
 
-/* ── Marquee headline ──────────────────────────────────────────── */
+/* ── Marquee headline ────────────────────────────────────────────── */
 
 const HEADLINE_TILE = `${SITE_DATA.hero.headlineLine1}  ${SITE_DATA.hero.headlineLine2}  ·  `;
 const FONT_URL = "/fonts/inter-tight-bold.ttf";
@@ -298,7 +190,6 @@ function MarqueeText({
   useFrame((_, delta) => {
     if (!groupRef.current) return;
 
-    // Hero scroll: progress 0 = hero at rest, 1 = hero scrolled out
     const heroP = getSectionProgress("top");
     const heroOut = heroP >= 1;
 
@@ -308,12 +199,13 @@ function MarqueeText({
     }
     groupRef.current.visible = true;
 
-    // Parallax: headline scrolls up at 0.85x scroll speed
-    const scrollY = heroP * visHeight * 0.85;
+    // heroP ≈ 0.5 at rest (section visible but not scrolled).
+    // Remap so rest → 0 offset, fully scrolled out → full offset.
+    const heroScroll = Math.max(0, (heroP - 0.5) / 0.5);
+    const scrollY = heroScroll * visHeight * 0.85;
     groupRef.current.position.y = -scrollY;
 
-    // Fade out between hero progress 0.6 - 1.0
-    const fade = heroP < 0.6 ? 1 : 1 - (heroP - 0.6) / 0.4;
+    const fade = heroScroll < 0.2 ? 1 : 1 - (heroScroll - 0.2) / 0.8;
     const children = groupRef.current.children;
     for (let i = 0; i < children.length; i++) {
       const mat = (children[i] as THREE.Mesh).material as THREE.Material & {
@@ -389,14 +281,14 @@ function MarqueeText({
   );
 }
 
-/* ── Spline paths for scroll choreography ─────────────────────── */
+/* ── Spline paths for scroll choreography ────────────────────────── */
 
 const crystalSpline = new THREE.CatmullRomCurve3([
-  new THREE.Vector3(0, 0, 0),       // hero: centered
-  new THREE.Vector3(-1.5, -0.8, -1), // about: drift left
-  new THREE.Vector3(1.2, -1.5, -2),  // works: slide right, further back
-  new THREE.Vector3(2.0, -0.5, -1),  // recognition: rise right
-  new THREE.Vector3(0.5, 0.8, -0.5), // contact: settle near center
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(-1.5, -0.8, -1),
+  new THREE.Vector3(1.2, -1.5, -2),
+  new THREE.Vector3(2.0, -0.5, -1),
+  new THREE.Vector3(0.5, 0.8, -0.5),
 ]);
 
 const crystalScaleSpline = [1.0, 0.85, 0.65, 0.55, 0.45];
@@ -417,15 +309,7 @@ function scrollScaleAt(scales: number[], t: number) {
   return scales[lo] + (scales[hi] - scales[lo]) * frac;
 }
 
-/* ── Crystal ───────────────────────────────────────────────────── */
-
-/* ── Fractured crystal group ──────────────────────────────────── */
-
-const SHARD_COUNT = 16;
-const FRACTURE_END = 0.35;
-
-// Module-scoped shard mesh store (avoids react-hooks/immutability)
-const shardMeshes: THREE.Mesh[] = [];
+/* ── Solid crystal ───────────────────────────────────────────────── */
 
 function Crystal({
   reducedMotion,
@@ -434,22 +318,11 @@ function Crystal({
   reducedMotion: boolean;
   isMobile: boolean;
 }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const shards = useCrystalShards(4, SHARD_COUNT, isMobile);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const geo = useCrystalGeometry(isMobile);
   const mouseRef = useRef({ x: 0, y: 0 });
   const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
   const dampedScale = useRef(1);
-  const dampedFracture = useRef<number[]>(
-    new Array(SHARD_COUNT).fill(0)
-  );
-  const dampedVelKick = useRef({ v: 0 });
-
-  const shardRefCb = useCallback(
-    (index: number) => (el: THREE.Mesh | null) => {
-      if (el) shardMeshes[index] = el;
-    },
-    []
-  );
 
   useEffect(() => {
     if (isMobile || reducedMotion) return;
@@ -462,9 +335,9 @@ function Crystal({
   }, [isMobile, reducedMotion]);
 
   useFrame((state, delta) => {
-    if (!groupRef.current || reducedMotion) return;
+    if (!meshRef.current || reducedMotion) return;
     const elapsed = state.clock.elapsedTime;
-    const { progress, velocity } = useScrollStore.getState();
+    const { progress } = useScrollStore.getState();
 
     const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
     const targetScale = scrollScaleAt(
@@ -481,96 +354,53 @@ function Crystal({
       1 - Math.exp(-4 * delta)
     );
 
-    groupRef.current.position.copy(dampedPos.current);
-    groupRef.current.scale.setScalar(dampedScale.current);
+    meshRef.current.position.copy(dampedPos.current);
+    meshRef.current.scale.setScalar(dampedScale.current);
 
-    groupRef.current.rotation.y = elapsed * 0.15;
-    groupRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
+    meshRef.current.rotation.y = elapsed * 0.15;
+    meshRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
     if (!isMobile) {
-      groupRef.current.rotation.y += mouseRef.current.x * 0.15;
-      groupRef.current.rotation.x += mouseRef.current.y * 0.1;
-    }
-
-    // Fracture driven by scroll progress (0 to FRACTURE_END)
-    const rawFrac = Math.min(progress / FRACTURE_END, 1);
-    const easedFrac = 1 - Math.pow(1 - rawFrac, 3);
-
-    damp(dampedVelKick.current, "v", velocity * 0.0006, 0.3, delta);
-    const velBoost = dampedVelKick.current.v;
-
-    for (let i = 0; i < shards.length; i++) {
-      const mesh = shardMeshes[i];
-      if (!mesh) continue;
-      const s = shards[i];
-
-      const delayed =
-        Math.max(0, easedFrac - s.delay) / (1 - s.delay);
-      const targetF = delayed + velBoost * 0.5;
-
-      if (!dampedFracture.current[i]) dampedFracture.current[i] = 0;
-      dampedFracture.current[i] = THREE.MathUtils.lerp(
-        dampedFracture.current[i],
-        targetF,
-        1 - Math.exp(-6 * delta)
-      );
-      const f = dampedFracture.current[i];
-
-      const dist = (1 + s.delay * 2) * f * 2.5;
-      mesh.position.set(
-        s.centroid.x + s.direction.x * dist,
-        s.centroid.y + s.direction.y * dist,
-        s.centroid.z + s.direction.z * dist
-      );
-
-      const tumble = f * (1 + s.delay) * 0.8;
-      mesh.rotation.set(
-        s.direction.y * tumble,
-        s.direction.z * tumble,
-        s.direction.x * tumble
-      );
+      meshRef.current.rotation.y += mouseRef.current.x * 0.15;
+      meshRef.current.rotation.x += mouseRef.current.y * 0.1;
     }
   });
 
   return (
-    <group ref={groupRef}>
-      {shards.map((shard, i) => (
-        <mesh key={i} ref={shardRefCb(i)} geometry={shard.geometry}>
-          {isMobile ? (
-            <meshPhysicalMaterial
-              color="#f0f2f8"
-              roughness={0.1}
-              metalness={0.05}
-              transparent
-              opacity={0.8}
-              transmission={0.7}
-              ior={1.3}
-              thickness={1.0}
-            />
-          ) : (
-            <MeshTransmissionMaterial
-              thickness={2.0}
-              chromaticAberration={0.4}
-              anisotropicBlur={0.3}
-              roughness={0.08}
-              distortion={0.3}
-              distortionScale={0.25}
-              temporalDistortion={0.08}
-              transmission={1}
-              ior={1.3}
-              samples={8}
-              resolution={1024}
-              color="#f0f4fa"
-              backside
-              backsideThickness={0.6}
-            />
-          )}
-        </mesh>
-      ))}
-    </group>
+    <mesh ref={meshRef} geometry={geo}>
+      {isMobile ? (
+        <meshPhysicalMaterial
+          color="#f0f4fa"
+          roughness={0.1}
+          metalness={0.05}
+          transparent
+          opacity={0.85}
+          transmission={0.7}
+          ior={1.3}
+          thickness={1.0}
+        />
+      ) : (
+        <MeshTransmissionMaterial
+          thickness={2.0}
+          chromaticAberration={0.4}
+          anisotropicBlur={0.3}
+          roughness={0.08}
+          distortion={0.3}
+          distortionScale={0.25}
+          temporalDistortion={0.08}
+          transmission={1}
+          ior={1.3}
+          samples={8}
+          resolution={1024}
+          color="#f0f4fa"
+          backside
+          backsideThickness={0.6}
+        />
+      )}
+    </mesh>
   );
 }
 
-/* ── Orbit ring ────────────────────────────────────────────────── */
+/* ── Orbit ring ──────────────────────────────────────────────────── */
 
 function createOrbitTexture() {
   const w = 2048,
@@ -628,7 +458,6 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
 
     texRef.current!.offset.x = elapsed * 0.02;
 
-    // Fade out in lower sections
     const targetOpacity = progress < 0.6 ? 0.45 : 0.45 * (1 - (progress - 0.6) / 0.4);
     dampedOpacity.current = THREE.MathUtils.lerp(dampedOpacity.current, targetOpacity, 1 - Math.exp(-4 * delta));
     (meshRef.current.material as THREE.MeshBasicMaterial).opacity = dampedOpacity.current;
@@ -648,7 +477,7 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
   );
 }
 
-/* ── Pixel gem cursor follower ─────────────────────────────────── */
+/* ── Pixel gem cursor follower ───────────────────────────────────── */
 
 const SPARKLE_COUNT = 12;
 
@@ -753,7 +582,7 @@ function PixelGem({
   );
 }
 
-/* ── Scene ─────────────────────────────────────────────────────── */
+/* ── Scene ───────────────────────────────────────────────────────── */
 
 export default function WakeScene({
   reducedMotion,
