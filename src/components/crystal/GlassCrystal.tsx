@@ -59,27 +59,84 @@ export interface ShardData {
 
 /* ── Hook: generate Voronoi-fractured shards ───────────────────── */
 
+function buildRefNormals(): THREE.Vector3[] {
+  const ref = new THREE.IcosahedronGeometry(1, 0).toNonIndexed();
+  const rp = ref.attributes.position;
+  const normals: THREE.Vector3[] = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let t = 0; t < rp.count / 3; t++) {
+    a.fromBufferAttribute(rp, t * 3);
+    b.fromBufferAttribute(rp, t * 3 + 1);
+    c.fromBufferAttribute(rp, t * 3 + 2);
+    normals.push(
+      new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).normalize()
+    );
+  }
+  ref.dispose();
+  return normals;
+}
+
+const REF_NORMALS = buildRefNormals();
+
 export function useGlassCrystalShards(detail = 5): ShardData[] {
   return useMemo(() => {
-    const geo = new THREE.IcosahedronGeometry(1.4, detail);
+    const indexed = new THREE.IcosahedronGeometry(1.4, detail);
+    const geo = indexed.toNonIndexed();
+    indexed.dispose();
+
     const pos = geo.attributes.position;
     const v = new THREE.Vector3();
+    const SX = 1.0, SY = 1.25, SZ = 0.85;
+    const chipDir = new THREE.Vector3(0.35, -0.65, 0.25).normalize();
 
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
+      v.x *= SX; v.y *= SY; v.z *= SZ;
       const dir = v.clone().normalize();
-      const n1 = noise3(dir.x * 1.8, dir.y * 1.8, dir.z * 1.8);
-      const raw = noise3(
-        dir.x * 4.5 + 7.3,
-        dir.y * 4.5 + 3.1,
-        dir.z * 4.5 + 1.7
-      );
-      const ridged = 1 - Math.abs(raw * 2 - 1);
-      const displacement = (n1 - 0.5) * 0.35 + ridged * 0.12;
-      v.copy(dir).multiplyScalar(1.4 + displacement);
+      const r = v.length();
+
+      const n1 = noise3(dir.x * 0.9, dir.y * 0.9, dir.z * 0.9);
+      const raw1 = noise3(dir.x * 2.4 + 7.3, dir.y * 2.4 + 3.1, dir.z * 2.4 + 1.7);
+      const ridged1 = 1 - Math.abs(raw1 * 2 - 1);
+      const raw2 = noise3(dir.x * 5.5 + 13.7, dir.y * 5.5 + 9.2, dir.z * 5.5 + 5.8);
+      const ridged2 = 1 - Math.abs(raw2 * 2 - 1);
+
+      const chipDot = dir.dot(chipDir);
+      const chipMask = Math.max(0, chipDot - 0.65) / 0.35;
+      const chipNoise = noise3(dir.x * 9 + 20, dir.y * 9 + 20, dir.z * 9 + 20);
+
+      const displacement =
+        (n1 - 0.5) * 0.55 +
+        ridged1 * 0.15 +
+        ridged2 * 0.06 +
+        chipMask * (chipNoise - 0.5) * 0.35;
+
+      v.copy(dir).multiplyScalar(r + displacement);
       pos.setXYZ(i, v.x, v.y, v.z);
     }
+
     geo.computeVertexNormals();
+    const normals = geo.attributes.normal;
+    const fn = new THREE.Vector3();
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    for (let t = 0; t < pos.count / 3; t++) {
+      const base = t * 3;
+      a.fromBufferAttribute(pos, base);
+      b.fromBufferAttribute(pos, base + 1);
+      c.fromBufferAttribute(pos, base + 2);
+      fn.crossVectors(b.clone().sub(a), c.clone().sub(a)).normalize();
+
+      let bestDot = -Infinity;
+      let bestIdx = 0;
+      for (let ri = 0; ri < REF_NORMALS.length; ri++) {
+        const d = fn.dot(REF_NORMALS[ri]);
+        if (d > bestDot) { bestDot = d; bestIdx = ri; }
+      }
+      const qn = REF_NORMALS[bestIdx];
+      normals.setXYZ(base, qn.x, qn.y, qn.z);
+      normals.setXYZ(base + 1, qn.x, qn.y, qn.z);
+      normals.setXYZ(base + 2, qn.x, qn.y, qn.z);
+    }
 
     const rng = seededRandom(SEED);
     const seeds: THREE.Vector3[] = [];
@@ -97,17 +154,17 @@ export function useGlassCrystalShards(detail = 5): ShardData[] {
 
     const triCount = pos.count / 3;
     const assignments = new Int32Array(triCount);
-    const a = new THREE.Vector3();
-    const b = new THREE.Vector3();
-    const c = new THREE.Vector3();
+    const va = new THREE.Vector3();
+    const vb = new THREE.Vector3();
+    const vc = new THREE.Vector3();
     const triCenter = new THREE.Vector3();
 
     for (let t = 0; t < triCount; t++) {
       const base = t * 3;
-      a.fromBufferAttribute(pos, base);
-      b.fromBufferAttribute(pos, base + 1);
-      c.fromBufferAttribute(pos, base + 2);
-      triCenter.copy(a).add(b).add(c).divideScalar(3).normalize();
+      va.fromBufferAttribute(pos, base);
+      vb.fromBufferAttribute(pos, base + 1);
+      vc.fromBufferAttribute(pos, base + 2);
+      triCenter.copy(va).add(vb).add(vc).divideScalar(3).normalize();
 
       let best = 0;
       let bestDist = Infinity;
@@ -205,20 +262,23 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(function GlassCr
         >
           <MeshTransmissionMaterial
             buffer={buffer}
-            thickness={2.0}
-            chromaticAberration={0.4}
-            anisotropicBlur={0.3}
-            roughness={0.08}
-            distortion={0.3}
-            distortionScale={0.25}
-            temporalDistortion={0.08}
+            thickness={1.2}
+            chromaticAberration={0.08}
+            anisotropicBlur={0.6}
+            roughness={0.04}
+            distortion={0}
+            distortionScale={0}
+            temporalDistortion={0}
             transmission={1}
-            ior={1.3}
-            samples={8}
+            ior={1.25}
+            samples={16}
             resolution={1024}
-            color="#f0f4fa"
+            color="#f4f8fa"
+            attenuationColor="#d8e8f8"
+            attenuationDistance={3.5}
             backside
-            backsideThickness={0.6}
+            backsideThickness={0.4}
+            envMapIntensity={1.5}
           />
         </mesh>
       ))}
