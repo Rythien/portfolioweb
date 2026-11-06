@@ -15,7 +15,6 @@ function subscribeWebGL(cb: () => void) {
   window.addEventListener("webglcontextlost", cb);
   return () => window.removeEventListener("webglcontextlost", cb);
 }
-
 function hasWebGL() {
   try {
     const c = document.createElement("canvas");
@@ -32,7 +31,7 @@ export default function CircleReveal() {
   const endTransition = useThemeStore((s) => s.endTransition);
   const setMode = useThemeStore((s) => s.setMode);
 
-  const webglAvailable = useSyncExternalStore(subscribeWebGL, hasWebGL, () => true);
+  const webgl = useSyncExternalStore(subscribeWebGL, hasWebGL, () => true);
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
@@ -72,8 +71,7 @@ export default function CircleReveal() {
   }, [clickOrigin, endTransition, setMode]);
 
   useEffect(() => {
-    // Only activate if WebGL is NOT available (shader handles it otherwise)
-    if (!transitioning || !clickOrigin || webglAvailable) return;
+    if (!transitioning || !clickOrigin || webgl) return;
 
     targetModeRef.current = mode === "wake" ? "dream" : "wake";
     themeSwitchedRef.current = false;
@@ -88,10 +86,9 @@ export default function CircleReveal() {
     rafRef.current = requestAnimationFrame((ts) => animateRef.current?.(ts));
 
     return () => cancelAnimationFrame(rafRef.current);
-  }, [transitioning, clickOrigin, mode, webglAvailable]);
+  }, [transitioning, clickOrigin, mode, webgl]);
 
-  // Only render when WebGL is NOT available
-  if (webglAvailable || !transitioning) return null;
+  if (webgl || !transitioning) return null;
 
   return (
     <div

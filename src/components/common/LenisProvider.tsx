@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import Lenis from "lenis";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useScrollStore, setSectionProgress } from "@/store/useScrollStore";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -18,6 +19,8 @@ const LenisContext = createContext<LenisContextValue>({
 });
 
 export const useLenis = () => useContext(LenisContext);
+
+const SECTION_IDS = ["top", "about", "disciplines", "works", "recognition", "contact"];
 
 export default function LenisProvider({
   children,
@@ -52,18 +55,23 @@ export default function LenisProvider({
         setLenisInstance(lenis);
       });
 
-      // Connect Lenis scroll to ScrollTrigger
-      lenis.on("scroll", (e: { velocity: number }) => {
-        ScrollTrigger.update();
-        setVelocity(e.velocity || 0);
-      });
+      lenis.on(
+        "scroll",
+        (e: { velocity: number; progress: number; direction: number }) => {
+          ScrollTrigger.update();
+          setVelocity(e.velocity || 0);
+          useScrollStore.setState({
+            progress: e.progress ?? 0,
+            velocity: e.velocity ?? 0,
+            direction: e.direction ?? 1,
+          });
+        }
+      );
 
-      // Ensure ScrollTrigger coordinates align after Lenis initializes
       requestAnimationFrame(() => {
         ScrollTrigger.refresh();
       });
 
-      // Refresh ScrollTrigger after custom fonts load to eliminate pin misalignment
       if (typeof document !== "undefined" && document.fonts) {
         document.fonts.ready.then(() => {
           ScrollTrigger.refresh();
@@ -75,7 +83,6 @@ export default function LenisProvider({
       };
       window.addEventListener("load", handleWindowLoad);
 
-      // Connect GSAP ticker to Lenis rAF
       const updateTicker = (time: number) => {
         lenis.raf(time * 1000);
       };
@@ -94,6 +101,34 @@ export default function LenisProvider({
       console.warn("Lenis initialization error:", err);
     }
   }, []);
+
+  // Per-section progress via ScrollTrigger
+  useEffect(() => {
+    if (!lenisInstance) return;
+
+    const triggers: ScrollTrigger[] = [];
+
+    requestAnimationFrame(() => {
+      SECTION_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        triggers.push(
+          ScrollTrigger.create({
+            trigger: el,
+            start: "top bottom",
+            end: "bottom top",
+            onUpdate: (self) => {
+              setSectionProgress(id, self.progress);
+            },
+          })
+        );
+      });
+    });
+
+    return () => {
+      triggers.forEach((t) => t.kill());
+    };
+  }, [lenisInstance]);
 
   return (
     <LenisContext.Provider value={{ lenis: lenisInstance, velocity }}>

@@ -3,6 +3,7 @@ import Header from "@/components/common/Header";
 import Preloader from "@/components/common/Preloader";
 import ModePill from "@/components/chrome/ModePill";
 import TransitionLayer from "@/components/chrome/TransitionLayer";
+import SceneLoader from "@/components/scene/SceneLoader";
 
 import Hero from "@/components/sections/Hero";
 import About from "@/components/sections/About";
@@ -23,6 +24,7 @@ export default function Home() {
         Skip to main content
       </a>
       <Header />
+      <SceneLoader />
       <main id="main-content" className="relative z-[1] block w-full">
         <Hero />
         <About />
