@@ -86,30 +86,36 @@ export function useGlassCrystalShards(detail = 5): ShardData[] {
 
     const pos = geo.attributes.position;
     const v = new THREE.Vector3();
-    const SX = 1.0, SY = 1.25, SZ = 0.85;
-    const chipDir = new THREE.Vector3(0.35, -0.65, 0.25).normalize();
+    const SX = 1.2, SY = 1.0, SZ = 0.9;
+    const chipDir = new THREE.Vector3(0.6, -0.4, 0.55).normalize();
+    const tilt = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 0, 1), 0.12
+    );
 
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
       v.x *= SX; v.y *= SY; v.z *= SZ;
+      v.applyQuaternion(tilt);
       const dir = v.clone().normalize();
       const r = v.length();
 
-      const n1 = noise3(dir.x * 0.9, dir.y * 0.9, dir.z * 0.9);
+      const n1 = noise3(dir.x * 0.7, dir.y * 0.7, dir.z * 0.7);
+      const n2 = noise3(dir.x * 1.3 + 5.0, dir.y * 1.3 + 2.0, dir.z * 1.3 + 8.0);
       const raw1 = noise3(dir.x * 2.4 + 7.3, dir.y * 2.4 + 3.1, dir.z * 2.4 + 1.7);
       const ridged1 = 1 - Math.abs(raw1 * 2 - 1);
       const raw2 = noise3(dir.x * 5.5 + 13.7, dir.y * 5.5 + 9.2, dir.z * 5.5 + 5.8);
       const ridged2 = 1 - Math.abs(raw2 * 2 - 1);
 
       const chipDot = dir.dot(chipDir);
-      const chipMask = Math.max(0, chipDot - 0.65) / 0.35;
+      const chipMask = Math.max(0, chipDot - 0.6) / 0.4;
       const chipNoise = noise3(dir.x * 9 + 20, dir.y * 9 + 20, dir.z * 9 + 20);
 
       const displacement =
-        (n1 - 0.5) * 0.55 +
-        ridged1 * 0.15 +
-        ridged2 * 0.06 +
-        chipMask * (chipNoise - 0.5) * 0.35;
+        (n1 - 0.5) * 0.5 +
+        (n2 - 0.5) * 0.3 +
+        ridged1 * 0.12 +
+        ridged2 * 0.05 +
+        chipMask * (chipNoise - 0.5) * 0.4;
 
       v.copy(dir).multiplyScalar(r + displacement);
       pos.setXYZ(i, v.x, v.y, v.z);
@@ -262,23 +268,23 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(function GlassCr
         >
           <MeshTransmissionMaterial
             buffer={buffer}
-            thickness={1.2}
-            chromaticAberration={0.08}
-            anisotropicBlur={0.6}
-            roughness={0.04}
+            thickness={0.6}
+            chromaticAberration={0.03}
+            anisotropicBlur={0.4}
+            roughness={0.03}
             distortion={0}
             distortionScale={0}
             temporalDistortion={0}
             transmission={1}
-            ior={1.25}
+            ior={1.15}
             samples={16}
             resolution={1024}
-            color="#f4f8fa"
-            attenuationColor="#d8e8f8"
-            attenuationDistance={3.5}
+            color="#ffffff"
+            attenuationColor="#eaf0f6"
+            attenuationDistance={6}
             backside
-            backsideThickness={0.4}
-            envMapIntensity={1.5}
+            backsideThickness={0.2}
+            envMapIntensity={2.5}
           />
         </mesh>
       ))}
