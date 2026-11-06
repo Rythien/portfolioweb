@@ -2,11 +2,12 @@
 
 import { forwardRef, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { MeshTransmissionMaterial } from "@react-three/drei";
+import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getCrystalPose } from "@/hooks/useCrystalPose";
+import { useCrystalSound } from "@/hooks/useCrystalSound";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -20,11 +21,15 @@ function seededRandom(seed: number) {
 
 /* ── Constants ────────────────────────────────────────────────── */
 
-const DEFAULT_SEED = 3131;
+const DEFAULT_SEED = 105;
 const SHARD_COUNT = 10;
 const R = 1.4;
 const SCALE = new THREE.Vector3(1.2, 1.0, 0.9);
 const TWO_PI = Math.PI * 2;
+const BODY = 10;
+const CLEAVE = 2;
+const VCHIPS = 26;
+const ECHIPS = 26;
 
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -109,103 +114,185 @@ function solveHalfSpaces(planes: HalfPlane[]): THREE.Vector3[] {
   return verts;
 }
 
-/* ── Generate rock planes ────────────────────────────────────── */
+/* ── Fibonacci sphere ────────────────────────────────────────── */
 
-function buildRockPlanes(seed: number): HalfPlane[] {
-  const rng = seededRandom(seed);
-  const count = 16 + Math.floor(rng() * 7);
-  const planes: HalfPlane[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const theta = Math.acos(2 * rng() - 1);
-    const phi = 2 * Math.PI * rng();
-    const n = new THREE.Vector3(
-      Math.sin(theta) * Math.cos(phi),
-      Math.sin(theta) * Math.sin(phi),
-      Math.cos(theta),
-    );
-    const isCleavage = i < 3;
-    const d = isCleavage
-      ? R * (0.55 + rng() * 0.1)
-      : R * (0.85 + rng() * 0.25);
-    planes.push({ n, d });
+function fibSphere(n: number): THREE.Vector3[] {
+  const ga = Math.PI * (3 - Math.sqrt(5));
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + 0.5) / n;
+    const r = Math.sqrt(1 - y * y);
+    const t = ga * i;
+    out.push(new THREE.Vector3(Math.cos(t) * r, y, Math.sin(t) * r));
   }
-
-  return planes;
+  return out;
 }
 
-/* ── Build merged rock geometry ──────────────────────────────── */
+/* ── Unit random direction ───────────────────────────────────── */
 
-function buildRockGeo(seed: number): THREE.BufferGeometry {
+function unitDir(rng: () => number): THREE.Vector3 {
+  const th = Math.acos(2 * rng() - 1);
+  const ph = 2 * Math.PI * rng();
+  return new THREE.Vector3(
+    Math.sin(th) * Math.cos(ph),
+    Math.sin(th) * Math.sin(ph),
+    Math.cos(th),
+  );
+}
+
+/* ── Generate rock planes (chunky ice-rock, ported from rockgen.mjs) */
+
+function buildRockPlanes(seed: number): HalfPlane[] | null {
+  const rng = seededRandom(seed);
+  rng(); rng();
+
+  const P: HalfPlane[] = [];
+
+  for (const b of fibSphere(BODY)) {
+    const u = unitDir(rng);
+    const n = new THREE.Vector3(
+      b.x + u.x * 0.35, b.y + u.y * 0.35, b.z + u.z * 0.35,
+    ).normalize();
+    P.push({ n, d: R * (0.74 + rng() * 0.18) });
+  }
+
+  for (let i = 0; i < CLEAVE; i++) {
+    P.push({ n: unitDir(rng), d: R * (0.58 + rng() * 0.10) });
+  }
+
+  const nb = P.length;
+  const V = solveHalfSpaces(P);
+  if (V.length < 8) return null;
+
+  const on = V.map(v => {
+    const s = new Set<number>();
+    for (let m = 0; m < nb; m++) {
+      if (Math.abs(P[m].n.dot(v) - P[m].d) < 1e-4) s.add(m);
+    }
+    return s;
+  });
+
+  for (let c = 0; c < VCHIPS; c++) {
+    const v = V[Math.floor(rng() * V.length)];
+    const L = v.length();
+    const u = unitDir(rng);
+    const n = new THREE.Vector3(
+      v.x / L + u.x * 0.12, v.y / L + u.y * 0.12, v.z / L + u.z * 0.12,
+    ).normalize();
+    P.push({ n, d: L * (0.80 + rng() * 0.14) });
+  }
+
+  const edges: [number, number][] = [];
+  for (let a = 0; a < V.length; a++) {
+    for (let b = a + 1; b < V.length; b++) {
+      let common = 0;
+      for (const m of on[a]) if (on[b].has(m)) common++;
+      if (common >= 2) edges.push([a, b]);
+    }
+  }
+  if (!edges.length) return null;
+
+  for (let c = 0; c < ECHIPS; c++) {
+    const [a, b] = edges[Math.floor(rng() * edges.length)];
+    const mid = new THREE.Vector3().addVectors(V[a], V[b]).multiplyScalar(0.5);
+    const L = mid.length();
+    const u = unitDir(rng);
+    const n = new THREE.Vector3(
+      mid.x / L + u.x * 0.10, mid.y / L + u.y * 0.10, mid.z / L + u.z * 0.10,
+    ).normalize();
+    P.push({ n, d: L * (0.86 + rng() * 0.09) });
+  }
+
+  return P;
+}
+
+/* ── Build rock geometry + Voronoi shards ────────────────────── */
+
+interface RockResult {
+  rockGeo: THREE.BufferGeometry;
+  shards: ShardData[];
+}
+
+function buildRockData(seed: number): RockResult {
   const planes = buildRockPlanes(seed);
-  const verts = solveHalfSpaces(planes);
 
-  if (verts.length < 4) {
+  if (!planes) {
     const fb = new THREE.IcosahedronGeometry(1.2, 1);
     const g = fb.toNonIndexed();
     fb.dispose();
     g.computeVertexNormals();
-    return g;
+    return { rockGeo: g, shards: [] };
   }
 
-  for (const v of verts) v.multiply(SCALE);
+  const rockV = solveHalfSpaces(planes);
+  if (rockV.length < 8) {
+    const fb = new THREE.IcosahedronGeometry(1.2, 1);
+    const g = fb.toNonIndexed();
+    fb.dispose();
+    g.computeVertexNormals();
+    return { rockGeo: g, shards: [] };
+  }
 
-  const convex = new ConvexGeometry(verts);
-  const geo = convex.toNonIndexed();
-  convex.dispose();
-  geo.computeVertexNormals();
-  return geo;
-}
+  const active = planes.filter(p =>
+    rockV.filter(v => Math.abs(p.n.dot(v) - p.d) < 1e-4).length >= 3
+  );
 
-/* ── Build Voronoi shards with Lissajous data ────────────────── */
+  const bb = new THREE.Box3();
+  for (const v of rockV) bb.expandByPoint(v);
+  const center = new THREE.Vector3();
+  bb.getCenter(center);
+  const maxLen = Math.max(...rockV.map(v => v.clone().sub(center).length()));
+  const f = R * 1.05 / maxLen;
 
-function buildShards(seed: number): ShardData[] {
-  const planes = buildRockPlanes(seed);
+  const xf = (v: THREE.Vector3) => new THREE.Vector3(
+    (v.x - center.x) * f * SCALE.x,
+    (v.y - center.y) * f * SCALE.y,
+    (v.z - center.z) * f * SCALE.z,
+  );
+
+  const finalVerts = rockV.map(xf);
+  const rockConvex = new ConvexGeometry(finalVerts);
+  const rockGeo = rockConvex.toNonIndexed();
+  rockConvex.dispose();
+  rockGeo.computeVertexNormals();
+
   const rng = seededRandom(seed + 5555);
+  rng(); rng();
 
-  const shardSeeds: THREE.Vector3[] = [];
+  const pts: THREE.Vector3[] = [];
   for (let i = 0; i < SHARD_COUNT; i++) {
-    const theta = Math.acos(2 * rng() - 1);
-    const phi = 2 * Math.PI * rng();
-    const r = 0.2 + rng() * 0.5;
-    shardSeeds.push(
-      new THREE.Vector3(
-        r * Math.sin(theta) * Math.cos(phi),
-        r * Math.sin(theta) * Math.sin(phi),
-        r * Math.cos(theta),
-      ),
-    );
+    const th = Math.acos(2 * rng() - 1);
+    const ph = 2 * Math.PI * rng();
+    const r = (0.15 + rng() * 0.6) * R;
+    pts.push(new THREE.Vector3(
+      center.x + r * Math.sin(th) * Math.cos(ph),
+      center.y + r * Math.sin(th) * Math.sin(ph),
+      center.z + r * Math.cos(th),
+    ));
   }
 
+  const animRng = seededRandom(seed + 7777);
   const shards: ShardData[] = [];
+  let idx = 0;
 
   for (let i = 0; i < SHARD_COUNT; i++) {
-    const shardPlanes: HalfPlane[] = planes.map((p) => ({
-      n: p.n.clone(),
-      d: p.d,
-    }));
-
+    const P: HalfPlane[] = active.map(p => ({ n: p.n.clone(), d: p.d }));
     for (let j = 0; j < SHARD_COUNT; j++) {
       if (i === j) continue;
-      const diff = new THREE.Vector3().subVectors(shardSeeds[j], shardSeeds[i]);
-      const len = diff.length();
-      if (len < 1e-10) continue;
-      const n = diff.clone().divideScalar(len);
-      const mid = new THREE.Vector3()
-        .addVectors(shardSeeds[i], shardSeeds[j])
-        .multiplyScalar(0.5);
-      const d = n.dot(mid);
-      shardPlanes.push({ n, d });
+      const diff = new THREE.Vector3().subVectors(pts[j], pts[i]);
+      const L = diff.length();
+      if (L < 1e-9) continue;
+      const n = diff.clone().divideScalar(L);
+      const mid = new THREE.Vector3().addVectors(pts[i], pts[j]).multiplyScalar(0.5);
+      P.push({ n, d: n.dot(mid) });
     }
 
-    const verts = solveHalfSpaces(shardPlanes);
-    if (verts.length < 4) continue;
+    const V = solveHalfSpaces(P).map(xf);
+    if (V.length < 4) continue;
 
-    for (const v of verts) v.multiply(SCALE);
-
-    const convex = new ConvexGeometry(verts);
-    const geo = convex.toNonIndexed();
-    convex.dispose();
+    const sConvex = new ConvexGeometry(V);
+    const geo = sConvex.toNonIndexed();
+    sConvex.dispose();
     geo.computeVertexNormals();
 
     const pos = geo.attributes.position;
@@ -218,66 +305,44 @@ function buildShards(seed: number): ShardData[] {
     centroid.divideScalar(pos.count);
 
     for (let v = 0; v < pos.count; v++) {
-      pos.setXYZ(
-        v,
-        pos.getX(v) - centroid.x,
-        pos.getY(v) - centroid.y,
-        pos.getZ(v) - centroid.z,
-      );
+      pos.setXYZ(v, pos.getX(v) - centroid.x, pos.getY(v) - centroid.y, pos.getZ(v) - centroid.z);
     }
     pos.needsUpdate = true;
 
     const direction = centroid.clone().normalize();
     const tumbleAxis = new THREE.Vector3(
-      rng() - 0.5, rng() - 0.5, rng() - 0.5,
+      animRng() - 0.5, animRng() - 0.5, animRng() - 0.5,
     ).normalize();
-    const tumbleSpeed = 0.3 + rng() * 0.4;
-
+    const tumbleSpeed = 0.3 + animRng() * 0.4;
     const driftCenter = new THREE.Vector3(
-      -2.5 + (i / Math.max(SHARD_COUNT - 1, 1)) * 4,
-      (rng() - 0.5) * 3,
-      (rng() - 0.5) * 2,
+      -2.5 + (idx / Math.max(SHARD_COUNT - 1, 1)) * 4,
+      (animRng() - 0.5) * 3,
+      (animRng() - 0.5) * 2,
     );
     const lissFreq = new THREE.Vector3(
-      0.2 + rng() * 0.3,
-      0.15 + rng() * 0.25,
-      0.1 + rng() * 0.2,
+      0.2 + animRng() * 0.3, 0.15 + animRng() * 0.25, 0.1 + animRng() * 0.2,
     );
     const lissPhase = new THREE.Vector3(
-      rng() * TWO_PI,
-      rng() * TWO_PI,
-      rng() * TWO_PI,
+      animRng() * TWO_PI, animRng() * TWO_PI, animRng() * TWO_PI,
     );
     const lissAmp = new THREE.Vector3(
-      0.5 + rng() * 1.0,
-      0.3 + rng() * 0.8,
-      0.2 + rng() * 0.5,
+      0.5 + animRng() * 1.0, 0.3 + animRng() * 0.8, 0.2 + animRng() * 0.5,
     );
 
     shards.push({
-      geometry: geo,
-      centroid,
-      direction,
-      tumbleAxis,
-      tumbleSpeed,
-      driftCenter,
-      lissFreq,
-      lissPhase,
-      lissAmp,
+      geometry: geo, centroid, direction, tumbleAxis, tumbleSpeed,
+      driftCenter, lissFreq, lissPhase, lissAmp,
     });
+    idx++;
   }
 
-  return shards;
+  return { rockGeo, shards };
 }
 
-/* ── Hooks ───────────────────────────────────────────────────── */
+/* ── Hook ───────────────────────────────────────────────────── */
 
-export function useRockGeo(seed = DEFAULT_SEED) {
-  return useMemo(() => buildRockGeo(seed), [seed]);
-}
-
-export function useRockShards(seed = DEFAULT_SEED) {
-  return useMemo(() => buildShards(seed), [seed]);
+export function useRockData(seed = DEFAULT_SEED) {
+  return useMemo(() => buildRockData(seed), [seed]);
 }
 
 /* ── Material tints ──────────────────────────────────────────── */
@@ -303,33 +368,56 @@ interface GlassCrystalProps {
 
 const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake" }, ref) {
-    const geo = useRockGeo(seed);
-    const shards = useRockShards(seed);
+    const { rockGeo: geo, shards } = useRockData(seed);
     const tint = variant === "dream" ? DREAM_TINT : WAKE_TINT;
+    useCrystalSound();
 
     const mergedRef = useRef<THREE.Mesh>(null);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
     const showShardsRef = useRef(false);
+    const _invQ = useRef(new THREE.Quaternion());
+    const _off = useRef(new THREE.Vector3());
+    const shardFbo = useFBO(512, 512, { depthBuffer: true });
 
     useFrame((state) => {
       const breakVal = useFractureStore.getState().breakVal;
       const elapsed = state.clock.elapsedTime;
       const pose = getCrystalPose();
 
-      // Hysteresis for shard visibility
       if (!showShardsRef.current && breakVal >= 0.08) showShardsRef.current = true;
       if (showShardsRef.current && breakVal <= 0.05) showShardsRef.current = false;
       const showShards = showShardsRef.current;
 
-      // Merged mesh visibility
       if (mergedRef.current) {
-        mergedRef.current.visible = !showShards;
-        const mat = mergedRef.current.material as THREE.Material;
-        if (mat) mat.visible = !showShards;
+        const crossfade = showShards ? smoothstep(0.05, 0.15, breakVal) : 0;
+        mergedRef.current.visible = true;
+        const mat = mergedRef.current.material as THREE.MeshPhysicalMaterial;
+        if (mat) {
+          mat.visible = true;
+          mat.opacity = 1 - crossfade;
+          mat.transparent = crossfade > 0 && crossfade < 1;
+        }
       }
 
-      // Shard animation
+      // Render shared backdrop FBO for shard transmission
+      if (showShards) {
+        for (let i = 0; i < shards.length; i++) {
+          const m = shardMeshRefs.current[i];
+          if (m) m.visible = false;
+        }
+        state.gl.setRenderTarget(shardFbo);
+        state.gl.clear();
+        state.gl.render(state.scene, state.camera);
+        state.gl.setRenderTarget(null);
+        for (let i = 0; i < shards.length; i++) {
+          const m = shardMeshRefs.current[i];
+          if (m) m.visible = true;
+        }
+      }
+
       const gs = pose.scale || 0.5;
+      _invQ.current.setFromEuler(new THREE.Euler(pose.rotX, pose.rotY, 0));
+      _invQ.current.invert();
       const explosionFade = 1 - smoothstep(0.3, 0.8, breakVal);
       const driftFade = smoothstep(0.1, 0.5, breakVal);
       const spreadDist = breakVal * 2.0 * explosionFade;
@@ -339,14 +427,17 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (!mesh) continue;
 
         mesh.visible = showShards;
-        const mat = mesh.material as THREE.Material;
-        if (mat) mat.visible = showShards;
-
         if (!showShards) continue;
+
+        const shardOpacity = smoothstep(0.05, 0.15, breakVal);
+        const sMat = mesh.material as THREE.MeshPhysicalMaterial;
+        if (sMat) {
+          sMat.opacity = shardOpacity;
+          sMat.transparent = shardOpacity < 1;
+        }
 
         const s = shards[i];
 
-        // Lissajous world position
         const driftX = s.driftCenter.x
           + Math.sin(elapsed * s.lissFreq.x + s.lissPhase.x) * s.lissAmp.x;
         const driftY = s.driftCenter.y
@@ -354,16 +445,15 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         const driftZ = s.driftCenter.z
           + Math.sin(elapsed * s.lissFreq.z + s.lissPhase.z) * s.lissAmp.z;
 
-        // Mouse parallax (varies per shard)
         const mx = pose.mouseX * 0.15 * (1 + i * 0.05);
         const my = pose.mouseY * 0.08 * (1 + i * 0.05);
 
-        // Convert drift world → group local
-        const dlx = (driftX + mx - pose.x) / gs;
-        const dly = (driftY + my - pose.y) / gs;
-        const dlz = (driftZ - pose.z) / gs;
+        _off.current.set(driftX + mx - pose.x, driftY + my - pose.y, driftZ - pose.z);
+        _off.current.applyQuaternion(_invQ.current);
+        const dlx = _off.current.x / gs;
+        const dly = _off.current.y / gs;
+        const dlz = _off.current.z / gs;
 
-        // Position: lerp centroid → drift, plus explosion spread
         mesh.position.x = s.centroid.x
           + driftFade * (dlx - s.centroid.x)
           + s.direction.x * spreadDist;
@@ -374,16 +464,15 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           + driftFade * (dlz - s.centroid.z)
           + s.direction.z * spreadDist;
 
-        // Tumble rotation
-        const tumbleAngle =
-          breakVal * Math.PI + elapsed * s.tumbleSpeed * Math.min(breakVal * 2, 1);
+        const tumbleFade = smoothstep(0.02, 0.15, breakVal);
+        const tumbleAngle = tumbleFade *
+          (breakVal * Math.PI + elapsed * s.tumbleSpeed * Math.min(breakVal * 2, 1));
         mesh.quaternion.setFromAxisAngle(s.tumbleAxis, tumbleAngle);
       }
     });
 
     return (
       <group ref={ref}>
-        {/* Merged crystal — always mounted, visibility toggled */}
         <mesh ref={mergedRef} geometry={geo}>
           <MeshTransmissionMaterial
             thickness={1.5}
@@ -406,7 +495,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           />
         </mesh>
 
-        {/* Shards — always mounted, visibility toggled */}
         {shards.map((shard, i) => (
           <mesh
             key={i}
@@ -416,6 +504,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             visible={false}
           >
             <MeshTransmissionMaterial
+              buffer={shardFbo.texture}
               thickness={1.0}
               chromaticAberration={0.04}
               anisotropicBlur={0.08}
@@ -430,8 +519,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               color={tint.color}
               attenuationColor={tint.attenuationColor}
               attenuationDistance={4}
-              backside
-              backsideThickness={0.2}
               envMapIntensity={tint.envMapIntensity}
             />
           </mesh>

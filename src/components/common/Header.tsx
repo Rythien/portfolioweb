@@ -4,12 +4,14 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { SITE_DATA } from "@/content/site";
 import { useMounted } from "@/utils/useMounted";
+import { useSoundStore } from "@/store/useSoundStore";
 
 export default function Header() {
   const mounted = useMounted();
   const [timeStr, setTimeStr] = useState<string>("--:--");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
+  const soundOn = useSoundStore((s) => s.enabled);
+  const toggleSound = useSoundStore((s) => s.toggle);
 
   useEffect(() => {
     const updateTime = () => {
@@ -64,7 +66,7 @@ export default function Header() {
 
           {/* Sound Toggle */}
           <button
-            onClick={() => setSoundOn((s) => !s)}
+            onClick={toggleSound}
             aria-label={soundOn ? "Mute sound" : "Unmute sound"}
             className="flex items-center gap-2 hover:opacity-70 transition-opacity py-2"
           >

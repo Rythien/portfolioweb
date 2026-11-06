@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useScrollStore } from "@/store/useScrollStore";
+import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import { useFractureStore } from "@/store/useFractureStore";
 
 function smoothstep(a: number, b: number, x: number): number {
@@ -36,6 +36,7 @@ let _lastE = -1;
 let _prevBreak = 0;
 let _shakeEnd = 0;
 let _flashStart = -1;
+let _reassembleStart = -1;
 
 export const crystalEvents = {
   burst: false,
@@ -60,7 +61,7 @@ function tick(elapsed: number, delta: number) {
   if (Math.abs(elapsed - _lastE) < 0.0001) return;
   _lastE = elapsed;
 
-  const rawS = Math.min(useScrollStore.getState().progress * 1.5, 1.0);
+  const rawS = getSectionProgress("works");
   const l = 1 - Math.exp(-4 * delta);
   _d.s += (rawS - _d.s) * l;
   const s = _d.s;
@@ -80,7 +81,16 @@ function tick(elapsed: number, delta: number) {
   pose.x = _d.x;
   pose.y = _d.y;
   pose.z = 0;
-  pose.scale = _d.scale;
+  let scaleBoost = 0;
+  if (_reassembleStart >= 0) {
+    const rt = elapsed - _reassembleStart;
+    if (rt < 0.4) {
+      scaleBoost = 0.1 * Math.sin(Math.PI * rt / 0.4);
+    } else {
+      _reassembleStart = -1;
+    }
+  }
+  pose.scale = _d.scale + scaleBoost;
   pose.breakVal = _d.breakVal;
   pose.rotY = elapsed * 0.15 * rf;
   pose.rotX = Math.sin(elapsed * 0.1) * 0.2 * rf;
@@ -94,6 +104,7 @@ function tick(elapsed: number, delta: number) {
   }
   if (_prevBreak > 0.05 && _d.breakVal <= 0.05) {
     crystalEvents.reassemble = true;
+    _reassembleStart = elapsed;
   }
   _prevBreak = _d.breakVal;
 
