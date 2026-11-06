@@ -1,49 +1,107 @@
-import puppeteer from 'puppeteer-core';
-import path from 'path';
-import { fileURLToPath } from 'url';
+#!/usr/bin/env node
+import { firefox } from "playwright";
+import { mkdirSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.resolve(__dirname, '..', 'docs');
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const shotsDir = resolve(__dirname, "..", "shots");
+mkdirSync(shotsDir, { recursive: true });
 
-async function run() {
-  const browser = await puppeteer.launch({
-    executablePath: EDGE,
-    headless: true,
-    args: ['--no-sandbox', '--disable-gpu'],
-  });
+const browser = await firefox.launch({
+  headless: true,
+  firefoxUserPrefs: {
+    "webgl.force-enabled": true,
+    "webgl.disabled": false,
+    "webgl.enable-webgl2": true,
+  },
+});
 
-  const errors = [];
+const context = await browser.newContext({
+  viewport: { width: 1440, height: 900 },
+  ignoreHTTPSErrors: true,
+});
 
-  for (const w of [1440, 768, 375]) {
-    // WAKE
-    const pw = await browser.newPage();
-    pw.on('pageerror', e => errors.push(`wake-${w}: ${e.message.substring(0, 150)}`));
-    pw.on('console', m => { if (m.type() === 'error') errors.push(`wake-${w}: ${m.text().substring(0, 150)}`); });
-    await pw.evaluateOnNewDocument(() => { localStorage.removeItem('searon-mode'); });
-    await pw.setViewport({ width: w, height: 900 });
-    await pw.goto('http://localhost:3000?nopreload=1', { waitUntil: 'domcontentloaded', timeout: 12000 });
-    await new Promise(r => setTimeout(r, 3000));
-    await pw.screenshot({ path: path.join(outDir, `fix-wake-hero-${w}.png`) });
-    console.log(`Saved fix-wake-hero-${w}.png`);
-    await pw.close();
+const page = await context.newPage();
+const errors = [];
+page.on("pageerror", (err) => errors.push(err.message));
 
-    // DREAM
-    const pd = await browser.newPage();
-    pd.on('pageerror', e => errors.push(`dream-${w}: ${e.message.substring(0, 150)}`));
-    await pd.evaluateOnNewDocument(() => { localStorage.setItem('searon-mode', 'dream'); });
-    await pd.setViewport({ width: w, height: 900 });
-    await pd.goto('http://localhost:3000?mode=dream&nopreload=1', { waitUntil: 'domcontentloaded', timeout: 12000 });
-    await new Promise(r => setTimeout(r, 4000));
-    await pd.screenshot({ path: path.join(outDir, `fix-dream-hero-${w}.png`) });
-    console.log(`Saved fix-dream-hero-${w}.png`);
-    await pd.close();
-  }
+console.log("Loading page...");
+await page.goto("http://localhost:3000", {
+  waitUntil: "domcontentloaded",
+  timeout: 30000,
+});
+await page.waitForTimeout(6000);
 
-  console.log('\n=== Errors ===');
-  console.log(errors.length ? errors.join('\n') : 'None');
+const totalScroll = await page.evaluate(
+  () => document.documentElement.scrollHeight - window.innerHeight,
+);
 
-  await browser.close();
+async function takeShot(label, scrollY) {
+  await page.evaluate((y) => window.scrollTo(0, y), scrollY);
+  await page.waitForTimeout(2000);
+  const path = resolve(shotsDir, `fix-${label}.png`);
+  await page.screenshot({ path, fullPage: false });
+  console.log(`  ${label}: saved`);
 }
 
-run().catch(e => { console.error(e); process.exit(1); });
+async function measureFPS(label) {
+  const fps = await page.evaluate(() => {
+    return new Promise((resolve) => {
+      let frames = 0;
+      const start = performance.now();
+      function count() {
+        frames++;
+        if (performance.now() - start < 2000) requestAnimationFrame(count);
+        else resolve(Math.round(frames / ((performance.now() - start) / 1000)));
+      }
+      requestAnimationFrame(count);
+    });
+  });
+  console.log(`  FPS [${label}]: ${fps}`);
+  return fps;
+}
+
+const midScroll = Math.round(totalScroll * 0.33);
+const worksScroll = Math.round(totalScroll * 0.65);
+
+// ── WAKE ──
+console.log("\n=== WAKE ===");
+await takeShot("wake-intact", 0);
+const wFps0 = await measureFPS("wake-scroll0");
+await takeShot("wake-mid", midScroll);
+const wFpsMid = await measureFPS("wake-mid");
+await takeShot("wake-broken", worksScroll);
+const wFpsWorks = await measureFPS("wake-works");
+await takeShot("wake-return", 0);
+
+// ── Switch to DREAM ──
+console.log("\n=== SWITCHING TO DREAM ===");
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(1000);
+await page.click('text=DREAM', { timeout: 5000 }).catch(() => {
+  console.log("  DREAM button not found");
+});
+await page.waitForTimeout(3000);
+
+// ── DREAM ──
+console.log("\n=== DREAM ===");
+await takeShot("dream-intact", 0);
+const dFps0 = await measureFPS("dream-scroll0");
+await takeShot("dream-mid", midScroll);
+const dFpsMid = await measureFPS("dream-mid");
+await takeShot("dream-broken", worksScroll);
+const dFpsWorks = await measureFPS("dream-works");
+await takeShot("dream-return", 0);
+
+console.log("\n=== FPS SUMMARY ===");
+console.log(`  Wake:  scroll0=${wFps0}  mid=${wFpsMid}  works=${wFpsWorks}`);
+console.log(`  Dream: scroll0=${dFps0}  mid=${dFpsMid}  works=${dFpsWorks}`);
+
+if (errors.length > 0) {
+  console.log("\n--- Page errors ---");
+  errors.forEach((e) => console.log("  " + e));
+}
+
+await browser.close();
+console.log("\nDone.");

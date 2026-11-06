@@ -5,13 +5,19 @@ import Link from "next/link";
 import { SITE_DATA } from "@/content/site";
 import { useMounted } from "@/utils/useMounted";
 import { useSoundStore } from "@/store/useSoundStore";
+import { initAudioContext, playTick } from "@/hooks/useCrystalSound";
 
 export default function Header() {
   const mounted = useMounted();
   const [timeStr, setTimeStr] = useState<string>("--:--");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const soundOn = useSoundStore((s) => s.enabled);
-  const toggleSound = useSoundStore((s) => s.toggle);
+  const rawToggle = useSoundStore((s) => s.toggle);
+  const toggleSound = () => {
+    initAudioContext();
+    rawToggle();
+    if (!soundOn) playTick();
+  };
 
   useEffect(() => {
     const updateTime = () => {

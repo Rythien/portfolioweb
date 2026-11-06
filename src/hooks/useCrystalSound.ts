@@ -11,6 +11,27 @@ function getCtx(): AudioContext {
   return _ctx;
 }
 
+export function initAudioContext() {
+  const ctx = getCtx();
+  if (ctx.state === "suspended") ctx.resume();
+  return ctx;
+}
+
+export function playTick() {
+  const ctx = getCtx();
+  if (ctx.state === "suspended") ctx.resume();
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.value = 1800;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.04, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.05);
+}
+
 function playCrack() {
   const ctx = getCtx();
   if (ctx.state === "suspended") ctx.resume();

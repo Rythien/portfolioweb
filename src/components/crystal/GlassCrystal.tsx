@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
@@ -364,14 +364,16 @@ const DREAM_TINT = {
 interface GlassCrystalProps {
   seed?: number;
   variant?: "wake" | "dream";
+  active?: boolean;
 }
 
 const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
-  function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake" }, ref) {
+  function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake", active = true }, ref) {
     const { rockGeo: geo, shards } = useRockData(seed);
     const tint = variant === "dream" ? DREAM_TINT : WAKE_TINT;
     useCrystalSound();
 
+    const { scene: portalScene, camera: portalCamera } = useThree();
     const mergedRef = useRef<THREE.Mesh>(null);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
     const showShardsRef = useRef(false);
@@ -380,6 +382,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const shardFbo = useFBO(512, 512, { depthBuffer: true });
 
     useFrame((state) => {
+      if (!active) {
+        if (mergedRef.current) mergedRef.current.visible = false;
+        for (let i = 0; i < shards.length; i++) {
+          const m = shardMeshRefs.current[i];
+          if (m) m.visible = false;
+        }
+        return;
+      }
       const breakVal = useFractureStore.getState().breakVal;
       const elapsed = state.clock.elapsedTime;
       const pose = getCrystalPose();
@@ -390,12 +400,15 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
       if (mergedRef.current) {
         const crossfade = showShards ? smoothstep(0.05, 0.15, breakVal) : 0;
-        mergedRef.current.visible = true;
+        const mergedHidden = crossfade >= 1;
+        mergedRef.current.visible = !mergedHidden;
         const mat = mergedRef.current.material as THREE.MeshPhysicalMaterial;
         if (mat) {
-          mat.visible = true;
-          mat.opacity = 1 - crossfade;
-          mat.transparent = crossfade > 0 && crossfade < 1;
+          mat.visible = !mergedHidden;
+          if (!mergedHidden) {
+            mat.opacity = 1 - crossfade;
+            mat.transparent = crossfade > 0;
+          }
         }
       }
 
@@ -407,7 +420,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         }
         state.gl.setRenderTarget(shardFbo);
         state.gl.clear();
-        state.gl.render(state.scene, state.camera);
+        state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];

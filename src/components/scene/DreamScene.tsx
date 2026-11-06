@@ -9,6 +9,7 @@ import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import { useCrystalPose } from "@/hooks/useCrystalPose";
+import { useThemeStore } from "@/store/useThemeStore";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -39,7 +40,8 @@ function DreamCrystal({
     groupRef.current.rotation.x = pose.rotX;
   });
 
-  return <GlassCrystal ref={groupRef} variant="dream" />;
+  const active = useThemeStore((s) => s.mode === "dream");
+  return <GlassCrystal ref={groupRef} variant="dream" active={active} />;
 }
 
 /* ── Drifting dust particles ──────────────────────────────────── */

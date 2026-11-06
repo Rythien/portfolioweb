@@ -9,6 +9,7 @@ import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import { useCrystalPose, getCrystalPose } from "@/hooks/useCrystalPose";
+import { useThemeStore } from "@/store/useThemeStore";
 
 /* ── Seeded PRNG (for pixel gem sparkles) ──────────────────────── */
 
@@ -254,7 +255,8 @@ function WakeCrystal({
     groupRef.current.rotation.x = pose.rotX;
   });
 
-  return <GlassCrystal ref={groupRef} />;
+  const active = useThemeStore((s) => s.mode === "wake");
+  return <GlassCrystal ref={groupRef} active={active} />;
 }
 
 /* ── Orbit ring (follows crystal pose) ──────────────────────────── */
