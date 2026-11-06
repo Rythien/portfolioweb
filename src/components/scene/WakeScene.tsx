@@ -48,9 +48,20 @@ function noise3(x: number, y: number, z: number) {
   );
 }
 
-/* ── Displaced icosahedron geometry ────────────────────────────── */
+/* ── Crystal geometry + Voronoi fracture ──────────────────────── */
 
-function useCrystalGeometry(detail: number, isMobile: boolean) {
+interface ShardData {
+  geometry: THREE.BufferGeometry;
+  centroid: THREE.Vector3;
+  direction: THREE.Vector3;
+  delay: number;
+}
+
+function useCrystalShards(
+  detail: number,
+  shardCount: number,
+  isMobile: boolean
+): ShardData[] {
   return useMemo(() => {
     const d = isMobile ? Math.max(2, detail - 2) : detail;
     const geo = new THREE.IcosahedronGeometry(1.4, d);
@@ -60,22 +71,118 @@ function useCrystalGeometry(detail: number, isMobile: boolean) {
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
       const dir = v.clone().normalize();
-
-      // Octave 1: large low-frequency lumps
       const n1 = noise3(dir.x * 1.8, dir.y * 1.8, dir.z * 1.8);
-      // Octave 2: sharper ridged noise for icy facets
-      const raw = noise3(dir.x * 4.5 + 7.3, dir.y * 4.5 + 3.1, dir.z * 4.5 + 1.7);
+      const raw = noise3(
+        dir.x * 4.5 + 7.3,
+        dir.y * 4.5 + 3.1,
+        dir.z * 4.5 + 1.7
+      );
       const ridged = 1 - Math.abs(raw * 2 - 1);
-      // Combine: broad shape + sharp ridges
       const displacement = (n1 - 0.5) * 0.35 + ridged * 0.12;
-
       v.copy(dir).multiplyScalar(1.4 + displacement);
       pos.setXYZ(i, v.x, v.y, v.z);
     }
-
     geo.computeVertexNormals();
-    return geo;
-  }, [detail, isMobile]);
+
+    // Generate Voronoi seed points on the unit sphere
+    const rng = seededRandom(4242);
+    const seeds: THREE.Vector3[] = [];
+    for (let i = 0; i < shardCount; i++) {
+      const theta = Math.acos(2 * rng() - 1);
+      const phi = 2 * Math.PI * rng();
+      seeds.push(
+        new THREE.Vector3(
+          Math.sin(theta) * Math.cos(phi),
+          Math.sin(theta) * Math.sin(phi),
+          Math.cos(theta)
+        )
+      );
+    }
+
+    // Assign each triangle to nearest seed (Voronoi on sphere)
+    const triCount = pos.count / 3;
+    const assignments = new Int32Array(triCount);
+    const centA = new THREE.Vector3();
+    const centB = new THREE.Vector3();
+    const centC = new THREE.Vector3();
+    const triCenter = new THREE.Vector3();
+
+    for (let t = 0; t < triCount; t++) {
+      const base = t * 3;
+      centA.fromBufferAttribute(pos, base);
+      centB.fromBufferAttribute(pos, base + 1);
+      centC.fromBufferAttribute(pos, base + 2);
+      triCenter
+        .copy(centA)
+        .add(centB)
+        .add(centC)
+        .divideScalar(3)
+        .normalize();
+
+      let best = 0;
+      let bestDist = Infinity;
+      for (let s = 0; s < seeds.length; s++) {
+        const dist = triCenter.distanceToSquared(seeds[s]);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = s;
+        }
+      }
+      assignments[t] = best;
+    }
+
+    // Build per-shard geometries
+    const srcNormals = geo.attributes.normal;
+    const shards: ShardData[] = [];
+
+    for (let s = 0; s < shardCount; s++) {
+      const verts: number[] = [];
+      const norms: number[] = [];
+
+      for (let t = 0; t < triCount; t++) {
+        if (assignments[t] !== s) continue;
+        const base = t * 3;
+        for (let vi = 0; vi < 3; vi++) {
+          const idx = base + vi;
+          verts.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+          norms.push(
+            srcNormals.getX(idx),
+            srcNormals.getY(idx),
+            srcNormals.getZ(idx)
+          );
+        }
+      }
+
+      if (verts.length === 0) continue;
+
+      const shardGeo = new THREE.BufferGeometry();
+      shardGeo.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(verts, 3)
+      );
+      shardGeo.setAttribute(
+        "normal",
+        new THREE.Float32BufferAttribute(norms, 3)
+      );
+
+      // Compute centroid
+      const centroid = new THREE.Vector3();
+      for (let i = 0; i < verts.length; i += 3) {
+        centroid.x += verts[i];
+        centroid.y += verts[i + 1];
+        centroid.z += verts[i + 2];
+      }
+      centroid.divideScalar(verts.length / 3);
+
+      const direction = centroid.clone().normalize();
+      const delay = rng() * 0.3;
+
+      shards.push({ geometry: shardGeo, centroid, direction, delay });
+    }
+
+    geo.dispose();
+    return shards;
+  }, [detail, shardCount, isMobile]);
 }
 
 /* ── Pixel gem canvas texture ──────────────────────────────────── */
@@ -312,6 +419,14 @@ function scrollScaleAt(scales: number[], t: number) {
 
 /* ── Crystal ───────────────────────────────────────────────────── */
 
+/* ── Fractured crystal group ──────────────────────────────────── */
+
+const SHARD_COUNT = 16;
+const FRACTURE_END = 0.35;
+
+// Module-scoped shard mesh store (avoids react-hooks/immutability)
+const shardMeshes: THREE.Mesh[] = [];
+
 function Crystal({
   reducedMotion,
   isMobile,
@@ -319,11 +434,22 @@ function Crystal({
   reducedMotion: boolean;
   isMobile: boolean;
 }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const geo = useCrystalGeometry(4, isMobile);
+  const groupRef = useRef<THREE.Group>(null);
+  const shards = useCrystalShards(4, SHARD_COUNT, isMobile);
   const mouseRef = useRef({ x: 0, y: 0 });
   const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
   const dampedScale = useRef(1);
+  const dampedFracture = useRef<number[]>(
+    new Array(SHARD_COUNT).fill(0)
+  );
+  const dampedVelKick = useRef({ v: 0 });
+
+  const shardRefCb = useCallback(
+    (index: number) => (el: THREE.Mesh | null) => {
+      if (el) shardMeshes[index] = el;
+    },
+    []
+  );
 
   useEffect(() => {
     if (isMobile || reducedMotion) return;
@@ -336,12 +462,15 @@ function Crystal({
   }, [isMobile, reducedMotion]);
 
   useFrame((state, delta) => {
-    if (!meshRef.current || reducedMotion) return;
+    if (!groupRef.current || reducedMotion) return;
     const elapsed = state.clock.elapsedTime;
-    const { progress } = useScrollStore.getState();
+    const { progress, velocity } = useScrollStore.getState();
 
     const targetPos = crystalSpline.getPointAt(Math.min(progress, 1));
-    const targetScale = scrollScaleAt(crystalScaleSpline, Math.min(progress, 1));
+    const targetScale = scrollScaleAt(
+      crystalScaleSpline,
+      Math.min(progress, 1)
+    );
 
     damp(dampedPos.current, "x", targetPos.x, 0.25, delta);
     damp(dampedPos.current, "y", targetPos.y, 0.25, delta);
@@ -352,49 +481,92 @@ function Crystal({
       1 - Math.exp(-4 * delta)
     );
 
-    meshRef.current.position.copy(dampedPos.current);
-    meshRef.current.scale.setScalar(dampedScale.current);
+    groupRef.current.position.copy(dampedPos.current);
+    groupRef.current.scale.setScalar(dampedScale.current);
 
-    meshRef.current.rotation.y = elapsed * 0.15;
-    meshRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
+    groupRef.current.rotation.y = elapsed * 0.15;
+    groupRef.current.rotation.x = Math.sin(elapsed * 0.1) * 0.2;
     if (!isMobile) {
-      meshRef.current.rotation.y += mouseRef.current.x * 0.15;
-      meshRef.current.rotation.x += mouseRef.current.y * 0.1;
+      groupRef.current.rotation.y += mouseRef.current.x * 0.15;
+      groupRef.current.rotation.x += mouseRef.current.y * 0.1;
+    }
+
+    // Fracture driven by scroll progress (0 to FRACTURE_END)
+    const rawFrac = Math.min(progress / FRACTURE_END, 1);
+    const easedFrac = 1 - Math.pow(1 - rawFrac, 3);
+
+    damp(dampedVelKick.current, "v", velocity * 0.0006, 0.3, delta);
+    const velBoost = dampedVelKick.current.v;
+
+    for (let i = 0; i < shards.length; i++) {
+      const mesh = shardMeshes[i];
+      if (!mesh) continue;
+      const s = shards[i];
+
+      const delayed =
+        Math.max(0, easedFrac - s.delay) / (1 - s.delay);
+      const targetF = delayed + velBoost * 0.5;
+
+      if (!dampedFracture.current[i]) dampedFracture.current[i] = 0;
+      dampedFracture.current[i] = THREE.MathUtils.lerp(
+        dampedFracture.current[i],
+        targetF,
+        1 - Math.exp(-6 * delta)
+      );
+      const f = dampedFracture.current[i];
+
+      const dist = (1 + s.delay * 2) * f * 2.5;
+      mesh.position.set(
+        s.centroid.x + s.direction.x * dist,
+        s.centroid.y + s.direction.y * dist,
+        s.centroid.z + s.direction.z * dist
+      );
+
+      const tumble = f * (1 + s.delay) * 0.8;
+      mesh.rotation.set(
+        s.direction.y * tumble,
+        s.direction.z * tumble,
+        s.direction.x * tumble
+      );
     }
   });
 
   return (
-    <mesh ref={meshRef} geometry={geo}>
-      {isMobile ? (
-        <meshPhysicalMaterial
-          color="#f0f2f8"
-          roughness={0.1}
-          metalness={0.05}
-          transparent
-          opacity={0.8}
-          transmission={0.7}
-          ior={1.3}
-          thickness={1.0}
-        />
-      ) : (
-        <MeshTransmissionMaterial
-          thickness={2.0}
-          chromaticAberration={0.4}
-          anisotropicBlur={0.3}
-          roughness={0.08}
-          distortion={0.3}
-          distortionScale={0.25}
-          temporalDistortion={0.08}
-          transmission={1}
-          ior={1.3}
-          samples={8}
-          resolution={1024}
-          color="#f0f4fa"
-          backside
-          backsideThickness={0.6}
-        />
-      )}
-    </mesh>
+    <group ref={groupRef}>
+      {shards.map((shard, i) => (
+        <mesh key={i} ref={shardRefCb(i)} geometry={shard.geometry}>
+          {isMobile ? (
+            <meshPhysicalMaterial
+              color="#f0f2f8"
+              roughness={0.1}
+              metalness={0.05}
+              transparent
+              opacity={0.8}
+              transmission={0.7}
+              ior={1.3}
+              thickness={1.0}
+            />
+          ) : (
+            <MeshTransmissionMaterial
+              thickness={2.0}
+              chromaticAberration={0.4}
+              anisotropicBlur={0.3}
+              roughness={0.08}
+              distortion={0.3}
+              distortionScale={0.25}
+              temporalDistortion={0.08}
+              transmission={1}
+              ior={1.3}
+              samples={8}
+              resolution={1024}
+              color="#f0f4fa"
+              backside
+              backsideThickness={0.6}
+            />
+          )}
+        </mesh>
+      ))}
+    </group>
   );
 }
 
