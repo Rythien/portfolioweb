@@ -77,32 +77,26 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
     if (!groupRef.current) return;
 
     const heroP = getSectionProgress("top");
-    if (heroP >= 1) {
-      groupRef.current.visible = false;
-      return;
-    }
-
     const heroScroll = Math.max(0, (heroP - 0.5) / 0.5);
-    const fade = heroScroll < 0.2 ? 1 : 1 - (heroScroll - 0.2) / 0.8;
 
-    if (fade <= 0.001) {
+    // Fully gone by heroScroll 0.5 (half a screen), before About heading arrives
+    if (heroScroll >= 0.5) {
       groupRef.current.visible = false;
       return;
     }
 
+    const fade = 1 - heroScroll / 0.5;
     groupRef.current.visible = true;
 
-    // No vertical motion — pinned at resting y. Only fade opacity.
-    const fading = fade < 0.999;
+    // troika Text ignores material.opacity — must use fillOpacity
     const children = groupRef.current.children;
     for (let i = 0; i < children.length; i++) {
-      const mat = (children[i] as THREE.Mesh).material as THREE.Material & {
-        opacity: number;
+      const tile = children[i] as THREE.Mesh & {
+        fillOpacity?: number;
+        outlineOpacity?: number;
       };
-      if (mat) {
-        mat.transparent = fading;
-        mat.opacity = fade;
-      }
+      tile.fillOpacity = fade;
+      if (tile.outlineOpacity !== undefined) tile.outlineOpacity = fade;
     }
 
     if (reducedMotion) return;
