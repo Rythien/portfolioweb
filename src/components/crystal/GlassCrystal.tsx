@@ -377,7 +377,7 @@ export function useRockData(seed = DEFAULT_SEED) {
 export const GLASS_LOOK = {
   thickness: 1.2,
   chromaticAberration: 0.12,
-  anisotropicBlur: 0.2,
+  anisotropicBlur: 0.1,
   roughness: 0.05,
   distortion: 0.1,
   distortionScale: 0.2,
@@ -646,7 +646,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       }
     });
 
-    const normalScale = useMemo(() => new THREE.Vector2(0.4, 0.4), []);
+    const normalScale = useMemo(() => new THREE.Vector2(0.25, 0.25), []);
 
     return (
       <group ref={ref}>

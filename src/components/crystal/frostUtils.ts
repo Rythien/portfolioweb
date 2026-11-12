@@ -111,7 +111,7 @@ export function generateSphericalUVs(geo: THREE.BufferGeometry): void {
 
 export function createFrostNormalMap(size = 256): THREE.DataTexture {
   const data = new Uint8Array(size * size * 4);
-  const scale = 8;
+  const scale = 14;
   const eps = 0.5 / size;
 
   for (let y = 0; y < size; y++) {
