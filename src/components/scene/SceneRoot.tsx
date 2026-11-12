@@ -5,6 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import type { RootState } from "@react-three/fiber";
 import Compositor from "./Compositor";
 import CrystalCursor from "@/components/crystal/CrystalCursor";
+import DreamBlob from "@/components/crystal/DreamBlob";
 import { SITE_DATA } from "@/content/site";
 
 /* ── External store subscriptions ─────────────────────────────── */
@@ -99,6 +100,7 @@ export default function SceneRoot() {
   return (
     <div aria-hidden="true" className="fixed inset-0 z-0 pointer-events-none">
       <CrystalCursor />
+      <DreamBlob />
       <Canvas
         dpr={[1, 1.5]}
         orthographic
