@@ -1,15 +1,15 @@
 "use client";
 
-import { useRef, useMemo, useEffect, useCallback } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Text, Environment, Lightformer } from "@react-three/drei";
+import { Environment, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
 import { damp } from "maath/easing";
-import { SITE_DATA } from "@/content/site";
-import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
+import { useScrollStore } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import { useCrystalPose, getCrystalPose } from "@/hooks/useCrystalPose";
 import { useThemeStore } from "@/store/useThemeStore";
+import Marquee from "./Marquee";
 
 /* ── Seeded PRNG (for pixel gem sparkles) ──────────────────────── */
 
@@ -90,150 +90,6 @@ function useSparkleTexture() {
     tex.minFilter = THREE.NearestFilter;
     return tex;
   }, []);
-}
-
-/* ── Marquee headline ────────────────────────────────────────────── */
-
-const HEADLINE_TILE = `${SITE_DATA.hero.headlineLine1}  ${SITE_DATA.hero.headlineLine2}  ·  `;
-const FONT_URL = "/fonts/inter-tight-bold.ttf";
-const TILE_COUNT = 4;
-
-const FBO_HALF_FOV_RAD = (50 / 2) * (Math.PI / 180);
-const FBO_CAM_Z = 6;
-const TEXT_Z = -3;
-const CAM_TO_TEXT = FBO_CAM_Z - TEXT_Z;
-
-function MarqueeText({
-  isMobile,
-  reducedMotion,
-}: {
-  isMobile: boolean;
-  reducedMotion: boolean;
-}) {
-  const groupRef = useRef<THREE.Group>(null);
-  const firstTextRef = useRef<THREE.Mesh>(null);
-  const offsetRef = useRef(0);
-  const tileWidthRef = useRef(0);
-  const dampState = useRef({ vel: 0 });
-  const visHeight = 2 * CAM_TO_TEXT * Math.tan(FBO_HALF_FOV_RAD);
-
-  const fontSize = isMobile ? visHeight * 0.14 : visHeight * 0.22;
-
-  const measureTile = useCallback(() => {
-    const mesh = firstTextRef.current as unknown as {
-      geometry: THREE.BufferGeometry;
-    };
-    if (!mesh?.geometry) return;
-    mesh.geometry.computeBoundingBox();
-    const bb = mesh.geometry.boundingBox;
-    if (bb && bb.max.x - bb.min.x > 0.1) {
-      tileWidthRef.current = bb.max.x - bb.min.x;
-    }
-  }, []);
-
-  useFrame((_, delta) => {
-    if (!groupRef.current) return;
-
-    const heroP = getSectionProgress("top");
-    const heroOut = heroP >= 1;
-
-    if (heroOut) {
-      groupRef.current.visible = false;
-      return;
-    }
-    groupRef.current.visible = true;
-
-    const heroScroll = Math.max(0, (heroP - 0.5) / 0.5);
-    const scrollY = heroScroll * visHeight * 0.85;
-    groupRef.current.position.y = -scrollY;
-
-    const fade = heroScroll < 0.2 ? 1 : 1 - (heroScroll - 0.2) / 0.8;
-    const fading = fade < 0.999;
-    const children = groupRef.current.children;
-    for (let i = 0; i < children.length; i++) {
-      const mat = (children[i] as THREE.Mesh).material as THREE.Material & {
-        opacity: number;
-      };
-      if (mat) {
-        mat.transparent = fading;
-        mat.opacity = fade;
-      }
-    }
-
-    if (reducedMotion) return;
-
-    if (tileWidthRef.current === 0) {
-      measureTile();
-      return;
-    }
-
-    const tw = tileWidthRef.current;
-    const { velocity, direction } = useScrollStore.getState();
-
-    damp(dampState.current, "vel", velocity * 0.0004, 0.4, delta);
-
-    const baseSpeed = tw / 22;
-    const scrollKick = dampState.current.vel * direction;
-    const raw = baseSpeed + scrollKick;
-    const speed =
-      Math.sign(raw) * Math.min(Math.abs(raw), baseSpeed * 2.5);
-
-    offsetRef.current -= speed * delta;
-    offsetRef.current = ((offsetRef.current % tw) + tw) % tw;
-
-    for (let i = 0; i < children.length; i++) {
-      children[i].position.x = offsetRef.current + i * tw - tw;
-    }
-  });
-
-  if (reducedMotion) {
-    return (
-      <group position={[0, 0, TEXT_Z]}>
-        <Text
-          font={FONT_URL}
-          fontSize={fontSize}
-          letterSpacing={-0.04}
-          color="#1a1a1e"
-          anchorX="center"
-          anchorY="middle"
-          onSync={(troika: any) => {
-            if (troika.material) {
-              troika.material.transparent = false;
-              troika.material.alphaTest = 0.5;
-            }
-          }}
-        >
-          {SITE_DATA.hero.headlineLine1}
-        </Text>
-      </group>
-    );
-  }
-
-  return (
-    <group ref={groupRef} position={[0, 0, TEXT_Z]}>
-      {Array.from({ length: TILE_COUNT }, (_, i) => (
-        <Text
-          key={i}
-          ref={i === 0 ? firstTextRef : undefined}
-          font={FONT_URL}
-          fontSize={fontSize}
-          letterSpacing={-0.04}
-          color="#1a1a1e"
-          anchorX="left"
-          anchorY="middle"
-          onSync={(troika: any) => {
-            if (i === 0) measureTile();
-            if (troika.material) {
-              troika.material.transparent = false;
-              troika.material.alphaTest = 0.5;
-            }
-          }}
-        >
-          {HEADLINE_TILE}
-        </Text>
-      ))}
-    </group>
-  );
 }
 
 /* ── Crystal (uses shared pose) ─────────────────────────────────── */
@@ -472,7 +328,7 @@ export default function WakeScene({
         <Lightformer form="rect" intensity={0.1} position={[2, 0, -5]} scale={[8, 8, 1]} color="#111111" />
         <Lightformer form="rect" intensity={0.1} position={[-3, -2, 3]} scale={[6, 6, 1]} color="#0a0a0a" />
       </Environment>
-      <MarqueeText isMobile={isMobile} reducedMotion={reducedMotion} />
+      <Marquee color="#1a1a1e" isMobile={isMobile} reducedMotion={reducedMotion} />
       <WakeCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
       <OrbitRing reducedMotion={reducedMotion} />
       <PixelGem reducedMotion={reducedMotion} isMobile={isMobile} />

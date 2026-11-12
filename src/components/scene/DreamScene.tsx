@@ -1,15 +1,14 @@
 "use client";
 
-import { useRef, useMemo, useEffect, useCallback } from "react";
+import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Environment, Lightformer, Text } from "@react-three/drei";
+import { Environment, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
-import { damp } from "maath/easing";
-import { SITE_DATA } from "@/content/site";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import { useCrystalPose } from "@/hooks/useCrystalPose";
 import { useThemeStore } from "@/store/useThemeStore";
+import Marquee from "./Marquee";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -212,137 +211,6 @@ function GhostedTitle({
   );
 }
 
-/* ── Dream marquee text ───────────────────────────────────────── */
-
-const HEADLINE_TILE = `${SITE_DATA.hero.headlineLine1}  ${SITE_DATA.hero.headlineLine2}  ·  `;
-const FONT_URL = "/fonts/inter-tight-bold.ttf";
-const TILE_COUNT = 4;
-
-const FBO_HALF_FOV_RAD = (50 / 2) * (Math.PI / 180);
-const FBO_CAM_Z = 6;
-const TEXT_Z = -3;
-const CAM_TO_TEXT = FBO_CAM_Z - TEXT_Z;
-
-function DreamMarquee({
-  isMobile,
-  reducedMotion,
-}: {
-  isMobile: boolean;
-  reducedMotion: boolean;
-}) {
-  const groupRef = useRef<THREE.Group>(null);
-  const firstTextRef = useRef<THREE.Mesh>(null);
-  const offsetRef = useRef(0);
-  const tileWidthRef = useRef(0);
-  const dampState = useRef({ vel: 0 });
-  const visHeight = 2 * CAM_TO_TEXT * Math.tan(FBO_HALF_FOV_RAD);
-
-  const fontSize = isMobile ? visHeight * 0.14 : visHeight * 0.22;
-
-  const measureTile = useCallback(() => {
-    const mesh = firstTextRef.current as unknown as {
-      geometry: THREE.BufferGeometry;
-    };
-    if (!mesh?.geometry) return;
-    mesh.geometry.computeBoundingBox();
-    const bb = mesh.geometry.boundingBox;
-    if (bb && bb.max.x - bb.min.x > 0.1) {
-      tileWidthRef.current = bb.max.x - bb.min.x;
-    }
-  }, []);
-
-  useFrame((_, delta) => {
-    if (!groupRef.current) return;
-
-    const heroP = getSectionProgress("top");
-    const heroOut = heroP >= 1;
-
-    if (heroOut) {
-      groupRef.current.visible = false;
-      return;
-    }
-    groupRef.current.visible = true;
-
-    const heroScroll = Math.max(0, (heroP - 0.5) / 0.5);
-    const scrollY = heroScroll * visHeight * 0.85;
-    groupRef.current.position.y = -scrollY;
-
-    const fade = heroScroll < 0.2 ? 1 : 1 - (heroScroll - 0.2) / 0.8;
-    const children = groupRef.current.children;
-    for (let i = 0; i < children.length; i++) {
-      const mat = (children[i] as THREE.Mesh).material as THREE.Material & {
-        opacity: number;
-      };
-      if (mat) {
-        mat.transparent = true;
-        mat.opacity = fade;
-      }
-    }
-
-    if (reducedMotion) return;
-
-    if (tileWidthRef.current === 0) {
-      measureTile();
-      return;
-    }
-
-    const tw = tileWidthRef.current;
-    const { velocity, direction } = useScrollStore.getState();
-
-    damp(dampState.current, "vel", velocity * 0.0004, 0.4, delta);
-
-    const baseSpeed = tw / 22;
-    const scrollKick = dampState.current.vel * direction;
-    const raw = baseSpeed + scrollKick;
-    const speed =
-      Math.sign(raw) * Math.min(Math.abs(raw), baseSpeed * 2.5);
-
-    offsetRef.current -= speed * delta;
-    offsetRef.current = ((offsetRef.current % tw) + tw) % tw;
-
-    for (let i = 0; i < children.length; i++) {
-      children[i].position.x = offsetRef.current + i * tw - tw;
-    }
-  });
-
-  if (reducedMotion) {
-    return (
-      <group position={[0, 0, TEXT_Z]}>
-        <Text
-          font={FONT_URL}
-          fontSize={fontSize}
-          letterSpacing={-0.04}
-          color="#a8b4ff"
-          anchorX="center"
-          anchorY="middle"
-        >
-          {SITE_DATA.hero.headlineLine1}
-        </Text>
-      </group>
-    );
-  }
-
-  return (
-    <group ref={groupRef} position={[0, 0, TEXT_Z]}>
-      {Array.from({ length: TILE_COUNT }, (_, i) => (
-        <Text
-          key={i}
-          ref={i === 0 ? firstTextRef : undefined}
-          font={FONT_URL}
-          fontSize={fontSize}
-          letterSpacing={-0.04}
-          color="#a8b4ff"
-          anchorX="left"
-          anchorY="middle"
-          onSync={i === 0 ? measureTile : undefined}
-        >
-          {HEADLINE_TILE}
-        </Text>
-      ))}
-    </group>
-  );
-}
-
 /* ── Fog background plane ─────────────────────────────────────── */
 
 function FogPlane() {
@@ -397,7 +265,7 @@ export default function DreamScene({
         <Lightformer form="rect" intensity={0.05} position={[-3, -2, 3]} scale={[6, 6, 1]} color="#030318" />
       </Environment>
 
-      <DreamMarquee isMobile={isMobile} reducedMotion={reducedMotion} />
+      <Marquee color="#a8b4ff" isMobile={isMobile} reducedMotion={reducedMotion} />
       <DreamCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
 
       <DustParticles />
