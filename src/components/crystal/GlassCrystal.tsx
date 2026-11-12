@@ -15,6 +15,7 @@ import {
   createFrostNormalMap,
   createGlowTexture,
 } from "./frostUtils";
+import { getHeroLogo, getShardLogos, type LogoData } from "./logoGeometry";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -457,9 +458,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const frostNormalMap = useMemo(() => createFrostNormalMap(256), []);
     const glowTex = useMemo(() => createGlowTexture(128), []);
     const inclusions = useMemo(() => buildInclusions(seed, INCLUSION_COUNT, R), [seed]);
+    const heroLogo = useMemo(() => getHeroLogo(), []);
+    const shardLogos = useMemo(() => getShardLogos(shards.length), [shards.length]);
 
     const { scene: portalScene, camera: portalCamera } = useThree();
     const mergedRef = useRef<THREE.Mesh>(null);
+    const heroLogoRef = useRef<THREE.Mesh>(null);
+    const shardLogoRefs = useRef<(THREE.Mesh | null)[]>([]);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
     const inclusionRef = useRef<THREE.InstancedMesh>(null);
     const glowRef = useRef<THREE.Sprite>(null);
@@ -480,11 +485,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     useFrame((state) => {
       if (!active) {
         if (mergedRef.current) mergedRef.current.visible = false;
+        if (heroLogoRef.current) heroLogoRef.current.visible = false;
         if (inclusionRef.current) inclusionRef.current.visible = false;
         if (glowRef.current) glowRef.current.visible = false;
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];
           if (m) m.visible = false;
+          const sl = shardLogoRefs.current[i];
+          if (sl) sl.visible = false;
         }
         return;
       }
@@ -510,6 +518,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         glowRef.current.visible = !mergedHidden;
         const sMat = glowRef.current.material as THREE.SpriteMaterial;
         if (sMat) sMat.opacity = (0.3 + Math.sin(elapsed * 0.8) * 0.08) * (1 - crossfade);
+      }
+
+      // Hero logo visible when intact, fades with crossfade
+      if (heroLogoRef.current) {
+        heroLogoRef.current.visible = !mergedHidden;
+        const hMat = heroLogoRef.current.material as THREE.MeshStandardMaterial;
+        if (hMat) hMat.opacity = (0.6 - crossfade * 0.6);
       }
 
       if (mergedRef.current) {
@@ -603,6 +618,16 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         const tumbleAngle = tumbleFade *
           (breakVal * Math.PI + elapsed * s.tumbleSpeed * Math.min(breakVal * 2, 1));
         mesh.quaternion.setFromAxisAngle(s.tumbleAxis, tumbleAngle);
+
+        // Sync shard logo position + rotation
+        const logoMesh = shardLogoRefs.current[i];
+        if (logoMesh) {
+          logoMesh.visible = showShards;
+          logoMesh.position.copy(mesh.position);
+          logoMesh.quaternion.copy(mesh.quaternion);
+          const lMat = logoMesh.material as THREE.MeshStandardMaterial;
+          if (lMat) lMat.opacity = shardOpacity * 0.55;
+        }
       }
     });
 
@@ -631,6 +656,21 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             depthWrite={false}
           />
         </instancedMesh>
+
+        {/* Hero logo inside intact crystal */}
+        {heroLogo && (
+          <mesh ref={heroLogoRef} geometry={heroLogo.geometry}>
+            <meshStandardMaterial
+              color="#c0d8e8"
+              emissive="#90b8d0"
+              emissiveIntensity={0.25}
+              transparent
+              opacity={0.6}
+              roughness={0.4}
+              depthWrite={false}
+            />
+          </mesh>
+        )}
 
         {/* Merged (intact) crystal */}
         <mesh ref={mergedRef} geometry={geo}>
@@ -689,6 +729,28 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             />
           </mesh>
         ))}
+
+        {/* Shard logos (one per shard, follow shard motion) */}
+        {shardLogos.map((logo, i) =>
+          logo ? (
+            <mesh
+              key={`logo-${i}`}
+              ref={(el) => { shardLogoRefs.current[i] = el; }}
+              geometry={logo.geometry}
+              visible={false}
+            >
+              <meshStandardMaterial
+                color="#c0d8e8"
+                emissive="#90b8d0"
+                emissiveIntensity={0.2}
+                transparent
+                opacity={0.55}
+                roughness={0.4}
+                depthWrite={false}
+              />
+            </mesh>
+          ) : null,
+        )}
       </group>
     );
   },
