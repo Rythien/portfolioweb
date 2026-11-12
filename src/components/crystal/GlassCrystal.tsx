@@ -61,6 +61,7 @@ export interface ShardData {
   lissFreq: THREE.Vector3;
   lissPhase: THREE.Vector3;
   lissAmp: THREE.Vector3;
+  brokenScale: number;
 }
 
 /* ── 3×3 Cramer solve ────────────────────────────────────────── */
@@ -330,24 +331,34 @@ function buildRockData(seed: number): RockResult {
       animRng() - 0.5, animRng() - 0.5, animRng() - 0.5,
     ).normalize();
     const tumbleSpeed = 0.3 + animRng() * 0.4;
-    const driftCenter = new THREE.Vector3(
-      -2.5 + (idx / Math.max(SHARD_COUNT - 1, 1)) * 4,
-      (animRng() - 0.5) * 3,
-      (animRng() - 0.5) * 2,
-    );
+    // Bias drift targets toward top/bottom bands and left/right edges,
+    // avoiding the hero text centre line (y ~ 0)
+    const edgeBias = animRng();
+    let dx: number, dy: number;
+    if (edgeBias < 0.5) {
+      // Left/right edges
+      dx = (animRng() < 0.5 ? -1 : 1) * (2.0 + animRng() * 1.2);
+      dy = (animRng() - 0.5) * 3.0;
+    } else {
+      // Top/bottom bands
+      dx = (animRng() - 0.5) * 3.5;
+      dy = (animRng() < 0.5 ? -1 : 1) * (1.4 + animRng() * 1.0);
+    }
+    const driftCenter = new THREE.Vector3(dx, dy, (animRng() - 0.5) * 0.6);
     const lissFreq = new THREE.Vector3(
-      0.2 + animRng() * 0.3, 0.15 + animRng() * 0.25, 0.1 + animRng() * 0.2,
+      0.15 + animRng() * 0.2, 0.12 + animRng() * 0.18, 0.08 + animRng() * 0.12,
     );
     const lissPhase = new THREE.Vector3(
       animRng() * TWO_PI, animRng() * TWO_PI, animRng() * TWO_PI,
     );
     const lissAmp = new THREE.Vector3(
-      0.5 + animRng() * 1.0, 0.3 + animRng() * 0.8, 0.2 + animRng() * 0.5,
+      0.3 + animRng() * 0.5, 0.2 + animRng() * 0.4, 0.1 + animRng() * 0.2,
     );
 
+    const brokenScale = 0.35 + animRng() * 0.25;
     shards.push({
       geometry: geo, centroid, direction, tumbleAxis, tumbleSpeed,
-      driftCenter, lissFreq, lissPhase, lissAmp,
+      driftCenter, lissFreq, lissPhase, lissAmp, brokenScale,
     });
     idx++;
   }
@@ -615,16 +626,20 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         mesh.position.z = s.centroid.z
           + driftFade * (dlz - s.centroid.z)
           + s.direction.z * spreadDist;
+        if (mesh.position.z > 0.5) mesh.position.z = 0.5;
+
+        const scaleVal = 1 - driftFade * (1 - s.brokenScale);
+        mesh.scale.setScalar(scaleVal);
 
         const tumbleFade = smoothstep(0.02, 0.15, breakVal);
         const tumbleAngle = tumbleFade *
           (breakVal * Math.PI + elapsed * s.tumbleSpeed * Math.min(breakVal * 2, 1));
         mesh.quaternion.setFromAxisAngle(s.tumbleAxis, tumbleAngle);
 
-        // Sync shard logo position + rotation
         if (logoMesh) {
           logoMesh.position.copy(mesh.position);
           logoMesh.quaternion.copy(mesh.quaternion);
+          logoMesh.scale.setScalar(scaleVal);
           const lMat = logoMesh.material as THREE.MeshStandardMaterial;
           if (lMat) lMat.opacity = shardOpacity * 0.55;
         }
