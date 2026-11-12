@@ -8,6 +8,7 @@ import { damp } from "maath/easing";
 import { useScrollStore } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import Debris from "@/components/crystal/Debris";
+import CrystalHover from "@/components/crystal/CrystalHover";
 import { useCrystalPose, getCrystalPose } from "@/hooks/useCrystalPose";
 import { useThemeStore } from "@/store/useThemeStore";
 import Marquee from "./Marquee";
@@ -331,6 +332,7 @@ export default function WakeScene({
       </Environment>
       <Marquee color="#1a1a1e" isMobile={isMobile} reducedMotion={reducedMotion} />
       <WakeCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
+      <CrystalHover />
       <Debris seed={42} />
       <OrbitRing reducedMotion={reducedMotion} />
       <PixelGem reducedMotion={reducedMotion} isMobile={isMobile} />

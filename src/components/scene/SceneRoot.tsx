@@ -4,6 +4,7 @@ import { useSyncExternalStore, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import type { RootState } from "@react-three/fiber";
 import Compositor from "./Compositor";
+import CrystalCursor from "@/components/crystal/CrystalCursor";
 import { SITE_DATA } from "@/content/site";
 
 /* ── External store subscriptions ─────────────────────────────── */
@@ -97,6 +98,7 @@ export default function SceneRoot() {
 
   return (
     <div aria-hidden="true" className="fixed inset-0 z-0 pointer-events-none">
+      <CrystalCursor />
       <Canvas
         dpr={[1, 1.5]}
         orthographic

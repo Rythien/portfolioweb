@@ -37,6 +37,7 @@ let _prevBreak = 0;
 let _shakeEnd = 0;
 let _flashStart = -1;
 let _reassembleStart = -1;
+let _hoverBreakVal = 0;
 
 export const crystalEvents = {
   burst: false,
@@ -70,7 +71,18 @@ function tick(elapsed: number, delta: number) {
   const tx = 0.6 + t25 * 1.6;
   const ty = -t25 * 0.3;
   const ts = 1.0 - t25 * 0.5;
-  const tb = smoothstep(0.45, 0.65, s);
+
+  // Scroll-driven break
+  const scrollBreak = smoothstep(0.45, 0.65, s);
+
+  // Hover-driven break (damped spring)
+  const hoverTarget = useFractureStore.getState().hoverBreak ? 1 : 0;
+  const hoverRate = hoverTarget > 0.5 ? 5.0 : 3.0;
+  _hoverBreakVal += (hoverTarget - _hoverBreakVal) * (1 - Math.exp(-hoverRate * delta));
+  if (Math.abs(_hoverBreakVal - hoverTarget) < 0.002) _hoverBreakVal = hoverTarget;
+
+  // Whichever source is higher wins
+  const tb = Math.max(scrollBreak, _hoverBreakVal);
 
   _d.x += (tx - _d.x) * l;
   _d.y += (ty - _d.y) * l;
