@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { useFractureStore } from "@/store/useFractureStore";
 
 const VERT = /* glsl */ `
@@ -77,6 +77,15 @@ export default function DreamBlob() {
   const mouseMoving = useRef(false);
   const lastMoveTime = useRef(0);
   const rafRef = useRef(0);
+  const sleeping = useRef(true);
+  const frameRef = useRef<(() => void) | null>(null);
+
+  const wake = useCallback(() => {
+    if (sleeping.current && frameRef.current) {
+      sleeping.current = false;
+      rafRef.current = requestAnimationFrame(frameRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -84,6 +93,7 @@ export default function DreamBlob() {
       mouseRef.current.y = 1 - e.clientY / window.innerHeight;
       mouseMoving.current = true;
       lastMoveTime.current = performance.now();
+      wake();
     };
     const onLeave = () => { mouseMoving.current = false; };
     window.addEventListener("mousemove", onMove, { passive: true });
@@ -92,7 +102,7 @@ export default function DreamBlob() {
       window.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseleave", onLeave);
     };
-  }, []);
+  }, [wake]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -144,18 +154,14 @@ export default function DreamBlob() {
 
     const t0 = performance.now();
     function frame() {
-      rafRef.current = requestAnimationFrame(frame);
-
       const { hoverBreak, cursorLabel } = useFractureStore.getState();
       const now = performance.now();
       const idle = now - lastMoveTime.current > 2000;
 
-      // Blob active when mouse is moving, not hovering crystal, not in flood
       const wantActive = mouseMoving.current && !idle && !hoverBreak && cursorLabel !== "BREAK";
       const target = wantActive ? 1 : 0;
       activeRef.current += (target - activeRef.current) * (target > 0.5 ? 0.06 : 0.03);
 
-      // Set cursor label when blob is visible
       if (activeRef.current > 0.15 && cursorLabel !== "BREAK") {
         useFractureStore.setState({ cursorLabel: "ENTER THE DREAM" });
       } else if (activeRef.current < 0.1 && cursorLabel === "ENTER THE DREAM") {
@@ -165,6 +171,11 @@ export default function DreamBlob() {
       if (activeRef.current < 0.005) {
         gl!.clearColor(0, 0, 0, 0);
         gl!.clear(gl!.COLOR_BUFFER_BIT);
+        if (idle && now - lastMoveTime.current > 5000) {
+          sleeping.current = true;
+          return;
+        }
+        rafRef.current = requestAnimationFrame(frame);
         return;
       }
 
@@ -180,12 +191,17 @@ export default function DreamBlob() {
       gl!.clearColor(0, 0, 0, 0);
       gl!.clear(gl!.COLOR_BUFFER_BIT);
       gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4);
+
+      rafRef.current = requestAnimationFrame(frame);
     }
-    rafRef.current = requestAnimationFrame(frame);
+    frameRef.current = frame;
+    // Start sleeping — wake on first mousemove
+    sleeping.current = true;
 
     return () => {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", resize);
+      frameRef.current = null;
     };
   }, []);
 
