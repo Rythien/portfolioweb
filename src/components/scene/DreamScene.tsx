@@ -6,6 +6,7 @@ import { Environment, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
+import Debris from "@/components/crystal/Debris";
 import { useCrystalPose } from "@/hooks/useCrystalPose";
 import { useThemeStore } from "@/store/useThemeStore";
 import Marquee from "./Marquee";
@@ -267,6 +268,7 @@ export default function DreamScene({
 
       <Marquee color="#a8b4ff" isMobile={isMobile} reducedMotion={reducedMotion} />
       <DreamCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
+      <Debris seed={42} />
 
       <DustParticles />
       <PixelSparkles />
