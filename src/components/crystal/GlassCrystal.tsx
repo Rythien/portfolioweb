@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
 import * as THREE from "three";
@@ -8,6 +8,13 @@ import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js"
 import { useFractureStore } from "@/store/useFractureStore";
 import { getCrystalPose } from "@/hooks/useCrystalPose";
 import { useCrystalSound } from "@/hooks/useCrystalSound";
+import {
+  subdivideNonIndexed,
+  displaceAlongNormals,
+  generateSphericalUVs,
+  createFrostNormalMap,
+  createGlowTexture,
+} from "./frostUtils";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -252,9 +259,14 @@ function buildRockData(seed: number): RockResult {
 
   const finalVerts = rockV.map(xf);
   const rockConvex = new ConvexGeometry(finalVerts);
-  const rockGeo = rockConvex.toNonIndexed();
+  const rawRock = rockConvex.toNonIndexed();
   rockConvex.dispose();
-  rockGeo.computeVertexNormals();
+
+  const rockSub = subdivideNonIndexed(rawRock, SUBDIV_LEVELS_ROCK);
+  rawRock.dispose();
+  displaceAlongNormals(rockSub, DISPLACE_STRENGTH, DISPLACE_FREQ, seed * 0.13);
+  generateSphericalUVs(rockSub);
+  const rockGeo = rockSub;
 
   const rng = seededRandom(seed + 5555);
   rng(); rng();
@@ -291,9 +303,12 @@ function buildRockData(seed: number): RockResult {
     if (V.length < 4) continue;
 
     const sConvex = new ConvexGeometry(V);
-    const geo = sConvex.toNonIndexed();
+    const rawShard = sConvex.toNonIndexed();
     sConvex.dispose();
-    geo.computeVertexNormals();
+    const geo = subdivideNonIndexed(rawShard, SUBDIV_LEVELS_SHARD);
+    rawShard.dispose();
+    displaceAlongNormals(geo, DISPLACE_STRENGTH * 0.6, DISPLACE_FREQ * 1.2, seed * 0.13 + i);
+    generateSphericalUVs(geo);
 
     const pos = geo.attributes.position;
     const centroid = new THREE.Vector3();
@@ -348,34 +363,41 @@ export function useRockData(seed = DEFAULT_SEED) {
 /* ── Glass look (single tweak point) ─────────────────────────── */
 
 export const GLASS_LOOK = {
-  thickness: 2.0,
-  chromaticAberration: 0.35,
-  anisotropicBlur: 0.3,
-  roughness: 0.08,
-  distortion: 0.3,
-  distortionScale: 0.25,
-  temporalDistortion: 0.05,
-  ior: 1.3,
-  samples: 10,
+  thickness: 1.2,
+  chromaticAberration: 0.12,
+  anisotropicBlur: 0.2,
+  roughness: 0.05,
+  distortion: 0.1,
+  distortionScale: 0.2,
+  temporalDistortion: 0.02,
+  ior: 1.35,
+  samples: 8,
   resolution: 1024,
-  color: "#f0f4fa",
-  attenuationDistance: 3.5,
-  backsideThickness: 0.3,
-  envMapIntensity: 1.2,
+  color: "#e8f1f5",
+  attenuationColor: "#cfe3ea",
+  attenuationDistance: 5,
+  backsideThickness: 0.25,
+  envMapIntensity: 1.0,
 } as const;
+
+const INCLUSION_COUNT = 10;
+const SUBDIV_LEVELS_ROCK = 2;
+const SUBDIV_LEVELS_SHARD = 1;
+const DISPLACE_STRENGTH = 0.045;
+const DISPLACE_FREQ = 3.5;
 
 /* ── Material tints ──────────────────────────────────────────── */
 
 const WAKE_TINT = {
-  color: "#f0f4fa",
-  attenuationColor: "#eaf0f6",
-  envMapIntensity: 1.2,
+  color: "#e8f1f5",
+  attenuationColor: "#cfe3ea",
+  envMapIntensity: 1.0,
 } as const;
 
 const DREAM_TINT = {
   color: "#c4b5fd",
   attenuationColor: "#b4a0e8",
-  envMapIntensity: 1.2,
+  envMapIntensity: 1.0,
 } as const;
 
 /* ── Component ───────────────────────────────────────────────── */
@@ -386,24 +408,80 @@ interface GlassCrystalProps {
   active?: boolean;
 }
 
+/* ── Inclusion sliver data (random thin needles inside crystal) ── */
+
+interface InclusionData {
+  matrix: THREE.Matrix4;
+}
+
+function buildInclusions(seed: number, count: number, maxR: number): InclusionData[] {
+  const rng = seededRandom(seed + 9999);
+  const out: InclusionData[] = [];
+  const _pos = new THREE.Vector3();
+  const _quat = new THREE.Quaternion();
+  const _euler = new THREE.Euler();
+  const _scale = new THREE.Vector3();
+
+  for (let i = 0; i < count; i++) {
+    const r = rng() * maxR * 0.6;
+    const th = Math.acos(2 * rng() - 1);
+    const ph = TWO_PI * rng();
+    _pos.set(
+      r * Math.sin(th) * Math.cos(ph),
+      r * Math.sin(th) * Math.sin(ph),
+      r * Math.cos(th),
+    );
+    const length = 0.06 + rng() * 0.14;
+    const thickness = 0.006 + rng() * 0.008;
+    _scale.set(thickness, length, thickness);
+    _euler.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+    _quat.setFromEuler(_euler);
+
+    const m = new THREE.Matrix4();
+    m.compose(_pos, _quat, _scale);
+    out.push({ matrix: m });
+  }
+  return out;
+}
+
+/* ── Component ───────────────────────────────────────────────── */
+
+const _inclusionGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 4, 1);
+
 const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake", active = true }, ref) {
     const { rockGeo: geo, shards } = useRockData(seed);
     const tint = variant === "dream" ? DREAM_TINT : WAKE_TINT;
     useCrystalSound();
 
+    const frostNormalMap = useMemo(() => createFrostNormalMap(256), []);
+    const glowTex = useMemo(() => createGlowTexture(128), []);
+    const inclusions = useMemo(() => buildInclusions(seed, INCLUSION_COUNT, R), [seed]);
+
     const { scene: portalScene, camera: portalCamera } = useThree();
     const mergedRef = useRef<THREE.Mesh>(null);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
+    const inclusionRef = useRef<THREE.InstancedMesh>(null);
+    const glowRef = useRef<THREE.Sprite>(null);
     const showShardsRef = useRef(false);
     const _invQ = useRef(new THREE.Quaternion());
     const _off = useRef(new THREE.Vector3());
     const mergedFbo = useFBO(1024, 1024, { depthBuffer: true });
     const shardFbo = useFBO(512, 512, { depthBuffer: true });
 
+    useEffect(() => {
+      if (!inclusionRef.current) return;
+      for (let i = 0; i < inclusions.length; i++) {
+        inclusionRef.current.setMatrixAt(i, inclusions[i].matrix);
+      }
+      inclusionRef.current.instanceMatrix.needsUpdate = true;
+    }, [inclusions]);
+
     useFrame((state) => {
       if (!active) {
         if (mergedRef.current) mergedRef.current.visible = false;
+        if (inclusionRef.current) inclusionRef.current.visible = false;
+        if (glowRef.current) glowRef.current.visible = false;
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];
           if (m) m.visible = false;
@@ -418,9 +496,23 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       if (showShardsRef.current && breakVal <= 0.05) showShardsRef.current = false;
       const showShards = showShardsRef.current;
 
+      // Inclusion + glow visibility follows merged mesh
+      const crossfade = showShards ? smoothstep(0.05, 0.15, breakVal) : 0;
+      const mergedHidden = crossfade >= 1;
+
+      if (inclusionRef.current) {
+        inclusionRef.current.visible = !mergedHidden;
+        const iMat = inclusionRef.current.material as THREE.MeshStandardMaterial;
+        if (iMat) iMat.opacity = 1 - crossfade;
+      }
+
+      if (glowRef.current) {
+        glowRef.current.visible = !mergedHidden;
+        const sMat = glowRef.current.material as THREE.SpriteMaterial;
+        if (sMat) sMat.opacity = (0.3 + Math.sin(elapsed * 0.8) * 0.08) * (1 - crossfade);
+      }
+
       if (mergedRef.current) {
-        const crossfade = showShards ? smoothstep(0.05, 0.15, breakVal) : 0;
-        const mergedHidden = crossfade >= 1;
         mergedRef.current.visible = !mergedHidden;
         const mat = mergedRef.current.material as THREE.MeshPhysicalMaterial;
         if (mat) {
@@ -432,7 +524,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         }
       }
 
-      // Render refraction backdrop for merged mesh (bypasses MeshTransmissionMaterial internal FBO which breaks inside createPortal)
+      // Render refraction backdrop for merged mesh
       if (mergedRef.current?.visible) {
         mergedRef.current.visible = false;
         state.gl.setRenderTarget(mergedFbo);
@@ -514,8 +606,33 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       }
     });
 
+    const normalScale = useMemo(() => new THREE.Vector2(0.4, 0.4), []);
+
     return (
       <group ref={ref}>
+        {/* Radial glow sprite underneath */}
+        <sprite ref={glowRef} position={[0, -1.1, 0]} scale={[4, 2, 1]}>
+          <spriteMaterial map={glowTex} transparent opacity={0.3} depthWrite={false} />
+        </sprite>
+
+        {/* Inclusion slivers inside crystal volume */}
+        <instancedMesh
+          ref={inclusionRef}
+          args={[_inclusionGeo, undefined, INCLUSION_COUNT]}
+          frustumCulled={false}
+        >
+          <meshStandardMaterial
+            color="#dceef5"
+            emissive="#b8d8e8"
+            emissiveIntensity={0.3}
+            transparent
+            opacity={0.5}
+            roughness={0.3}
+            depthWrite={false}
+          />
+        </instancedMesh>
+
+        {/* Merged (intact) crystal */}
         <mesh ref={mergedRef} geometry={geo}>
           <MeshTransmissionMaterial
             buffer={mergedFbo.texture}
@@ -536,9 +653,12 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             backside
             backsideThickness={GLASS_LOOK.backsideThickness}
             envMapIntensity={tint.envMapIntensity}
+            normalMap={frostNormalMap}
+            normalScale={normalScale}
           />
         </mesh>
 
+        {/* Shards */}
         {shards.map((shard, i) => (
           <mesh
             key={i}
@@ -549,11 +669,11 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           >
             <MeshTransmissionMaterial
               buffer={shardFbo.texture}
-              thickness={1.4}
-              chromaticAberration={0.3}
+              thickness={GLASS_LOOK.thickness * 0.8}
+              chromaticAberration={GLASS_LOOK.chromaticAberration}
               anisotropicBlur={GLASS_LOOK.anisotropicBlur}
               roughness={GLASS_LOOK.roughness}
-              distortion={0.2}
+              distortion={GLASS_LOOK.distortion * 0.7}
               distortionScale={GLASS_LOOK.distortionScale}
               temporalDistortion={GLASS_LOOK.temporalDistortion}
               transmission={1}
@@ -564,6 +684,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               attenuationColor={tint.attenuationColor}
               attenuationDistance={GLASS_LOOK.attenuationDistance}
               envMapIntensity={tint.envMapIntensity}
+              normalMap={frostNormalMap}
+              normalScale={normalScale}
             />
           </mesh>
         ))}
