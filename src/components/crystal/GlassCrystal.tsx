@@ -345,18 +345,37 @@ export function useRockData(seed = DEFAULT_SEED) {
   return useMemo(() => buildRockData(seed), [seed]);
 }
 
+/* ── Glass look (single tweak point) ─────────────────────────── */
+
+export const GLASS_LOOK = {
+  thickness: 2.0,
+  chromaticAberration: 0.35,
+  anisotropicBlur: 0.3,
+  roughness: 0.08,
+  distortion: 0.3,
+  distortionScale: 0.25,
+  temporalDistortion: 0.05,
+  ior: 1.3,
+  samples: 10,
+  resolution: 1024,
+  color: "#f0f4fa",
+  attenuationDistance: 3.5,
+  backsideThickness: 0.3,
+  envMapIntensity: 1.2,
+} as const;
+
 /* ── Material tints ──────────────────────────────────────────── */
 
 const WAKE_TINT = {
-  color: "#ffffff",
+  color: "#f0f4fa",
   attenuationColor: "#eaf0f6",
-  envMapIntensity: 0.8,
+  envMapIntensity: 1.2,
 } as const;
 
 const DREAM_TINT = {
   color: "#c4b5fd",
   attenuationColor: "#b4a0e8",
-  envMapIntensity: 1.0,
+  envMapIntensity: 1.2,
 } as const;
 
 /* ── Component ───────────────────────────────────────────────── */
@@ -379,6 +398,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const showShardsRef = useRef(false);
     const _invQ = useRef(new THREE.Quaternion());
     const _off = useRef(new THREE.Vector3());
+    const mergedFbo = useFBO(1024, 1024, { depthBuffer: true });
     const shardFbo = useFBO(512, 512, { depthBuffer: true });
 
     useFrame((state) => {
@@ -410,6 +430,16 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             mat.transparent = crossfade > 0;
           }
         }
+      }
+
+      // Render refraction backdrop for merged mesh (bypasses MeshTransmissionMaterial internal FBO which breaks inside createPortal)
+      if (mergedRef.current?.visible) {
+        mergedRef.current.visible = false;
+        state.gl.setRenderTarget(mergedFbo);
+        state.gl.clear();
+        state.gl.render(portalScene, portalCamera);
+        state.gl.setRenderTarget(null);
+        mergedRef.current.visible = true;
       }
 
       // Render shared backdrop FBO for shard transmission
@@ -488,22 +518,23 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       <group ref={ref}>
         <mesh ref={mergedRef} geometry={geo}>
           <MeshTransmissionMaterial
-            thickness={1.5}
-            chromaticAberration={0.06}
-            anisotropicBlur={0.1}
-            roughness={0.03}
-            distortion={0.15}
-            distortionScale={0.2}
-            temporalDistortion={0}
+            buffer={mergedFbo.texture}
+            thickness={GLASS_LOOK.thickness}
+            chromaticAberration={GLASS_LOOK.chromaticAberration}
+            anisotropicBlur={GLASS_LOOK.anisotropicBlur}
+            roughness={GLASS_LOOK.roughness}
+            distortion={GLASS_LOOK.distortion}
+            distortionScale={GLASS_LOOK.distortionScale}
+            temporalDistortion={GLASS_LOOK.temporalDistortion}
             transmission={1}
-            ior={1.3}
-            samples={8}
-            resolution={768}
+            ior={GLASS_LOOK.ior}
+            samples={GLASS_LOOK.samples}
+            resolution={GLASS_LOOK.resolution}
             color={tint.color}
             attenuationColor={tint.attenuationColor}
-            attenuationDistance={4}
+            attenuationDistance={GLASS_LOOK.attenuationDistance}
             backside
-            backsideThickness={0.3}
+            backsideThickness={GLASS_LOOK.backsideThickness}
             envMapIntensity={tint.envMapIntensity}
           />
         </mesh>
@@ -518,20 +549,20 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           >
             <MeshTransmissionMaterial
               buffer={shardFbo.texture}
-              thickness={1.0}
-              chromaticAberration={0.04}
-              anisotropicBlur={0.08}
-              roughness={0.04}
-              distortion={0.1}
-              distortionScale={0.15}
-              temporalDistortion={0}
+              thickness={1.4}
+              chromaticAberration={0.3}
+              anisotropicBlur={GLASS_LOOK.anisotropicBlur}
+              roughness={GLASS_LOOK.roughness}
+              distortion={0.2}
+              distortionScale={GLASS_LOOK.distortionScale}
+              temporalDistortion={GLASS_LOOK.temporalDistortion}
               transmission={1}
-              ior={1.3}
-              samples={4}
+              ior={GLASS_LOOK.ior}
+              samples={6}
               resolution={512}
               color={tint.color}
               attenuationColor={tint.attenuationColor}
-              attenuationDistance={4}
+              attenuationDistance={GLASS_LOOK.attenuationDistance}
               envMapIntensity={tint.envMapIntensity}
             />
           </mesh>

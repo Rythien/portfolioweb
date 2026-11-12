@@ -467,6 +467,8 @@ export default function WakeScene({
         <Lightformer form="rect" intensity={3} position={[4, 5, -3]} scale={[4, 1, 1]} rotation-x={Math.PI / 4} color="#ffffff" />
         <Lightformer form="rect" intensity={2.5} position={[-5, 3, 2]} scale={[3, 0.6, 1]} rotation-y={Math.PI / 3} color="#ffffff" />
         <Lightformer form="rect" intensity={1.8} position={[0, -4, 4]} scale={[6, 0.8, 1]} color="#ffffff" />
+        <Lightformer form="rect" intensity={1.2} position={[5, 0, 3]} scale={[2, 3, 1]} color="#a0f0f0" />
+        <Lightformer form="rect" intensity={1.0} position={[-4, -1, -4]} scale={[2, 3, 1]} color="#f0b0c8" />
         <Lightformer form="rect" intensity={0.1} position={[2, 0, -5]} scale={[8, 8, 1]} color="#111111" />
         <Lightformer form="rect" intensity={0.1} position={[-3, -2, 3]} scale={[6, 6, 1]} color="#0a0a0a" />
       </Environment>

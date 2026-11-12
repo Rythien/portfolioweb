@@ -2,7 +2,7 @@
 
 import { useRef, useMemo, useEffect, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Environment, Text } from "@react-three/drei";
+import { Environment, Lightformer, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
@@ -386,7 +386,16 @@ export default function DreamScene({
       <pointLight position={[-4, -3, 2]} intensity={0.35} color="#a855f7" />
       <pointLight position={[0, 2, -2]} intensity={0.2} color="#7c3aed" />
 
-      <Environment preset="night" />
+      <Environment background={false} resolution={512}>
+        <color attach="background" args={["#020118"]} />
+        <Lightformer form="rect" intensity={2.5} position={[4, 5, -3]} scale={[4, 1, 1]} rotation-x={Math.PI / 4} color="#c8c8ff" />
+        <Lightformer form="rect" intensity={2.0} position={[-5, 3, 2]} scale={[3, 0.6, 1]} rotation-y={Math.PI / 3} color="#d0d0ff" />
+        <Lightformer form="rect" intensity={1.5} position={[0, -4, 4]} scale={[6, 0.8, 1]} color="#b0b0ff" />
+        <Lightformer form="rect" intensity={1.2} position={[5, 0, 3]} scale={[2, 3, 1]} color="#80e0e0" />
+        <Lightformer form="rect" intensity={1.0} position={[-4, -1, -4]} scale={[2, 3, 1]} color="#e0a0d0" />
+        <Lightformer form="rect" intensity={0.05} position={[2, 0, -5]} scale={[8, 8, 1]} color="#050520" />
+        <Lightformer form="rect" intensity={0.05} position={[-3, -2, 3]} scale={[6, 6, 1]} color="#030318" />
+      </Environment>
 
       <DreamMarquee isMobile={isMobile} reducedMotion={reducedMotion} />
       <DreamCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
