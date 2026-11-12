@@ -54,10 +54,10 @@ function usePixelGemTexture() {
     ];
     const colors = [
       "transparent",
-      "rgba(80,40,120,0.9)",
-      "rgba(120,80,200,0.85)",
-      "rgba(160,120,240,0.8)",
-      "rgba(220,200,255,0.95)",
+      "rgba(160,190,210,0.9)",
+      "rgba(190,215,235,0.85)",
+      "rgba(210,230,245,0.8)",
+      "rgba(240,248,255,0.95)",
     ];
 
     for (let y = 0; y < size; y++) {
@@ -85,7 +85,7 @@ function useSparkleTexture() {
     c.width = 8;
     c.height = 8;
     const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "rgba(220,200,255,0.9)";
+    ctx.fillStyle = "rgba(220,235,255,0.9)";
     ctx.fillRect(3, 3, 2, 2);
     const tex = new THREE.CanvasTexture(c);
     tex.magFilter = THREE.NearestFilter;
@@ -218,8 +218,8 @@ function PixelGem({
   const sparklesRef = useRef<THREE.Points>(null);
   const gemTex = usePixelGemTexture();
   const sparkleTex = useSparkleTexture();
-  const mouseWorld = useRef(new THREE.Vector3(4, 2, 0));
-  const currentPos = useRef(new THREE.Vector3(4, 2, 0));
+  const mouseWorld = useRef(new THREE.Vector3(0, 0.5, 0));
+  const currentPos = useRef(new THREE.Vector3(0, 0.5, 0));
   const { camera, size } = useThree();
 
   const sparkleGeoRef = useRef<THREE.BufferGeometry>(null);
@@ -256,11 +256,20 @@ function PixelGem({
     return () => window.removeEventListener("mousemove", onMove);
   }, [camera, size, isMobile, reducedMotion]);
 
+  const matRef = useRef<THREE.SpriteMaterial>(null);
+
   useFrame(() => {
     if (!spriteRef.current || isMobile || reducedMotion) return;
 
     currentPos.current.lerp(mouseWorld.current, 0.08);
     spriteRef.current.position.copy(currentPos.current);
+
+    // Tint purple in dream mode
+    if (matRef.current) {
+      const isDream = useThemeStore.getState().mode === "dream";
+      const target = isDream ? 0xc4b5fd : 0xffffff;
+      matRef.current.color.lerp(new THREE.Color(target), 0.05);
+    }
 
     const geo = sparkleGeoRef.current;
     if (!geo) return;
@@ -285,8 +294,8 @@ function PixelGem({
 
   return (
     <>
-      <sprite ref={spriteRef} scale={[0.35, 0.35, 1]} position={[4, 2, 0]}>
-        <spriteMaterial map={gemTex} transparent depthWrite={false} />
+      <sprite ref={spriteRef} scale={[0.35, 0.35, 1]} position={[0, 0.5, 0]}>
+        <spriteMaterial ref={matRef} map={gemTex} transparent depthWrite={false} />
       </sprite>
       <points ref={sparklesRef}>
         <bufferGeometry ref={sparkleGeoRef}>
