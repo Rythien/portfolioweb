@@ -54,7 +54,7 @@ export default function Header() {
         </div>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-6 lg:gap-10 pointer-events-auto font-mono text-label uppercase tracking-widest text-white/90">
+        <nav className="hidden md:flex items-center gap-6 lg:gap-10 pointer-events-auto font-mono text-[0.875rem] font-medium uppercase tracking-widest text-white/90">
           <a
             href="#works"
             data-magnetic

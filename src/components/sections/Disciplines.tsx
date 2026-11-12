@@ -66,11 +66,11 @@ export default function Disciplines() {
                 ({item.number})
               </div>
 
-              <div className="md:col-span-4 font-[family-name:var(--font-display)] text-h3 sm:text-2xl font-light text-ink transition-transform duration-300 group-hover:translate-x-2">
+              <div className="md:col-span-4 font-[family-name:var(--font-sans)] text-h2 uppercase tracking-[-0.03em] text-ink/40 group-hover:text-ink transition-all duration-300 group-hover:translate-x-2">
                 {item.title}
               </div>
 
-              <div className="md:col-span-6 font-[family-name:var(--font-sans)] text-body text-ink-muted leading-relaxed group-hover:text-ink/80 transition-colors [text-wrap:pretty]">
+              <div className="md:col-span-6 font-[family-name:var(--font-sans)] text-body text-ink/70 leading-relaxed group-hover:text-ink/80 transition-colors [text-wrap:pretty]">
                 {item.description}
               </div>
             </div>

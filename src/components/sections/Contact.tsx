@@ -59,11 +59,11 @@ export default function Contact() {
         </div>
 
         <div className="flex flex-col gap-12 sm:gap-16 max-w-5xl">
-          <h2 className="contact-reveal font-[family-name:var(--font-display)] text-[clamp(3.5rem,12vw,9.5rem)] font-light text-ink leading-[0.92] tracking-[-0.035em]">
+          <h2 className="contact-reveal font-[family-name:var(--font-sans)] text-display uppercase text-ink">
             {SITE_DATA.contact.heading}
           </h2>
 
-          <p className="contact-reveal font-[family-name:var(--font-sans)] text-body-lg sm:text-2xl text-ink-muted leading-relaxed max-w-[65ch] [text-wrap:pretty]">
+          <p className="contact-reveal font-[family-name:var(--font-sans)] text-body-lg text-ink/70 leading-relaxed max-w-[60ch] [text-wrap:pretty]">
             {SITE_DATA.contact.subtext}
           </p>
 

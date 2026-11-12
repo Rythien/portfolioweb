@@ -57,10 +57,10 @@ export default function About() {
         <div className="max-w-4xl">
           <p
             ref={statementRef}
-            className="font-[family-name:var(--font-display)] text-h1 font-light leading-[1.12] text-ink tracking-[-0.025em] [text-wrap:pretty]"
+            className="font-[family-name:var(--font-sans)] text-h1 uppercase tracking-[-0.03em] text-ink [text-wrap:pretty]"
           >
             {SITE_DATA.about.statementPrefix}{" "}
-            <span className="italic text-ink-muted font-serif font-normal">
+            <span className="font-[family-name:var(--font-display)] italic normal-case font-normal text-ink/70">
               {SITE_DATA.about.statementItalic}
             </span>{" "}
             {SITE_DATA.about.statementSuffix}
@@ -68,7 +68,7 @@ export default function About() {
 
           <p
             ref={bodyRef}
-            className="mt-10 sm:mt-14 font-[family-name:var(--font-sans)] text-body-lg text-ink-muted leading-relaxed max-w-[65ch] [text-wrap:pretty]"
+            className="mt-10 sm:mt-14 font-[family-name:var(--font-sans)] text-body-lg text-ink/70 leading-relaxed max-w-[60ch] [text-wrap:pretty]"
           >
             {SITE_DATA.about.body}
           </p>

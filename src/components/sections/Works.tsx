@@ -77,7 +77,7 @@ export default function Works() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-baseline">
-                <h3 className="lg:col-span-7 font-[family-name:var(--font-display)] text-display sm:text-7xl font-light text-ink tracking-tight group-hover:text-ink transition-colors">
+                <h3 className="lg:col-span-7 font-[family-name:var(--font-sans)] text-h1 uppercase tracking-[-0.03em] text-ink group-hover:text-ink transition-colors">
                   <a
                     href={project.link}
                     target="_blank"
@@ -99,7 +99,7 @@ export default function Works() {
                     ))}
                   </div>
 
-                  <p className={`font-[family-name:var(--font-sans)] text-body leading-relaxed [text-wrap:pretty] ${isDream ? "text-ink-muted/90 italic" : "text-ink-muted"}`}>
+                  <p className={`font-[family-name:var(--font-sans)] text-body leading-relaxed max-w-[60ch] [text-wrap:pretty] ${isDream ? "text-ink/70 italic" : "text-ink/70"}`}>
                     {isDream && project.dreamDescription
                       ? project.dreamDescription
                       : project.description}
