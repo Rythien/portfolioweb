@@ -576,7 +576,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         const mesh = shardMeshRefs.current[i];
         if (!mesh) continue;
 
+        const logoMesh = shardLogoRefs.current[i];
         mesh.visible = showShards;
+        if (logoMesh) logoMesh.visible = showShards;
         if (!showShards) continue;
 
         const shardOpacity = smoothstep(0.05, 0.15, breakVal);
@@ -620,9 +622,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         mesh.quaternion.setFromAxisAngle(s.tumbleAxis, tumbleAngle);
 
         // Sync shard logo position + rotation
-        const logoMesh = shardLogoRefs.current[i];
         if (logoMesh) {
-          logoMesh.visible = showShards;
           logoMesh.position.copy(mesh.position);
           logoMesh.quaternion.copy(mesh.quaternion);
           const lMat = logoMesh.material as THREE.MeshStandardMaterial;
