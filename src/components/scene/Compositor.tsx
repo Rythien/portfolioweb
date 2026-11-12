@@ -7,6 +7,7 @@ import * as THREE from "three";
 import WakeScene from "./WakeScene";
 import DreamScene from "./DreamScene";
 import { useThemeStore, type Mode } from "@/store/useThemeStore";
+import { useFractureStore } from "@/store/useFractureStore";
 import { crystalEvents } from "@/hooks/useCrystalPose";
 
 /* ── Brush stamp shader (renders into brush buffer) ───────────── */
@@ -33,8 +34,8 @@ const brushFragmentShader = /* glsl */ `
   uniform vec2 uStamps[16];
   uniform float uFloodRadius;
   uniform vec2 uFloodCenter;
-  uniform float uFloodActive;  // 1.0 = active, 0.0 = off
-  uniform float uRestMode;     // 0.0 = wake at rest, 1.0 = dream at rest
+  uniform float uFloodActive;
+  uniform float uRestMode;
 
   varying vec2 vUv;
 
@@ -70,44 +71,42 @@ const brushFragmentShader = /* glsl */ `
     float aspect = uResolution.x / uResolution.y;
     vec2 aspectUv = uv * vec2(aspect, 1.0);
 
-    // ── Flood mode: mask is purely from the expanding circle ────
+    // ── Flood mode ────
     if (abs(uFloodActive) > 0.5) {
       vec2 floodPos = uFloodCenter * vec2(aspect, 1.0);
       float floodDist = length(aspectUv - floodPos);
       float floodNoise = fbm(aspectUv * 6.0 + uTime * 0.8) * 0.04;
       float R = uFloodRadius;
-      float n = floodNoise;
-      float circle = 1.0 - smoothstep(R - 0.04 + n, R + 0.02 + n, floodDist);
-
-      float result = circle;
-      gl_FragColor = vec4(result, result, result, 1.0);
+      float circle = 1.0 - smoothstep(R - 0.04 + floodNoise, R + 0.02 + floodNoise, floodDist);
+      gl_FragColor = vec4(vec3(circle), 1.0);
       return;
     }
 
-    // ── Normal brush mode ──────────────────────────────────────
+    // ── Normal brush: metaball sum of falloffs ────
     float restValue = step(0.5, uRestMode);
     float prev = texture2D(uPrevFrame, uv).r;
     prev = prev + (restValue - prev) * (1.0 - uDecay);
 
-    float brush = 0.0;
+    float field = 0.0;
     for (int i = 0; i < 16; i++) {
       if (i >= uStampCount) break;
       vec2 stampPos = uStamps[i] * vec2(aspect, 1.0);
       float dist = length(aspectUv - stampPos);
-      float noiseOffset = fbm(aspectUv * 8.0 + uTime * 0.5) * 0.02;
-      dist += noiseOffset;
-      float stamp = smoothstep(uBrushRadius, uBrushRadius * 0.3, dist);
-      brush = max(brush, stamp * uBrushStrength);
+      float r2 = dist / uBrushRadius;
+      float falloff = exp(-r2 * r2 * 2.0) * uBrushStrength;
+      field += falloff;
     }
+    field = clamp(field, 0.0, 1.0);
 
+    // Screen blend: smooth merging like metaballs
     float result;
     if (uRestMode > 0.5) {
-      result = min(prev, 1.0 - brush);
+      result = prev * (1.0 - field);
     } else {
-      result = max(prev, brush);
+      result = 1.0 - (1.0 - prev) * (1.0 - field);
     }
 
-    gl_FragColor = vec4(clamp(result, 0.0, 1.0), clamp(result, 0.0, 1.0), clamp(result, 0.0, 1.0), 1.0);
+    gl_FragColor = vec4(vec3(clamp(result, 0.0, 1.0)), 1.0);
   }
 `;
 
@@ -133,15 +132,46 @@ const compositeFragmentShader = /* glsl */ `
 
   varying vec2 vUv;
 
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+  float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i+vec2(1,0)), f.x),
+               mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+  }
+  float fbm(vec2 p) {
+    float v = 0.0; float a = 0.5;
+    mat2 r = mat2(0.8,0.6,-0.6,0.8);
+    for (int i = 0; i < 4; i++) { v += a * noise(p); p = r * p * 2.0; a *= 0.5; }
+    return v;
+  }
+
   void main() {
     vec2 uv = vUv;
-
     float mask = texture2D(uBrushMask, uv).r;
 
-    float reveal = smoothstep(0.05, 0.5, mask);
+    // Wobbly edge: displace threshold with animated FBM noise
+    float wobble = fbm(uv * 8.0 + uTime * 0.3) * 0.04;
+    float threshold = 0.5 + wobble;
 
-    float edgeStrength = smoothstep(0.05, 0.25, mask) - smoothstep(0.25, 0.5, mask);
-    float aberration = edgeStrength * 0.004;
+    // Thick glowing rim band (~0.025 wide)
+    float rimInner = smoothstep(threshold - 0.04, threshold - 0.01, mask);
+    float rimOuter = smoothstep(threshold + 0.01, threshold + 0.04, mask);
+    float rim = rimInner * (1.0 - rimOuter);
+
+    // Soft outer halo (wider glow beyond rim)
+    float halo = smoothstep(threshold - 0.12, threshold - 0.02, mask)
+               * (1.0 - smoothstep(threshold - 0.02, threshold + 0.06, mask));
+
+    // Reveal: hard edge at wobbled threshold
+    float reveal = smoothstep(threshold - 0.01, threshold + 0.01, mask);
+
+    // Chromatic aberration at edge
+    float edgeStrength = rim + halo * 0.4;
+    float aberration = edgeStrength * 0.003;
 
     vec4 wake = texture2D(uWakeScene, uv);
     vec4 dream = texture2D(uDreamScene, uv);
@@ -150,19 +180,22 @@ const compositeFragmentShader = /* glsl */ `
     float dreamB = texture2D(uDreamScene, uv - vec2(aberration, 0.0)).b;
     vec3 dreamChroma = vec3(dreamR, dream.g, dreamB);
 
-    float wakeR = texture2D(uWakeScene, uv + vec2(aberration * 0.5, 0.0)).r;
-    float wakeB = texture2D(uWakeScene, uv - vec2(aberration * 0.5, 0.0)).b;
-    vec3 wakeChroma = vec3(wakeR, wake.g, wakeB);
-
-    vec3 finalWake = mix(wake.rgb, wakeChroma, edgeStrength);
+    vec3 finalWake = wake.rgb;
     vec3 finalDream = mix(dream.rgb, dreamChroma, edgeStrength);
 
-    float edgeMask = smoothstep(0.1, 0.3, mask) - smoothstep(0.3, 0.5, mask);
-    float outerHalo = smoothstep(0.0, 0.15, mask) - smoothstep(0.15, 0.4, mask);
-    float rim = edgeMask * 0.8 + outerHalo * 0.3;
+    // Purple tint on dream interior (#4b32b8 -> #1a1050 gradient)
+    vec3 purpleLight = vec3(0.294, 0.196, 0.722);
+    vec3 purpleDark = vec3(0.102, 0.063, 0.314);
+    float tintGrad = length(uv - 0.5) * 1.4;
+    vec3 purpleTint = mix(purpleLight, purpleDark, clamp(tintGrad, 0.0, 1.0));
+    finalDream = mix(finalDream, finalDream * 0.7 + purpleTint * 0.3, reveal * 0.35);
 
     vec3 result = mix(finalWake, finalDream, reveal);
-    result += vec3(1.0) * rim;
+
+    // Add rim glow (bright white) and halo
+    result += vec3(1.0) * rim * 0.9;
+    result += vec3(0.75, 0.65, 1.0) * halo * 0.4;
+
     result += vec3(uFlash);
 
     gl_FragColor = vec4(result, 1.0);
@@ -336,6 +369,23 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     };
   }, []);
 
+  // JS-side brush field for cursor label detection
+  const stampHistoryRef = useRef<{ x: number; y: number; t: number }[]>([]);
+  const blobFieldAtCursor = useRef(0);
+  const brushRadiusRef = useRef(0.13);
+
+  // Click blob → flood to DREAM
+  const startTransition = useThemeStore((s) => s.startTransition);
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (blobFieldAtCursor.current > 0.3) {
+        startTransition({ x: e.clientX, y: e.clientY });
+      }
+    };
+    window.addEventListener("click", onClick);
+    return () => window.removeEventListener("click", onClick);
+  }, [startTransition]);
+
   useEffect(() => {
     return () => {
       wakeTarget.dispose();
@@ -427,8 +477,8 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     const dx = smoothMouseRef.current.x - prevMouseRef.current.x;
     const dy = smoothMouseRef.current.y - prevMouseRef.current.y;
     const vel = Math.sqrt(dx * dx + dy * dy);
-    const baseRadius = isMobile ? 0.06 : 0.08;
-    const dynamicRadius = baseRadius + Math.min(vel * 2.0, 0.04);
+    const baseRadius = isMobile ? 0.10 : 0.13;
+    const dynamicRadius = baseRadius + Math.min(vel * 1.5, 0.03);
 
     // ── Flood animation (spring toward target) ──────────────────
     const f = floodRef.current;
@@ -503,7 +553,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       pingPongRef.current === 0 ? brushTargetB : brushTargetA;
 
     brushMaterial.uniforms.uPrevFrame.value = readTarget.texture;
-    brushMaterial.uniforms.uDecay.value = f.active ? 1.0 : 0.985;
+    brushMaterial.uniforms.uDecay.value = f.active ? 1.0 : Math.exp(-delta / 1.5);
     brushMaterial.uniforms.uTime.value = time;
     brushMaterial.uniforms.uResolution.value.set(brushRes.w, brushRes.h);
 
@@ -546,6 +596,44 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
 
     gl.setClearColor("#000000", 0);
     gl.setRenderTarget(null);
+
+    // ── JS-side blob field for cursor label ──────────────────────
+    const aspect = size.width / size.height;
+    const history = stampHistoryRef.current;
+    const now = time;
+
+    // Add current stamp to history
+    if (mouseActiveRef.current && !f.active) {
+      history.push({ x: smoothMouseRef.current.x, y: smoothMouseRef.current.y, t: now });
+    }
+    // Decay old stamps (~1.5s)
+    while (history.length > 0 && now - history[0].t > 2.0) history.shift();
+
+    // Compute field at cursor position
+    const cx = smoothMouseRef.current.x * aspect;
+    const cy = smoothMouseRef.current.y;
+    let field = 0;
+    const radius = brushRadiusRef.current;
+    for (let i = 0; i < history.length; i++) {
+      const age = now - history[i].t;
+      const decay = Math.exp(-age / 1.5);
+      const sx = history[i].x * aspect;
+      const sy = history[i].y;
+      const d = Math.hypot(cx - sx, cy - sy);
+      const r2 = d / radius;
+      field += Math.exp(-r2 * r2 * 2.0) * decay;
+    }
+    blobFieldAtCursor.current = Math.min(field, 1);
+
+    // Update cursor label: blob beats default, crystal beats blob
+    const { cursorLabel, hoverBreak } = useFractureStore.getState();
+    if (!hoverBreak && cursorLabel !== "BREAK") {
+      if (field > 0.3) {
+        useFractureStore.setState({ cursorLabel: "ENTER THE DREAM" });
+      } else if (cursorLabel === "ENTER THE DREAM") {
+        useFractureStore.setState({ cursorLabel: "" });
+      }
+    }
 
     prevMouseRef.current.x = smoothMouseRef.current.x;
     prevMouseRef.current.y = smoothMouseRef.current.y;
