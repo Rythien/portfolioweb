@@ -21,6 +21,14 @@ export default function ModePill() {
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100]">
+      <div
+        className="pointer-events-none absolute -inset-x-12 -top-16 bottom-0"
+        style={{
+          background: "linear-gradient(to bottom, transparent, var(--color-surface) 75%)",
+          height: 96,
+          top: -72,
+        }}
+      />
       <button
         onClick={handleClick}
         aria-label={`Switch to ${mode === "wake" ? "dream" : "wake"} mode`}
