@@ -10,6 +10,13 @@ import { useThemeStore, type Mode } from "@/store/useThemeStore";
 import { useFractureStore } from "@/store/useFractureStore";
 import { crystalEvents } from "@/hooks/useCrystalPose";
 
+/* ── Brush tuning ─────────────────────────────────────────────── */
+
+const BRUSH_RADIUS = 0.06;     // fraction of screen height, at rest
+const BRUSH_RADIUS_MAX = 0.09; // cap when cursor is moving fast
+const RIM_WIDTH = 0.012;       // glowing rim thickness (mask-space)
+const TRAIL_DECAY = 1.2;       // seconds for the liquid trail to fade
+
 /* ── Brush stamp shader (renders into brush buffer) ───────────── */
 
 const brushVertexShader = /* glsl */ `
@@ -92,8 +99,9 @@ const brushFragmentShader = /* glsl */ `
       if (i >= uStampCount) break;
       vec2 stampPos = uStamps[i] * vec2(aspect, 1.0);
       float dist = length(aspectUv - stampPos);
-      float r2 = dist / uBrushRadius;
-      float falloff = exp(-r2 * r2 * 2.0) * uBrushStrength;
+      // Hard-zero beyond the stamp radius: tails must not accumulate
+      // past the composite threshold or the blob balloons into a disc.
+      float falloff = smoothstep(1.0, 0.55, dist / uBrushRadius) * uBrushStrength;
       field += falloff;
     }
     field = clamp(field, 0.0, 1.0);
@@ -129,6 +137,7 @@ const compositeFragmentShader = /* glsl */ `
   uniform vec2 uResolution;
   uniform float uTime;
   uniform float uFlash;
+  uniform float uRimWidth;
 
   varying vec2 vUv;
 
@@ -154,17 +163,16 @@ const compositeFragmentShader = /* glsl */ `
     float mask = texture2D(uBrushMask, uv).r;
 
     // Wobbly edge: displace threshold with animated FBM noise
-    float wobble = fbm(uv * 8.0 + uTime * 0.3) * 0.04;
+    float wobble = fbm(uv * 10.0 + uTime * 0.35) * 0.03;
     float threshold = 0.5 + wobble;
 
-    // Thick glowing rim band (~0.025 wide)
-    float rimInner = smoothstep(threshold - 0.04, threshold - 0.01, mask);
-    float rimOuter = smoothstep(threshold + 0.01, threshold + 0.04, mask);
-    float rim = rimInner * (1.0 - rimOuter);
+    // Glowing rim band (uRimWidth thick)
+    float rim = smoothstep(threshold - uRimWidth * 2.0, threshold - uRimWidth * 0.5, mask)
+              * (1.0 - smoothstep(threshold + uRimWidth * 0.5, threshold + uRimWidth * 2.0, mask));
 
-    // Soft outer halo (wider glow beyond rim)
-    float halo = smoothstep(threshold - 0.12, threshold - 0.02, mask)
-               * (1.0 - smoothstep(threshold - 0.02, threshold + 0.06, mask));
+    // Small soft outer halo
+    float halo = smoothstep(threshold - 0.05, threshold - 0.01, mask)
+               * (1.0 - smoothstep(threshold - 0.01, threshold + 0.025, mask));
 
     // Reveal: hard edge at wobbled threshold
     float reveal = smoothstep(threshold - 0.01, threshold + 0.01, mask);
@@ -183,12 +191,13 @@ const compositeFragmentShader = /* glsl */ `
     vec3 finalWake = wake.rgb;
     vec3 finalDream = mix(dream.rgb, dreamChroma, edgeStrength);
 
-    // Purple tint on dream interior (#4b32b8 -> #1a1050 gradient)
+    // Light purple tint over the real dream scene (#4b32b8 -> #1a1050),
+    // kept subtle so the scene itself reads through
     vec3 purpleLight = vec3(0.294, 0.196, 0.722);
     vec3 purpleDark = vec3(0.102, 0.063, 0.314);
     float tintGrad = length(uv - 0.5) * 1.4;
     vec3 purpleTint = mix(purpleLight, purpleDark, clamp(tintGrad, 0.0, 1.0));
-    finalDream = mix(finalDream, finalDream * 0.7 + purpleTint * 0.3, reveal * 0.35);
+    finalDream = mix(finalDream, finalDream * 0.85 + purpleTint * 0.15, reveal * 0.22);
 
     vec3 result = mix(finalWake, finalDream, reveal);
 
@@ -239,6 +248,7 @@ const compositeMaterial = new THREE.ShaderMaterial({
     uResolution: { value: new THREE.Vector2(1, 1) },
     uTime: { value: 0 },
     uFlash: { value: 0 },
+    uRimWidth: { value: RIM_WIDTH },
   },
   depthTest: false,
   depthWrite: false,
@@ -372,7 +382,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
   // JS-side brush field for cursor label detection
   const stampHistoryRef = useRef<{ x: number; y: number; t: number }[]>([]);
   const blobFieldAtCursor = useRef(0);
-  const brushRadiusRef = useRef(0.13);
+  const brushRadiusRef = useRef(BRUSH_RADIUS);
 
   // Click blob → flood to DREAM
   const startTransition = useThemeStore((s) => s.startTransition);
@@ -477,8 +487,12 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     const dx = smoothMouseRef.current.x - prevMouseRef.current.x;
     const dy = smoothMouseRef.current.y - prevMouseRef.current.y;
     const vel = Math.sqrt(dx * dx + dy * dy);
-    const baseRadius = isMobile ? 0.10 : 0.13;
-    const dynamicRadius = baseRadius + Math.min(vel * 1.5, 0.03);
+    const baseRadius = isMobile ? BRUSH_RADIUS * 0.8 : BRUSH_RADIUS;
+    const dynamicRadius = Math.min(
+      baseRadius + vel * 1.2,
+      BRUSH_RADIUS_MAX,
+    );
+    brushRadiusRef.current = dynamicRadius;
 
     // ── Flood animation (spring toward target) ──────────────────
     const f = floodRef.current;
@@ -553,7 +567,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       pingPongRef.current === 0 ? brushTargetB : brushTargetA;
 
     brushMaterial.uniforms.uPrevFrame.value = readTarget.texture;
-    brushMaterial.uniforms.uDecay.value = f.active ? 1.0 : Math.exp(-delta / 1.5);
+    brushMaterial.uniforms.uDecay.value = f.active ? 1.0 : Math.exp(-delta / TRAIL_DECAY);
     brushMaterial.uniforms.uTime.value = time;
     brushMaterial.uniforms.uResolution.value.set(brushRes.w, brushRes.h);
 
@@ -606,22 +620,22 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     if (mouseActiveRef.current && !f.active) {
       history.push({ x: smoothMouseRef.current.x, y: smoothMouseRef.current.y, t: now });
     }
-    // Decay old stamps (~1.5s)
-    while (history.length > 0 && now - history[0].t > 2.0) history.shift();
+    // Decay old stamps
+    while (history.length > 0 && now - history[0].t > TRAIL_DECAY * 1.5) history.shift();
 
-    // Compute field at cursor position
+    // Compute field at cursor position (mirrors the shader falloff)
     const cx = smoothMouseRef.current.x * aspect;
     const cy = smoothMouseRef.current.y;
     let field = 0;
     const radius = brushRadiusRef.current;
     for (let i = 0; i < history.length; i++) {
       const age = now - history[i].t;
-      const decay = Math.exp(-age / 1.5);
+      const decay = Math.exp(-age / TRAIL_DECAY);
       const sx = history[i].x * aspect;
       const sy = history[i].y;
       const d = Math.hypot(cx - sx, cy - sy);
-      const r2 = d / radius;
-      field += Math.exp(-r2 * r2 * 2.0) * decay;
+      const t = Math.max(0, Math.min(1, (1.0 - d / radius) / 0.45));
+      field += t * t * (3 - 2 * t) * decay;
     }
     blobFieldAtCursor.current = Math.min(field, 1);
 
