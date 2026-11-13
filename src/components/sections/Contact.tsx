@@ -25,9 +25,9 @@ export default function Contact() {
         {
           opacity: 1,
           y: 0,
-          duration: 0.9,
-          stagger: 0.15,
-          ease: "power3.out",
+          duration: 0.8,
+          stagger: 0.06,
+          ease: "expo.out",
           scrollTrigger: {
             trigger: sectionRef.current,
             start: "top 75%",
@@ -69,7 +69,7 @@ export default function Contact() {
               href={`mailto:${SITE_DATA.contact.email}`}
               data-magnetic
               data-cursor="Email"
-              className="px-8 py-5 bg-ink text-surface font-mono text-label font-semibold hover:opacity-90 transition-all duration-300 border border-ink"
+              className="pressable px-8 py-5 bg-ink text-surface font-mono text-label font-semibold hover:opacity-90 border border-ink"
             >
               Send Email ↗
             </a>
@@ -78,7 +78,7 @@ export default function Contact() {
               onClick={handleCopyEmail}
               data-magnetic
               aria-label="Copy email address to clipboard"
-              className="px-6 py-5 border border-rule text-ink font-mono text-label hover:border-rule-hover transition-colors"
+              className="pressable px-6 py-5 border border-rule text-ink font-mono text-label hover:border-rule-hover"
             >
               {copied ? "Copied ✓" : `Copy: ${SITE_DATA.contact.email}`}
             </button>

@@ -13,6 +13,12 @@ import { crystalEvents } from "@/hooks/useCrystalPose";
 
 /* ── Brush tuning ─────────────────────────────────────────────── */
 
+const FLOOD_DURATION = 1100;   // ms, full wake↔dream flood (power2.inOut)
+
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
 const BRUSH_RADIUS = 0.06;     // fraction of screen height, at rest
 const BRUSH_RADIUS_MAX = 0.09; // cap when cursor is moving fast
 const RIM_WIDTH = 0.012;       // glowing rim thickness (mask-space)
@@ -426,11 +432,14 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
 
   const compositeQuadRef = useRef<THREE.Mesh>(null);
 
-  // Flood animation state — spring-driven level (0 = wake, 1 = dream)
+  // Flood animation state — time-based power2.inOut level (0 wake, 1 dream)
   const floodRef = useRef({
     active: false,
     level: 0,
+    from: 0,
     target: 0,
+    t0: 0,
+    dur: FLOOD_DURATION,
     centerX: 0.5,
     centerY: 0.5,
     maxRadius: 2.0,
@@ -467,6 +476,16 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
           Math.hypot(cx - aspect, cy - 1)
         ) * 1.2;
     }
+
+    // Retime from the current level; shorter travel, shorter flood
+    f.from = f.level;
+    f.t0 = performance.now();
+    f.dur = Math.max(
+      FLOOD_DURATION * 0.35,
+      FLOOD_DURATION * Math.abs(f.target - f.from)
+    );
+    crystalEvents.floodActive = true;
+    crystalEvents.floodTarget = f.target === 1 ? "dream" : "wake";
 
     // Acknowledge the signal so the next click can fire
     endTransition();
@@ -517,19 +536,21 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     // ── Flood animation (spring toward target) ──────────────────
     const f = floodRef.current;
     if (f.active) {
-      const rate = 3.5;
-      f.level += (f.target - f.level) * (1 - Math.exp(-rate * delta));
+      // Mode change easing: power2.inOut over FLOOD_DURATION
+      const p = Math.min(1, (performance.now() - f.t0) / f.dur);
+      f.level = f.from + (f.target - f.from) * easeInOutQuad(p);
 
       // Every DOM-side dream effect (grid, heading glow, glass, cursor)
       // rides the same flood value through the --dream custom property.
       crystalEvents.dreamLevel = f.level;
       document.documentElement.style.setProperty("--dream", f.level.toFixed(3));
 
-      // Snap when visually complete
-      if (Math.abs(f.level - f.target) < 0.003) {
+      // Snap when the tween completes
+      if (p >= 1) {
         f.level = f.target;
         f.active = false;
         crystalEvents.dreamLevel = f.level;
+        crystalEvents.floodActive = false;
         // Hand control back to the html[data-mode] default at rest
         document.documentElement.style.removeProperty("--dream");
 

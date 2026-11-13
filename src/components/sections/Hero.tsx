@@ -30,8 +30,8 @@ export default function Hero() {
           opacity: 1,
           y: 0,
           duration: 0.8,
-          stagger: 0.12,
-          ease: "power2.out",
+          stagger: 0.06,
+          ease: "expo.out",
         }
       );
     }, containerRef);

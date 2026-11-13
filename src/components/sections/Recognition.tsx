@@ -26,9 +26,9 @@ export default function Recognition() {
         {
           opacity: 1,
           y: 0,
-          duration: 0.75,
-          stagger: 0.08,
-          ease: "power3.out",
+          duration: 0.8,
+          stagger: 0.06,
+          ease: "expo.out",
           scrollTrigger: {
             trigger: rowsRef.current,
             start: "top 80%",

@@ -27,9 +27,9 @@ export default function About() {
         {
           opacity: 1,
           y: 0,
-          duration: 0.9,
-          stagger: 0.18,
-          ease: "power3.out",
+          duration: 0.8,
+          stagger: 0.06,
+          ease: "expo.out",
           scrollTrigger: {
             trigger: sectionRef.current,
             start: "top 75%",

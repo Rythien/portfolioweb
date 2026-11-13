@@ -40,21 +40,26 @@ export default function Header() {
   }, []);
 
   return (
-    <header data-reveal className="fixed top-0 left-0 right-0 z-50 pointer-events-none mix-blend-difference text-white">
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between w-full">
+    <header data-reveal className="fixed top-0 left-0 right-0 z-50 pointer-events-none text-ink">
+      {/* Mode-aware scrim: legibility over the scene in both WAKE and DREAM */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-gradient-to-b from-surface/90 via-surface/40 to-transparent"
+      />
+      <div className="relative max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between w-full">
         {/* Brand Name */}
         <div className="pointer-events-auto">
           <Link
             href="#top"
             data-magnetic
-            className="font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-white hover:opacity-75 transition-opacity py-2"
+            className="font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-ink hover:opacity-75 transition-opacity py-2"
           >
             {SITE_DATA.brand.name}
           </Link>
         </div>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-6 lg:gap-10 pointer-events-auto font-mono text-[0.875rem] font-medium uppercase tracking-widest text-white/90">
+        <nav className="hidden md:flex items-center gap-6 lg:gap-10 pointer-events-auto font-mono text-[0.875rem] font-medium uppercase tracking-widest text-ink/80">
           <a
             href="#works"
             data-magnetic
@@ -93,14 +98,14 @@ export default function Header() {
         <div className="md:hidden pointer-events-auto flex items-center gap-3">
           <div
             aria-live="off"
-            className="font-mono text-label uppercase tracking-widest text-white/80 tabular-nums mr-1"
+            className="font-mono text-label text-ink/80 tabular-nums mr-1"
           >
             {mounted ? timeStr : "--:--"}
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle navigation menu"
-            className="p-2 -mr-2 text-white font-mono text-xs uppercase tracking-widest focus:outline-none"
+            className="pressable p-2 -mr-2 text-ink font-mono text-label focus:outline-none"
           >
             {isMobileMenuOpen ? "[Close]" : "[Menu]"}
           </button>

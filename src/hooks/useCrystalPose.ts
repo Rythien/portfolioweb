@@ -55,6 +55,9 @@ export const crystalEvents = {
   sceneReady: false,
   /** Flood progress 0 (wake) → 1 (dream), written by the Compositor. */
   dreamLevel: 0,
+  /** True while the flood is animating; floodTarget is where it is heading. */
+  floodActive: false,
+  floodTarget: "wake" as "wake" | "dream",
 };
 
 if (typeof window !== "undefined") {
