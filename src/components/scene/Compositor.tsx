@@ -384,18 +384,6 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
   const blobFieldAtCursor = useRef(0);
   const brushRadiusRef = useRef(BRUSH_RADIUS);
 
-  // Click blob → flood to DREAM
-  const startTransition = useThemeStore((s) => s.startTransition);
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (blobFieldAtCursor.current > 0.3) {
-        startTransition({ x: e.clientX, y: e.clientY });
-      }
-    };
-    window.addEventListener("click", onClick);
-    return () => window.removeEventListener("click", onClick);
-  }, [startTransition]);
-
   useEffect(() => {
     return () => {
       wakeTarget.dispose();
