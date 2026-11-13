@@ -82,10 +82,8 @@ export default function Hero() {
             ref={footerRef}
             className="flex items-center justify-between border-t border-rule pt-6 font-mono text-label text-ink/80"
           >
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline">{SITE_DATA.hero.hint}</span>
-              <span className="sm:hidden">{SITE_DATA.hero.hintTouch}</span>
-              <span className="animate-bounce">↓</span>
+            <div className="hidden sm:block">
+              {SITE_DATA.brand.tagline}
             </div>
 
             <div>

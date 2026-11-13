@@ -24,7 +24,7 @@ export default function ModePill() {
       <button
         onClick={handleClick}
         aria-label={`Switch to ${mode === "wake" ? "dream" : "wake"} mode`}
-        className="group flex items-center gap-0 rounded-full border border-rule bg-surface/80 backdrop-blur-md font-mono text-label uppercase tracking-widest transition-colors hover:border-rule-hover focus-visible:outline-offset-4"
+        className="group flex items-center gap-0 rounded-full border border-rule bg-surface/90 backdrop-blur-xl font-mono text-label transition-colors hover:border-rule-hover focus-visible:outline-offset-4"
       >
         <span
           className={`px-4 py-2.5 rounded-full transition-all duration-300 ${

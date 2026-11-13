@@ -47,13 +47,9 @@ export default function About() {
       ref={sectionRef}
       id="about"
       aria-label="About Searon Maharjan"
-      className="scroll-mt-24 py-28 sm:py-36 lg:py-44 border-t border-rule relative"
+      className="scroll-mt-24 py-16 sm:py-24 lg:py-32 border-t border-rule relative"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
-        <div className="flex items-center justify-between border-b border-rule pb-4 mb-16 sm:mb-24 font-mono text-label uppercase tracking-widest text-ink-muted">
-          <span>{SITE_DATA.about.sectionNum} · {SITE_DATA.about.title}</span>
-        </div>
-
         <div className="max-w-4xl">
           <p
             ref={statementRef}

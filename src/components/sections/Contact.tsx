@@ -51,13 +51,9 @@ export default function Contact() {
       ref={sectionRef}
       id="contact"
       aria-label="Contact Searon Maharjan"
-      className="scroll-mt-24 py-32 sm:py-44 border-t border-rule relative"
+      className="scroll-mt-24 py-16 sm:py-24 lg:py-32 border-t border-rule relative"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
-        <div className="flex items-center justify-between border-b border-rule pb-4 mb-20 sm:mb-28 font-mono text-label uppercase tracking-widest text-ink-muted">
-          <span>{SITE_DATA.contact.sectionNum} · {SITE_DATA.contact.title}</span>
-        </div>
-
         <div className="flex flex-col gap-12 sm:gap-16 max-w-5xl">
           <h2 className="contact-reveal font-[family-name:var(--font-sans)] text-display uppercase text-ink">
             {SITE_DATA.contact.headingPrefix}{" "}

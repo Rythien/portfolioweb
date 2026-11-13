@@ -46,14 +46,10 @@ export default function Recognition() {
       ref={sectionRef}
       id="recognition"
       aria-label="Awards and Recognition"
-      className="scroll-mt-24 py-28 sm:py-36 border-t border-rule"
+      className="scroll-mt-24 py-16 sm:py-24 lg:py-32 border-t border-rule"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
-        <div className="flex items-center justify-between border-b border-rule pb-4 mb-16 sm:mb-24 font-mono text-label uppercase tracking-widest text-ink-muted">
-          <span>{SITE_DATA.recognition.sectionNum} · {SITE_DATA.recognition.title}</span>
-        </div>
-
-        <div className="mb-16 sm:mb-24 flex flex-col sm:flex-row items-baseline gap-6 sm:gap-12">
+        <div className="mb-12 sm:mb-16 flex flex-col sm:flex-row items-baseline gap-6 sm:gap-12">
           <div className="font-mono text-display sm:text-8xl font-medium text-ink tabular-nums tracking-tighter">
             <Counter value={parseInt(SITE_DATA.recognition.totalAccolades, 10)} padDigits={2} />
           </div>

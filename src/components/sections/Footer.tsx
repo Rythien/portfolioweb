@@ -9,7 +9,7 @@ export default function Footer() {
   };
 
   return (
-    <footer className="py-16 sm:py-24 border-t border-rule font-mono text-label uppercase tracking-widest select-none text-ink-muted">
+    <footer className="pt-16 sm:pt-24 pb-32 border-t border-rule font-mono text-label select-none text-ink-muted">
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="text-center sm:text-left">
           {SITE_DATA.footer.copyright}

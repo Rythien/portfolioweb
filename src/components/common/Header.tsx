@@ -80,18 +80,6 @@ export default function Header() {
             <span>{soundOn ? "On" : "Off"}</span>
           </button>
 
-          {/* Live Clock */}
-          <div
-            aria-live="off"
-            className="flex items-center gap-2 border-x border-white/15 px-4 py-1 tabular-nums"
-            title={`${SITE_DATA.brand.city} Local Time`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            <span suppressHydrationWarning>
-              {SITE_DATA.brand.city} {mounted ? timeStr : "--:--"}
-            </span>
-          </div>
-
           <a
             href="#contact"
             data-magnetic
