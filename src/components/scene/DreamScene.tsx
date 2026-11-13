@@ -212,6 +212,84 @@ function GhostedTitle({
   );
 }
 
+/* ── Drifting fog billows ─────────────────────────────────────── */
+
+let _fogTex: THREE.CanvasTexture | null = null;
+function getFogTexture() {
+  if (_fogTex) return _fogTex;
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const grad = ctx.createRadialGradient(
+    size / 2, size / 2, 0,
+    size / 2, size / 2, size / 2,
+  );
+  grad.addColorStop(0, "rgba(140, 125, 220, 0.55)");
+  grad.addColorStop(0.5, "rgba(120, 105, 200, 0.22)");
+  grad.addColorStop(1, "rgba(100, 90, 180, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  _fogTex = new THREE.CanvasTexture(canvas);
+  return _fogTex;
+}
+
+const FOG_BILLOWS = (() => {
+  const rng = seededRandom(777);
+  return Array.from({ length: 5 }, (_, i) => ({
+    base: new THREE.Vector3(
+      (rng() - 0.5) * 14,
+      (rng() - 0.5) * 8,
+      -4 - i * 0.8,
+    ),
+    scale: 7 + rng() * 5,
+    speed: 0.025 + rng() * 0.03,
+    phase: rng() * Math.PI * 2,
+    spin: (rng() - 0.5) * 0.015,
+    opacity: 0.05 + rng() * 0.04,
+  }));
+})();
+
+function FogDrift() {
+  const refs = useRef<(THREE.Sprite | null)[]>([]);
+  const tex = useMemo(() => getFogTexture(), []);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < FOG_BILLOWS.length; i++) {
+      const s = refs.current[i];
+      if (!s) continue;
+      const b = FOG_BILLOWS[i];
+      s.position.x = b.base.x + Math.sin(t * b.speed + b.phase) * 2.2;
+      s.position.y = b.base.y + Math.cos(t * b.speed * 0.7 + b.phase) * 1.1;
+      const mat = s.material as THREE.SpriteMaterial;
+      mat.rotation += b.spin * 0.016;
+      mat.opacity = b.opacity * (0.8 + Math.sin(t * 0.1 + b.phase) * 0.2);
+    }
+  });
+
+  return (
+    <>
+      {FOG_BILLOWS.map((b, i) => (
+        <sprite
+          key={i}
+          ref={(el) => { refs.current[i] = el; }}
+          position={b.base.toArray() as [number, number, number]}
+          scale={[b.scale, b.scale * 0.65, 1]}
+        >
+          <spriteMaterial
+            map={tex}
+            transparent
+            opacity={b.opacity}
+            depthWrite={false}
+          />
+        </sprite>
+      ))}
+    </>
+  );
+}
+
 /* ── Fog background plane ─────────────────────────────────────── */
 
 function FogPlane() {
@@ -272,6 +350,7 @@ export default function DreamScene({
 
       <DustParticles />
       <PixelSparkles />
+      <FogDrift />
 
       {GHOST_TITLES.map((text, i) => (
         <GhostedTitle

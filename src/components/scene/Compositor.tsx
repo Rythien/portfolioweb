@@ -339,6 +339,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     f.target = f.level;
     f.dataMode = initMode;
     brushMaterial.uniforms.uRestMode.value = f.level;
+    crystalEvents.dreamLevel = f.level;
   }, [gl, brushTargetA, brushTargetB]);
 
   // Brush state
@@ -519,10 +520,18 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       const rate = 3.5;
       f.level += (f.target - f.level) * (1 - Math.exp(-rate * delta));
 
+      // Every DOM-side dream effect (grid, heading glow, glass, cursor)
+      // rides the same flood value through the --dream custom property.
+      crystalEvents.dreamLevel = f.level;
+      document.documentElement.style.setProperty("--dream", f.level.toFixed(3));
+
       // Snap when visually complete
       if (Math.abs(f.level - f.target) < 0.003) {
         f.level = f.target;
         f.active = false;
+        crystalEvents.dreamLevel = f.level;
+        // Hand control back to the html[data-mode] default at rest
+        document.documentElement.style.removeProperty("--dream");
 
         // Write final state to both buffers
         const finalColor = f.target === 1 ? "#ffffff" : "#000000";

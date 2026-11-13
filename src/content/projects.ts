@@ -1,4 +1,4 @@
-export interface ProjectImage {
+﻿export interface ProjectImage {
   src: string;
   alt: string;
   caption?: string;
@@ -61,7 +61,7 @@ export const projects: Project[] = [
       "Maintaining responsive layouts across mobile and desktop viewports",
     ],
     dreamDescription:
-      "A digital storefront sculpted from light and logic—product flows, reactive carts, and checkout choreography woven into a single cohesive architecture.",
+      "A digital storefront sculpted from light and logic: product flows, reactive carts, and checkout choreography woven into a single cohesive architecture.",
     link: "https://github.com/rythien",
     repo: "https://github.com/rythien",
     links: { repo: "https://github.com/rythien" },
@@ -111,7 +111,7 @@ export const projects: Project[] = [
       "Optimizing fluid simulation for render performance",
     ],
     dreamDescription:
-      "Frozen condensation and fluid dynamics captured in 3D—photorealistic glass, kinetic splashes, and cinematic pacing rendered for a commercial audience.",
+      "Frozen condensation and fluid dynamics captured in 3D: photorealistic glass, kinetic splashes, and cinematic pacing rendered for a commercial audience.",
     link: "https://github.com/rythien",
     repo: "https://github.com/rythien",
     links: { repo: "https://github.com/rythien" },
@@ -160,7 +160,7 @@ export const projects: Project[] = [
       "Touch geometry optimization for diverse device sizes",
     ],
     dreamDescription:
-      "Spatial typography drifting through fluid micro-interactions—an interface experiment in kinetic geometry and accessible touch language.",
+      "Spatial typography drifting through fluid micro-interactions: an interface experiment in kinetic geometry and accessible touch language.",
     link: "https://github.com/rythien",
     repo: "https://github.com/rythien",
     links: { repo: "https://github.com/rythien" },

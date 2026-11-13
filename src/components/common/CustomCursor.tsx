@@ -156,7 +156,7 @@ export default function CustomCursor() {
       />
       <div
         ref={reticleRef}
-        className="fixed top-0 left-0 w-8 h-8 rounded-full border border-ink/25 flex items-center justify-center -translate-x-1/2 -translate-y-1/2 transition-colors duration-200 pointer-events-none"
+        className="cursor-reticle fixed top-0 left-0 w-8 h-8 rounded-full border border-ink/25 flex items-center justify-center -translate-x-1/2 -translate-y-1/2 transition-colors duration-200 pointer-events-none"
       >
         {cursorLabel && (
           <span

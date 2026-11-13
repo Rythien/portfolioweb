@@ -53,6 +53,8 @@ export const crystalEvents = {
   flashOpacity: 0,
   /** True once the scene has produced its first rendered frame. */
   sceneReady: false,
+  /** Flood progress 0 (wake) → 1 (dream), written by the Compositor. */
+  dreamLevel: 0,
 };
 
 if (typeof window !== "undefined") {

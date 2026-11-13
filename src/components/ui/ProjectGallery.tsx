@@ -72,8 +72,7 @@ export default function ProjectGallery({
     <div className="flex flex-col gap-3">
       <div
         ref={containerRef}
-        className={`relative w-full ${aspectRatio} overflow-hidden border border-rule group ${isDream ? "shadow-[0_0_40px_rgba(99,102,241,0.08)]" : ""}`}
-        style={{ backgroundColor: "var(--t-surface-el)" }}
+        className={`dream-glass relative w-full ${aspectRatio} overflow-hidden border border-rule group`}
       >
         <div
           ref={innerRef}

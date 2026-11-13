@@ -16,6 +16,17 @@
 
 /* ── Theme tokens ─────────────────────────────────────────────── */
 
+:root {
+  /* Flood progress 0 (wake) → 1 (dream). The Compositor writes this
+     inline each frame during the flood so every DOM-side dream effect
+     moves with the transition; at rest the mode attribute owns it. */
+  --dream: 0;
+}
+
+html[data-mode="dream"] {
+  --dream: 1;
+}
+
 :root,
 html[data-mode="wake"] {
   --t-surface: #E9E7E2;
@@ -79,25 +90,33 @@ html[data-mode="dream"] {
 
 /* ── Typography tokens (fluid scale) ──────────────────────────── */
 
+/* Statements breathe with the flood: tracking opens +0.02em and a soft
+   violet halo blooms as --dream rises. Text itself stays sharp. */
 @utility text-display {
   font-size: clamp(4rem, 2.5rem + 9vw, 11rem);
   line-height: 0.92;
-  letter-spacing: -0.04em;
+  letter-spacing: calc(-0.04em + var(--dream, 0) * 0.02em);
   font-weight: 800;
+  text-shadow: 0 0 calc(var(--dream, 0) * 32px)
+    rgba(168, 148, 255, calc(var(--dream, 0) * 0.45));
 }
 
 @utility text-h1 {
   font-size: clamp(2.75rem, 1.9rem + 4.8vw, 6.5rem);
   line-height: 0.92;
-  letter-spacing: -0.04em;
+  letter-spacing: calc(-0.04em + var(--dream, 0) * 0.02em);
   font-weight: 800;
+  text-shadow: 0 0 calc(var(--dream, 0) * 28px)
+    rgba(168, 148, 255, calc(var(--dream, 0) * 0.4));
 }
 
 @utility text-h2 {
   font-size: clamp(2rem, 1.5rem + 2.5vw, 3.5rem);
   line-height: 0.95;
-  letter-spacing: -0.03em;
+  letter-spacing: calc(-0.03em + var(--dream, 0) * 0.02em);
   font-weight: 700;
+  text-shadow: 0 0 calc(var(--dream, 0) * 22px)
+    rgba(168, 148, 255, calc(var(--dream, 0) * 0.35));
 }
 
 @utility text-h3 {
@@ -231,6 +250,35 @@ textarea:focus-visible {
   }
 }
 
+/* ── Dream materials ──────────────────────────────────────────── */
+
+/* Project panels frost into glass as the flood rises: the paper fill
+   thins out and the dream scene refracts through a growing blur. */
+.dream-glass {
+  background-color: color-mix(
+    in srgb,
+    var(--t-surface-el) calc((1 - var(--dream, 0) * 0.75) * 100%),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(calc(var(--dream, 0) * 14px))
+    saturate(calc(100% + var(--dream, 0) * 50%));
+  backdrop-filter: blur(calc(var(--dream, 0) * 14px))
+    saturate(calc(100% + var(--dream, 0) * 50%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--dream, 0) * 0.12)),
+    0 0 calc(var(--dream, 0) * 48px)
+      rgba(99, 102, 241, calc(var(--dream, 0) * 0.14));
+}
+
+/* The cursor reticle becomes a soft glowing ring in the dream */
+.cursor-reticle {
+  box-shadow:
+    0 0 calc(var(--dream, 0) * 18px)
+      rgba(167, 139, 250, calc(var(--dream, 0) * 0.55)),
+    inset 0 0 calc(var(--dream, 0) * 12px)
+      rgba(167, 139, 250, calc(var(--dream, 0) * 0.3));
+}
+
 /* ── Section rail ─────────────────────────────────────────────── */
 
 @keyframes rail-label-in {
@@ -261,6 +309,8 @@ textarea:focus-visible {
   position: fixed;
   inset: 0;
   z-index: 9990;
+  /* WAKE's discipline dissolves with the flood */
+  opacity: calc(1 - var(--dream, 0));
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 0;

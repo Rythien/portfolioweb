@@ -9,7 +9,7 @@ import { useScrollStore } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import Debris from "@/components/crystal/Debris";
 import CrystalHover from "@/components/crystal/CrystalHover";
-import { useCrystalPose, getCrystalPose } from "@/hooks/useCrystalPose";
+import { useCrystalPose, getCrystalPose, crystalEvents } from "@/hooks/useCrystalPose";
 import { useThemeStore } from "@/store/useThemeStore";
 import Marquee from "./Marquee";
 
@@ -206,6 +206,8 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
 /* ── Pixel gem cursor follower ───────────────────────────────────── */
 
 const SPARKLE_COUNT = 12;
+const _gemWake = new THREE.Color(0xffffff);
+const _gemDream = new THREE.Color(0xc4b5fd);
 
 function PixelGem({
   reducedMotion,
@@ -264,11 +266,11 @@ function PixelGem({
     currentPos.current.lerp(mouseWorld.current, 0.08);
     spriteRef.current.position.copy(currentPos.current);
 
-    // Tint purple in dream mode
+    // Gem turns violet with the flood itself, not the mode flip
     if (matRef.current) {
-      const isDream = useThemeStore.getState().mode === "dream";
-      const target = isDream ? 0xc4b5fd : 0xffffff;
-      matRef.current.color.lerp(new THREE.Color(target), 0.05);
+      matRef.current.color
+        .copy(_gemWake)
+        .lerp(_gemDream, crystalEvents.dreamLevel);
     }
 
     const geo = sparkleGeoRef.current;
