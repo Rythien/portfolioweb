@@ -20,7 +20,7 @@ export default function ModePill() {
   };
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100]">
+    <div data-reveal className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100]">
       <button
         onClick={handleClick}
         aria-label={`Switch to ${mode === "wake" ? "dream" : "wake"} mode`}

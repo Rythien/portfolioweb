@@ -40,7 +40,7 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 pointer-events-none mix-blend-difference text-white">
+    <header data-reveal className="fixed top-0 left-0 right-0 z-50 pointer-events-none mix-blend-difference text-white">
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between w-full">
         {/* Brand Name */}
         <div className="pointer-events-auto">

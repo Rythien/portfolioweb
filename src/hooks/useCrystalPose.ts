@@ -38,6 +38,12 @@ let _shakeEnd = 0;
 let _flashStart = -1;
 let _reassembleStart = -1;
 let _hoverBreakVal = 0;
+let _introBreak = 0;
+
+/** Preloader drives this 1 → 0 so the shards gather into the intact crystal. */
+export function setIntroBreak(v: number) {
+  _introBreak = v;
+}
 
 export const crystalEvents = {
   burst: false,
@@ -45,6 +51,8 @@ export const crystalEvents = {
   shakeOffsetX: 0,
   shakeOffsetY: 0,
   flashOpacity: 0,
+  /** True once the scene has produced its first rendered frame. */
+  sceneReady: false,
 };
 
 if (typeof window !== "undefined") {
@@ -82,7 +90,7 @@ function tick(elapsed: number, delta: number) {
   if (Math.abs(_hoverBreakVal - hoverTarget) < 0.002) _hoverBreakVal = hoverTarget;
 
   // Whichever source is higher wins
-  const tb = Math.max(scrollBreak, _hoverBreakVal);
+  const tb = Math.max(scrollBreak, _hoverBreakVal, _introBreak);
 
   _d.x += (tx - _d.x) * l;
   _d.y += (ty - _d.y) * l;

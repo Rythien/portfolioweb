@@ -95,6 +95,7 @@ export default function SectionRail() {
   return (
     <div
       aria-hidden="true"
+      data-reveal
       className="fixed left-0 top-0 bottom-0 z-40 hidden lg:flex w-12 flex-col items-center gap-6 pt-28 pb-8 pointer-events-none select-none"
     >
       <div className="h-44 flex items-start justify-center overflow-hidden">

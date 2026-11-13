@@ -495,6 +495,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
 
   useFrame((state, delta) => {
     const time = state.clock.elapsedTime;
+    crystalEvents.sceneReady = true;
 
     const lerpFactor = 0.15;
     smoothMouseRef.current.x +=
