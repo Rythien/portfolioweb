@@ -66,7 +66,7 @@ export default function Disciplines() {
                 ({item.number})
               </div>
 
-              <div className="md:col-span-4 font-[family-name:var(--font-sans)] text-h2 uppercase tracking-[-0.03em] text-ink/40 group-hover:text-ink transition-all duration-300 group-hover:translate-x-2">
+              <div className="md:col-span-4 font-[family-name:var(--font-sans)] text-h2 uppercase text-ink/90 group-hover:text-ink transition-all duration-300 group-hover:translate-x-2">
                 {item.title}
               </div>
 

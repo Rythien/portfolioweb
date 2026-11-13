@@ -57,10 +57,10 @@ export default function About() {
         <div className="max-w-4xl">
           <p
             ref={statementRef}
-            className="font-[family-name:var(--font-sans)] text-h1 uppercase tracking-[-0.03em] text-ink [text-wrap:pretty]"
+            className="font-[family-name:var(--font-sans)] text-h1 uppercase text-ink [text-wrap:pretty]"
           >
             {SITE_DATA.about.statementPrefix}{" "}
-            <span className="font-[family-name:var(--font-display)] italic normal-case font-normal text-ink/70">
+            <span className="accent-word text-ink">
               {SITE_DATA.about.statementItalic}
             </span>{" "}
             {SITE_DATA.about.statementSuffix}
@@ -75,15 +75,15 @@ export default function About() {
 
           <div
             ref={secondLangRef}
-            className="mt-14 sm:mt-20 pt-8 sm:pt-10 border-t border-rule flex flex-col gap-3 font-mono text-xs"
+            className="mt-14 sm:mt-20 pt-8 sm:pt-10 border-t border-rule flex flex-col gap-3"
           >
-            <div className="text-label uppercase tracking-widest text-ink-muted">
+            <div className="font-mono text-label text-ink/80">
               {SITE_DATA.about.secondaryLanguage.lang}
             </div>
             <p className="font-[family-name:var(--font-sans)] text-base sm:text-lg text-ink/90 italic leading-relaxed">
               &ldquo;{SITE_DATA.about.secondaryLanguage.quote}&rdquo;
             </p>
-            <p className="text-label text-ink-muted leading-relaxed max-w-[65ch]">
+            <p className="font-[family-name:var(--font-sans)] text-small text-ink/80 leading-relaxed max-w-[60ch] [text-wrap:pretty]">
               {SITE_DATA.about.secondaryLanguage.translation}
             </p>
           </div>

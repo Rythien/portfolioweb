@@ -45,12 +45,12 @@ export const SITE_DATA = {
     statementPrefix: "I design digital spaces where architecture meets",
     statementItalic: "contemplation,",
     statementSuffix: "crafting tactile interfaces designed to outlive the noise.",
-    body: "Based in Kathmandu, I work at the intersection of graphic design, realtime frontend engineering, and 3D visualization. Every system begins with structural clarity—planning the journey, choosing the type, and choreographing responsive motion that communicates intent rather than ornamentation.",
+    body: "Based in Kathmandu, I work at the intersection of graphic design, realtime frontend engineering, and 3D visualization. Every system begins with structural clarity: planning the journey, choosing the type, and choreographing responsive motion that communicates intent rather than ornamentation.",
     secondaryLanguage: {
       lang: "Nepali / नेपाली",
-      quote: "काठमाडौँको ऐतिहासिक शिल्प र आधुनिक डिजिटल प्रविधिको संगम — स्पष्टता, सौन्दर्य र स्थायित्व।",
+      quote: "काठमाडौँको ऐतिहासिक शिल्प र आधुनिक डिजिटल प्रविधिको संगम: स्पष्टता, सौन्दर्य र स्थायित्व।",
       translation:
-        "Rooted in Kathmandu: synthesizing historic Newari spatial craft with modern computational engineering—clarity, elegance, and durability.",
+        "Rooted in Kathmandu: synthesizing historic Newari spatial craft with modern computational engineering. Clarity, elegance, and durability.",
     },
   },
 
@@ -150,7 +150,8 @@ export const SITE_DATA = {
   contact: {
     sectionNum: "(05)",
     title: "Contact",
-    heading: "Say hello.",
+    headingPrefix: "Say",
+    headingAccent: "hello.",
     subtext:
       "Open for freelance commissions, full-time engineering roles, and collaborative creative direction worldwide.",
     email: "seron.maharjan.5@gmail.com",

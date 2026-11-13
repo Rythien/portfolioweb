@@ -77,7 +77,7 @@ export default function Works() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-baseline">
-                <h3 className="lg:col-span-7 font-[family-name:var(--font-sans)] text-h1 uppercase tracking-[-0.03em] text-ink group-hover:text-ink transition-colors">
+                <h3 className="lg:col-span-7 font-[family-name:var(--font-sans)] text-h1 uppercase text-ink group-hover:text-ink transition-colors">
                   <a
                     href={project.link}
                     target="_blank"
@@ -90,8 +90,8 @@ export default function Works() {
                 </h3>
 
                 <div className="lg:col-span-5 flex flex-col gap-4">
-                  <div className="flex flex-wrap gap-2 font-mono text-label uppercase tracking-wider text-ink-muted">
-                    <span className="text-ink/40">Roles:</span>
+                  <div className="flex flex-wrap gap-2 font-mono text-label text-ink/80">
+                    <span>Roles:</span>
                     {project.roles.map((r, i) => (
                       <span key={r} className="text-ink/80">
                         {r}{i < project.roles.length - 1 ? "," : ""}
@@ -112,7 +112,7 @@ export default function Works() {
                   {project.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="font-mono text-[10px] uppercase tracking-widest text-ink-faint border border-rule px-2.5 py-1"
+                      className="font-mono text-label text-ink/80 border border-rule px-2.5 py-1"
                     >
                       {tag}
                     </span>
@@ -130,7 +130,7 @@ export default function Works() {
               </div>
 
               {isDream && project.stack && (
-                <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+                <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-label text-ink/80">
                   {project.stack.frontend.map((t) => (
                     <span key={t}>{t}</span>
                   ))}

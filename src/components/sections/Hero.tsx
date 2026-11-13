@@ -47,7 +47,7 @@ export default function Hero() {
         className="relative min-h-screen flex flex-col justify-between pt-28 pb-20 sm:pb-24 px-6 sm:px-10 lg:px-16 max-w-7xl mx-auto w-full overflow-hidden select-none"
       >
         {/* Top Metadata */}
-        <div className="relative z-10 flex items-center justify-between font-mono text-label text-ink/70 pt-4">
+        <div className="relative z-10 flex items-center justify-between font-mono text-label text-ink/80 pt-4">
           <div className="flex items-center gap-3">
             <span className="w-1.5 h-1.5 rounded-full bg-ink" />
             <span>{SITE_DATA.brand.role}</span>
@@ -64,7 +64,7 @@ export default function Hero() {
         <div className="relative z-10">
           <div
             ref={metaRef}
-            className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-label text-ink/70"
+            className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-label text-ink/80"
           >
             {SITE_DATA.hero.disciplines.map((item, idx) => (
               <React.Fragment key={item}>
@@ -80,7 +80,7 @@ export default function Hero() {
 
           <div
             ref={footerRef}
-            className="flex items-center justify-between border-t border-rule pt-6 font-mono text-label text-ink/70"
+            className="flex items-center justify-between border-t border-rule pt-6 font-mono text-label text-ink/80"
           >
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline">{SITE_DATA.hero.hint}</span>

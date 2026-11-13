@@ -87,16 +87,16 @@ html[data-mode="dream"] {
 }
 
 @utility text-h1 {
-  font-size: clamp(3rem, 2rem + 5vw, 7rem);
-  line-height: 1.0;
-  letter-spacing: -0.03em;
-  font-weight: 700;
+  font-size: clamp(2.75rem, 1.9rem + 4.8vw, 6.5rem);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  font-weight: 800;
 }
 
 @utility text-h2 {
-  font-size: clamp(2.25rem, 1.6rem + 2.5vw, 4rem);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  font-size: clamp(2rem, 1.5rem + 2.5vw, 3.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
   font-weight: 700;
 }
 
@@ -125,11 +125,26 @@ html[data-mode="dream"] {
 }
 
 @utility text-label {
-  font-size: clamp(0.8125rem, 0.75rem + 0.2vw, 0.9375rem);
+  /* Labels never drop below 14px or 500 weight: thin grey text is dead text */
+  font-size: clamp(0.875rem, 0.85rem + 0.15vw, 0.9375rem);
   line-height: 1.4;
   letter-spacing: 0.08em;
   font-weight: 500;
   text-transform: uppercase;
+}
+
+/* One Newsreader italic lowercase accent word per CAPS statement.
+   leading 1.1 + bottom reserve so descenders (y g j p q) never clip. */
+@layer components {
+  .accent-word {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    text-transform: lowercase;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    padding-bottom: 0.05em;
+  }
 }
 
 @utility tnum {

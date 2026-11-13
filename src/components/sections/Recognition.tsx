@@ -54,7 +54,7 @@ export default function Recognition() {
         </div>
 
         <div className="mb-16 sm:mb-24 flex flex-col sm:flex-row items-baseline gap-6 sm:gap-12">
-          <div className="font-mono text-display sm:text-8xl font-light text-ink tabular-nums tracking-tighter">
+          <div className="font-mono text-display sm:text-8xl font-medium text-ink tabular-nums tracking-tighter">
             <Counter value={parseInt(SITE_DATA.recognition.totalAccolades, 10)} padDigits={2} />
           </div>
           <div className="font-mono text-label uppercase tracking-widest text-ink-muted max-w-xs">
@@ -76,7 +76,7 @@ export default function Recognition() {
                 {item.year}
               </div>
 
-              <div className="md:col-span-4 font-[family-name:var(--font-display)] text-xl font-light text-ink">
+              <div className="md:col-span-4 font-[family-name:var(--font-display)] text-xl font-normal text-ink">
                 {item.project}
               </div>
 

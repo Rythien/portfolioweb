@@ -60,7 +60,8 @@ export default function Contact() {
 
         <div className="flex flex-col gap-12 sm:gap-16 max-w-5xl">
           <h2 className="contact-reveal font-[family-name:var(--font-sans)] text-display uppercase text-ink">
-            {SITE_DATA.contact.heading}
+            {SITE_DATA.contact.headingPrefix}{" "}
+            <span className="accent-word">{SITE_DATA.contact.headingAccent}</span>
           </h2>
 
           <p className="contact-reveal font-[family-name:var(--font-sans)] text-body-lg text-ink/70 leading-relaxed max-w-[60ch] [text-wrap:pretty]">
@@ -72,7 +73,7 @@ export default function Contact() {
               href={`mailto:${SITE_DATA.contact.email}`}
               data-magnetic
               data-cursor="Email"
-              className="px-8 py-5 bg-ink text-surface font-mono text-xs sm:text-sm uppercase tracking-widest font-semibold hover:opacity-90 transition-all duration-300 border border-ink"
+              className="px-8 py-5 bg-ink text-surface font-mono text-label font-semibold hover:opacity-90 transition-all duration-300 border border-ink"
             >
               Send Email ↗
             </a>
@@ -81,21 +82,21 @@ export default function Contact() {
               onClick={handleCopyEmail}
               data-magnetic
               aria-label="Copy email address to clipboard"
-              className="px-6 py-5 border border-rule text-ink font-mono text-xs uppercase tracking-widest hover:border-rule-hover transition-colors"
+              className="px-6 py-5 border border-rule text-ink font-mono text-label hover:border-rule-hover transition-colors"
             >
               {copied ? "Copied ✓" : `Copy: ${SITE_DATA.contact.email}`}
             </button>
           </div>
 
-          <div className="contact-reveal grid grid-cols-1 md:grid-cols-3 gap-8 pt-16 border-t border-rule font-mono text-xs">
+          <div className="contact-reveal grid grid-cols-1 md:grid-cols-3 gap-8 pt-16 border-t border-rule font-mono">
             <div className="flex flex-col gap-2">
-              <span className="text-label uppercase tracking-widest text-ink-faint">Location</span>
+              <span className="text-label text-ink/80">Location</span>
               <span className="text-ink text-sm">{SITE_DATA.contact.location}</span>
-              <span className="text-ink-muted">{SITE_DATA.contact.availability}</span>
+              <span className="text-sm text-ink/80">{SITE_DATA.contact.availability}</span>
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-label uppercase tracking-widest text-ink-faint">Phone</span>
+              <span className="text-label text-ink/80">Phone</span>
               <a
                 href={`tel:${SITE_DATA.contact.phone.replace(/\s+/g, "")}`}
                 data-magnetic
@@ -103,12 +104,12 @@ export default function Contact() {
               >
                 {SITE_DATA.contact.phone}
               </a>
-              <span className="text-ink-muted">Telegram / WhatsApp</span>
+              <span className="text-sm text-ink/80">Telegram / WhatsApp</span>
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-label uppercase tracking-widest text-ink-faint">Elsewhere</span>
-              <div className="flex flex-wrap gap-x-5 gap-y-2 uppercase tracking-wider text-ink-muted">
+              <span className="text-label text-ink/80">Elsewhere</span>
+              <div className="flex flex-wrap gap-x-5 gap-y-2 text-label text-ink/80">
                 {SITE_DATA.contact.socials.map((s) => (
                   <a
                     key={s.label}

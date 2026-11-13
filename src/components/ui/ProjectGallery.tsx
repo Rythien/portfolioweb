@@ -81,13 +81,13 @@ export default function ProjectGallery({
         >
           {isPlaceholder ? (
             <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-              <span className="font-mono text-label uppercase tracking-widest text-ink-faint">
+              <span className="font-mono text-label text-ink/80">
                 {category}
               </span>
-              <span className="font-[family-name:var(--font-display)] text-h2 font-light text-ink/20">
+              <span className="font-[family-name:var(--font-display)] text-h2 font-normal text-ink/20">
                 {title}
               </span>
-              <span className="font-mono text-label uppercase tracking-widest text-ink-faint">
+              <span className="font-mono text-label text-ink/80">
                 Media pending
               </span>
             </div>
@@ -103,10 +103,6 @@ export default function ProjectGallery({
         </div>
 
         <div className="absolute inset-0 bg-gradient-to-t from-surface/40 via-transparent to-transparent pointer-events-none" />
-
-        <div className="absolute top-4 right-4 font-mono text-[10px] uppercase tracking-widest text-ink-muted bg-surface/80 backdrop-blur-sm px-2.5 py-1 border border-rule pointer-events-none">
-          {title}
-        </div>
 
         {hasMultiple && (
           <>
@@ -149,10 +145,10 @@ export default function ProjectGallery({
       </div>
 
       {current?.caption && (
-        <p className="font-mono text-[10px] uppercase tracking-widest text-ink-faint px-1">
+        <p className="font-mono text-label text-ink/80 px-1">
           {current.caption}
           {hasMultiple && (
-            <span className="ml-2 text-ink-faint/60">
+            <span className="ml-2 text-ink/60 tabular-nums">
               {active + 1} / {images.length}
             </span>
           )}
