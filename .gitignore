@@ -43,3 +43,7 @@ next-env.d.ts
 # test screenshots & edge profiles
 *.png
 .edge-temp-profile/
+
+# crystal bake: keep the example env + baked assets despite the rules above
+!.env.example
+!public/models/*.png

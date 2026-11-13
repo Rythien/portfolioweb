@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
+import { MeshTransmissionMaterial, useFBO, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
 import { useFractureStore } from "@/store/useFractureStore";
@@ -466,6 +466,34 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const tint = variant === "dream" ? DREAM_TINT : WAKE_TINT;
     useCrystalSound();
 
+    // Baked intact mesh from Blender; procedural rock stays as fallback and
+    // as the bounds reference so pose/hover/break tuning still fits
+    const { nodes } = useGLTF("/models/crystal.glb") as unknown as {
+      nodes: Record<string, THREE.Object3D>;
+    };
+    const { intactGeo, bakedNormalMap } = useMemo(() => {
+      const node = nodes?.Crystal;
+      if (!(node instanceof THREE.Mesh)) {
+        return { intactGeo: geo, bakedNormalMap: null as THREE.Texture | null };
+      }
+      const g = (node.geometry as THREE.BufferGeometry).clone();
+      g.computeBoundingBox();
+      const bb = g.boundingBox!;
+      const center = bb.getCenter(new THREE.Vector3());
+      g.translate(-center.x, -center.y, -center.z);
+      const size = bb.getSize(new THREE.Vector3());
+      geo.computeBoundingBox();
+      const target = geo.boundingBox!.getSize(new THREE.Vector3());
+      // Uniform scale only: non-uniform would skew the exported split
+      // normals the bake relies on
+      const s =
+        Math.max(target.x, target.y, target.z) /
+        Math.max(size.x, size.y, size.z);
+      g.scale(s, s, s);
+      const mat = node.material as THREE.MeshStandardMaterial | undefined;
+      return { intactGeo: g, bakedNormalMap: mat?.normalMap ?? null };
+    }, [nodes, geo]);
+
     const frostNormalMap = useMemo(() => createFrostNormalMap(256), []);
     const glowTex = useMemo(() => createGlowTexture(128), []);
     const inclusions = useMemo(() => buildInclusions(seed, INCLUSION_COUNT, R), [seed]);
@@ -686,7 +714,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         )}
 
         {/* Merged (intact) crystal */}
-        <mesh ref={mergedRef} geometry={geo}>
+        <mesh ref={mergedRef} geometry={intactGeo}>
           <MeshTransmissionMaterial
             buffer={mergedFbo.texture}
             thickness={GLASS_LOOK.thickness}
@@ -706,7 +734,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             backside
             backsideThickness={GLASS_LOOK.backsideThickness}
             envMapIntensity={tint.envMapIntensity}
-            normalMap={frostNormalMap}
+            normalMap={bakedNormalMap ?? frostNormalMap}
             normalScale={normalScale}
           />
         </mesh>
@@ -766,5 +794,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     );
   },
 );
+
+useGLTF.preload("/models/crystal.glb");
 
 export default GlassCrystal;
