@@ -109,7 +109,7 @@ export default function ProjectGallery({
               type="button"
               onClick={retreat}
               aria-label="Previous image"
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-surface/70 backdrop-blur-sm border border-rule text-ink-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              className="absolute z-20 left-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-surface/70 backdrop-blur-sm border border-rule text-ink-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             >
               <span aria-hidden="true">&lsaquo;</span>
             </button>
@@ -117,7 +117,7 @@ export default function ProjectGallery({
               type="button"
               onClick={advance}
               aria-label="Next image"
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-surface/70 backdrop-blur-sm border border-rule text-ink-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              className="absolute z-20 right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-surface/70 backdrop-blur-sm border border-rule text-ink-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             >
               <span aria-hidden="true">&rsaquo;</span>
             </button>
@@ -125,7 +125,7 @@ export default function ProjectGallery({
         )}
 
         {hasMultiple && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+          <div className="absolute z-20 bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
             {images.map((_, i) => (
               <button
                 key={i}

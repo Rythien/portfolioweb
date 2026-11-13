@@ -8,6 +8,8 @@ export interface Project {
   slug: string;
   counter: string;
   title: string;
+  /** The one word of the title set in Newsreader italic lowercase. */
+  titleAccent?: string;
   subtitle?: string;
   category: string;
   type?: string;
@@ -39,6 +41,7 @@ export const projects: Project[] = [
     slug: "pixel-plus",
     counter: "01 / 03",
     title: "Pixel Plus",
+    titleAccent: "Plus",
     subtitle: "Full-stack e-commerce web platform",
     category: "Web Application / Full-Stack",
     type: "Web design",
@@ -89,6 +92,7 @@ export const projects: Project[] = [
     slug: "4c-iced-coffee",
     counter: "02 / 03",
     title: "4C Iced Coffee",
+    titleAccent: "Coffee",
     subtitle: "Commercial 3D product animation",
     category: "3D Commercial Animation",
     type: "3D / Blender",
@@ -138,6 +142,7 @@ export const projects: Project[] = [
     slug: "kinetic-archive",
     counter: "03 / 03",
     title: "Kinetic Architecture",
+    titleAccent: "Architecture",
     subtitle: "Kinetic spatial typography interface",
     category: "Interactive Interface / Mobile",
     type: "App design",
