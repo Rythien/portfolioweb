@@ -535,7 +535,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       if (heroLogoRef.current) {
         heroLogoRef.current.visible = !mergedHidden;
         const hMat = heroLogoRef.current.material as THREE.MeshStandardMaterial;
-        if (hMat) hMat.opacity = (0.6 - crossfade * 0.6);
+        if (hMat) hMat.opacity = 1 - crossfade;
       }
 
       if (mergedRef.current) {
@@ -641,7 +641,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           logoMesh.quaternion.copy(mesh.quaternion);
           logoMesh.scale.setScalar(scaleVal);
           const lMat = logoMesh.material as THREE.MeshStandardMaterial;
-          if (lMat) lMat.opacity = shardOpacity * 0.55;
+          if (lMat) lMat.opacity = shardOpacity;
         }
       }
     });
@@ -676,13 +676,11 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         {heroLogo && (
           <mesh ref={heroLogoRef} geometry={heroLogo.geometry}>
             <meshStandardMaterial
-              color="#c0d8e8"
-              emissive="#90b8d0"
-              emissiveIntensity={0.25}
+              color="#aab0c0"
               transparent
-              opacity={0.6}
-              roughness={0.4}
-              depthWrite={false}
+              opacity={1}
+              roughness={0.6}
+              metalness={0}
             />
           </mesh>
         )}
@@ -755,13 +753,11 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               visible={false}
             >
               <meshStandardMaterial
-                color="#c0d8e8"
-                emissive="#90b8d0"
-                emissiveIntensity={0.2}
+                color="#aab0c0"
                 transparent
-                opacity={0.55}
-                roughness={0.4}
-                depthWrite={false}
+                opacity={1}
+                roughness={0.6}
+                metalness={0}
               />
             </mesh>
           ) : null,
