@@ -8,6 +8,7 @@ import WakeScene from "./WakeScene";
 import DreamScene from "./DreamScene";
 import { useThemeStore, type Mode } from "@/store/useThemeStore";
 import { useFractureStore } from "@/store/useFractureStore";
+import { getSectionProgress } from "@/store/useScrollStore";
 import { crystalEvents } from "@/hooks/useCrystalPose";
 
 /* ── Brush tuning ─────────────────────────────────────────────── */
@@ -383,6 +384,35 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
   const stampHistoryRef = useRef<{ x: number; y: number; t: number }[]>([]);
   const blobFieldAtCursor = useRef(0);
   const brushRadiusRef = useRef(BRUSH_RADIUS);
+
+  // Blob click → flood. Scoped to the hero section only, never window:
+  // clicks in About/Works or on buttons/links/the pill must not flood.
+  const startTransition = useThemeStore((s) => s.startTransition);
+  useEffect(() => {
+    const hero = document.getElementById("top");
+    if (!hero) return;
+
+    let lastFire = 0;
+    const onClick = (e: MouseEvent) => {
+      const now = performance.now();
+      if (now - lastFire < 400) return;
+      if (blobFieldAtCursor.current <= 0.5) return;
+
+      // Hero must still be in view (same mapping as the hero headline fade)
+      const heroScroll = Math.max(0, (getSectionProgress("top") - 0.5) / 0.5);
+      if (heroScroll >= 0.5) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("button, a")) return;
+      if (useFractureStore.getState().hoverBreak) return;
+
+      lastFire = now;
+      startTransition({ x: e.clientX, y: e.clientY });
+    };
+
+    hero.addEventListener("click", onClick);
+    return () => hero.removeEventListener("click", onClick);
+  }, [startTransition]);
 
   useEffect(() => {
     return () => {
