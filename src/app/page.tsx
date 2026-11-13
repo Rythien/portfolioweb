@@ -3,6 +3,7 @@ import Header from "@/components/common/Header";
 import Preloader from "@/components/common/Preloader";
 import ModePill from "@/components/chrome/ModePill";
 import SectionRail from "@/components/chrome/SectionRail";
+import SoundLayer from "@/components/chrome/SoundLayer";
 import TransitionLayer from "@/components/chrome/TransitionLayer";
 import SceneLoader from "@/components/scene/SceneLoader";
 
@@ -37,6 +38,7 @@ export default function Home() {
       </main>
       <Footer />
       <ModePill />
+      <SoundLayer />
       <TransitionLayer />
     </LenisProvider>
   );
