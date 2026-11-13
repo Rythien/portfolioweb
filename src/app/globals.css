@@ -363,6 +363,24 @@ textarea:focus-visible {
   }
 }
 
+/* ── Footer ticker ────────────────────────────────────────────── */
+
+.ticker-track {
+  animation: ticker-scroll 42s linear infinite;
+}
+
+@keyframes ticker-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+  }
+}
+
 /* ── Section rail ─────────────────────────────────────────────── */
 
 @keyframes rail-label-in {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SITE_DATA } from "@/content/site";
@@ -8,7 +8,6 @@ import { SITE_DATA } from "@/content/site";
 gsap.registerPlugin(ScrollTrigger);
 
 export default function Contact() {
-  const [copied, setCopied] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -40,12 +39,6 @@ export default function Contact() {
     return () => ctx.revert();
   }, []);
 
-  const handleCopyEmail = () => {
-    navigator.clipboard.writeText(SITE_DATA.contact.email);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2400);
-  };
-
   return (
     <section
       ref={sectionRef}
@@ -74,17 +67,9 @@ export default function Contact() {
               Send Email ↗
             </a>
 
-            <button
-              onClick={handleCopyEmail}
-              data-magnetic
-              aria-label="Copy email address to clipboard"
-              className="pressable px-6 py-5 border border-rule text-ink font-mono text-label hover:border-rule-hover"
-            >
-              {copied ? "Copied ✓" : `Copy: ${SITE_DATA.contact.email}`}
-            </button>
           </div>
 
-          <div className="contact-reveal grid grid-cols-1 md:grid-cols-3 gap-8 pt-16 border-t border-rule font-mono">
+          <div className="contact-reveal grid grid-cols-1 md:grid-cols-2 gap-8 pt-16 border-t border-rule font-mono">
             <div className="flex flex-col gap-2">
               <span className="text-label text-ink/80">Location</span>
               <span className="text-ink text-sm">{SITE_DATA.contact.location}</span>
@@ -103,23 +88,6 @@ export default function Contact() {
               <span className="text-sm text-ink/80">Telegram / WhatsApp</span>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <span className="text-label text-ink/80">Elsewhere</span>
-              <div className="flex flex-wrap gap-x-5 gap-y-2 text-label text-ink/80">
-                {SITE_DATA.contact.socials.map((s) => (
-                  <a
-                    key={s.label}
-                    href={s.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-magnetic
-                    className="hover:text-ink underline underline-offset-4 decoration-ink/20 hover:decoration-ink transition-colors"
-                  >
-                    {s.label} ↗
-                  </a>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>
