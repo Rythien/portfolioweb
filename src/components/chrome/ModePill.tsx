@@ -1,7 +1,7 @@
 "use client";
 
 import { useThemeStore, type Mode } from "@/store/useThemeStore";
-import { crystalEvents } from "@/hooks/useCrystalPose";
+import { crystalEvents } from "@/hooks/crystalState";
 
 export default function ModePill() {
   const mode = useThemeStore((s) => s.mode);

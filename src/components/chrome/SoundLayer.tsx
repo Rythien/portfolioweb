@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useSoundStore } from "@/store/useSoundStore";
 import { useThemeStore } from "@/store/useThemeStore";
-import { crystalEvents } from "@/hooks/useCrystalPose";
-import { initAudioContext } from "@/hooks/useCrystalSound";
+import { crystalEvents } from "@/hooks/crystalState";
+import { initAudioContext } from "@/hooks/crystalAudio";
 
 const NAV_SELECTOR =
   'header a, header button, [role="group"][aria-label="Site mode"] button, footer a, footer button';

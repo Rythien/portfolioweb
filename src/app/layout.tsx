@@ -4,6 +4,7 @@ import "./globals.css";
 import CustomCursor from "@/components/common/CustomCursor";
 import ThemeSync from "@/components/chrome/ThemeSync";
 import GridOverlay from "@/components/chrome/GridOverlay";
+import DeferredDisplayFont from "@/components/chrome/DeferredDisplayFont";
 import { SITE_DATA } from "@/content/site";
 
 const newsreader = Newsreader({
@@ -13,6 +14,9 @@ const newsreader = Newsreader({
   style: ["normal", "italic"],
   axes: ["opsz"],
   adjustFontFallback: true,
+  // ~270KB of variable italic/roman for accent words only; switched on
+  // after load by DeferredDisplayFont so it never competes with LCP
+  preload: false,
 });
 
 const geist = Geist({
@@ -89,7 +93,7 @@ export default function RootLayout({
     <html
       lang="en"
       data-mode="wake"
-      className={`${newsreader.variable} ${geist.variable} ${geistMono.variable} antialiased`}
+      className={`${geist.variable} ${geistMono.variable} antialiased`}
     >
       <head>
         <script
@@ -101,6 +105,7 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning className="font-[family-name:var(--font-sans)] bg-surface text-ink min-h-screen selection:bg-ink selection:text-surface">
         <ThemeSync />
+        <DeferredDisplayFont family={newsreader.style.fontFamily} />
         <CustomCursor />
         <GridOverlay />
         {children}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SITE_DATA } from "@/content/site";
 import { useMounted } from "@/utils/useMounted";
 import { useSoundStore } from "@/store/useSoundStore";
-import { initAudioContext, playTick } from "@/hooks/useCrystalSound";
+import { initAudioContext, playTick } from "@/hooks/crystalAudio";
 
 export default function Header() {
   const mounted = useMounted();

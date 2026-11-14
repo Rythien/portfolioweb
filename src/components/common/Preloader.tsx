@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { gsap } from "gsap";
-import { setIntroBreak, crystalEvents } from "@/hooks/useCrystalPose";
+import { setIntroBreak, crystalEvents } from "@/hooks/crystalState";
 
 interface PreloaderProps {
   onComplete?: () => void;

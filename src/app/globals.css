@@ -55,6 +55,12 @@ html[data-mode="dream"] {
 
 /* ── Base ──────────────────────────────────────────────────────── */
 
+/* Display face before DeferredDisplayFont switches Newsreader on (it sets
+   --font-display inline on <html>, which wins once applied) */
+:root:not([data-display-font]) {
+  --font-display: Georgia, "Times New Roman", serif;
+}
+
 @layer base {
   html {
     scroll-behavior: initial;
