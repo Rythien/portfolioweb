@@ -1,5 +1,8 @@
 ﻿export interface ProjectImage {
+  /** WAKE variant. */
   src: string;
+  /** DREAM variant, crossfaded in by the --dream flood value. */
+  dreamSrc?: string;
   alt: string;
   caption?: string;
 }
@@ -25,6 +28,9 @@ export interface Project {
   link: string;
   links?: { live?: string; repo?: string };
   repo?: string;
+  /** Panel and case-study hero. */
+  cover: ProjectImage;
+  /** Case-study gallery. */
   images: ProjectImage[];
   aspectRatio?: string;
   ogImage?: string;
@@ -34,6 +40,43 @@ export interface Project {
     tools?: string[];
   };
   tags: string[];
+}
+
+/*
+ * All project media is generated concept artwork (npm run gen:covers),
+ * not screenshots or product renders, and is labelled as such.
+ */
+const CONCEPT = "Concept artwork";
+
+function conceptArt(slug: string, title: string, tools: string) {
+  const file = (name: string) => ({
+    src: `/projects/${slug}/${name}.webp`,
+    dreamSrc: `/projects/${slug}/${name}-dream.webp`,
+  });
+  return {
+    cover: {
+      ...file("cover"),
+      alt: `Concept artwork for ${title}: ice chips refracting the title`,
+      caption: CONCEPT,
+    },
+    images: [
+      {
+        ...file("detail-1"),
+        alt: `Concept artwork for ${title}: a single ice chip refracting the title, shallow depth of field`,
+        caption: CONCEPT,
+      },
+      {
+        ...file("detail-2"),
+        alt: `Concept artwork for ${title}: ${tools} embossed beneath a row of glass chips`,
+        caption: CONCEPT,
+      },
+      {
+        ...file("detail-3"),
+        alt: `Concept artwork for ${title}: the title smeared along a light trail through fog`,
+        caption: CONCEPT,
+      },
+    ],
+  };
 }
 
 export const projects: Project[] = [
@@ -68,18 +111,11 @@ export const projects: Project[] = [
     link: "https://github.com/rythien",
     repo: "https://github.com/rythien",
     links: { repo: "https://github.com/rythien" },
-    images: [
-      {
-        src: "/opengraph-image",
-        alt: "Pixel Plus storefront overview",
-        caption: "Storefront and checkout architecture",
-      },
-      {
-        src: "/opengraph-image",
-        alt: "Shopping cart and checkout flow",
-        caption: "Reactive cart and validation interface",
-      },
-    ],
+    ...conceptArt(
+      "pixel-plus",
+      "Pixel Plus",
+      "the React, Next.js, Tailwind CSS, TypeScript, Node.js and MongoDB logos",
+    ),
     aspectRatio: "aspect-[16/10]",
     stack: {
       frontend: ["React", "Next.js", "Tailwind CSS", "TypeScript"],
@@ -119,18 +155,7 @@ export const projects: Project[] = [
     link: "https://github.com/rythien",
     repo: "https://github.com/rythien",
     links: { repo: "https://github.com/rythien" },
-    images: [
-      {
-        src: "/opengraph-image",
-        alt: "4C Iced Coffee hero render",
-        caption: "Photorealistic beverage packaging render",
-      },
-      {
-        src: "/opengraph-image",
-        alt: "Fluid splash simulation",
-        caption: "Dynamic fluid dynamics and condensation",
-      },
-    ],
+    ...conceptArt("4c-iced-coffee", "4C Iced Coffee", "the Blender logo"),
     aspectRatio: "aspect-[16/10]",
     stack: {
       frontend: ["Blender", "EEVEE / Cycles"],
@@ -169,18 +194,11 @@ export const projects: Project[] = [
     link: "https://github.com/rythien",
     repo: "https://github.com/rythien",
     links: { repo: "https://github.com/rythien" },
-    images: [
-      {
-        src: "/opengraph-image",
-        alt: "Kinetic Architecture interface",
-        caption: "Kinetic spatial typography prototype",
-      },
-      {
-        src: "/opengraph-image",
-        alt: "Mobile touch interaction patterns",
-        caption: "Accessible touch geometries",
-      },
-    ],
+    ...conceptArt(
+      "kinetic-archive",
+      "Kinetic Architecture",
+      "the React, Framer Motion, TypeScript and Figma logos",
+    ),
     aspectRatio: "aspect-[16/10]",
     stack: {
       frontend: ["React", "Framer Motion", "TypeScript"],

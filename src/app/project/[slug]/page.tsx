@@ -4,8 +4,14 @@ import { notFound } from "next/navigation";
 import Header from "@/components/common/Header";
 import Footer from "@/components/sections/Footer";
 import LenisProvider from "@/components/common/LenisProvider";
-import PixelImage from "@/components/ui/PixelImage";
+import ProjectArt from "@/components/ui/ProjectArt";
 import { projects, getProjectBySlug } from "@/content/projects";
+
+// main is max-w-5xl (1024px) with px-6 / sm:px-10 gutters
+const CASE_STUDY_FULL =
+  "(min-width: 1104px) 1024px, (min-width: 640px) calc(100vw - 80px), calc(100vw - 48px)";
+const CASE_STUDY_HALF =
+  "(min-width: 1104px) 496px, (min-width: 640px) calc(50vw - 56px), calc(100vw - 48px)";
 
 export function generateStaticParams() {
   return projects.map((p) => ({
@@ -49,7 +55,7 @@ export default async function ProjectDetailPage({
           </div>
 
           <header className="mb-14">
-            <div className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+            <div className="font-mono text-xs uppercase tracking-widest text-ink-muted mb-3">
               Case Study // 0{currentIndex + 1}
             </div>
             <h1 className="font-[family-name:var(--font-display)] text-5xl sm:text-7xl font-light text-ink tracking-tight">
@@ -59,38 +65,40 @@ export default async function ProjectDetailPage({
               {project.subtitle}
             </p>
             {project.placeholder && (
-              <div className="mt-4 inline-block font-mono text-xs text-ink-faint border border-rule px-3 py-1 bg-ink/[0.02]">
+              <div className="mt-4 inline-block font-mono text-xs text-ink-muted border border-rule px-3 py-1 bg-ink/[0.02]">
                 Details pending
               </div>
             )}
           </header>
 
-          <div className="mb-16">
-            <PixelImage
-              src={project.images[0]?.src || "/opengraph-image"}
-              alt={project.title}
-              figureNumber="Fig. 01"
-              caption={project.images[0]?.caption || project.subtitle}
-              aspectRatio="aspect-[16/9]"
+          <figure className="mb-16 flex flex-col gap-3">
+            <ProjectArt
+              image={project.cover}
+              sizes={CASE_STUDY_FULL}
+              lcp
+              className="border border-rule rounded-sm"
             />
-          </div>
+            <figcaption className="font-mono text-label uppercase tracking-wider text-ink/80 tabular-nums">
+              Fig. 01 · {project.cover.caption}
+            </figcaption>
+          </figure>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 mb-16 border-b border-rule pb-16">
             <div className="lg:col-span-4 flex flex-col gap-6 font-mono text-xs">
               <div>
-                <span className="text-ink-faint uppercase tracking-widest block mb-2">
+                <span className="text-ink-muted uppercase tracking-widest block mb-2">
                   Timeline
                 </span>
                 <span className="text-ink">{project.year}</span>
               </div>
               <div>
-                <span className="text-ink-faint uppercase tracking-widest block mb-2">
+                <span className="text-ink-muted uppercase tracking-widest block mb-2">
                   Discipline
                 </span>
                 <span className="text-ink">{project.type}</span>
               </div>
               <div>
-                <span className="text-ink-faint uppercase tracking-widest block mb-2">
+                <span className="text-ink-muted uppercase tracking-widest block mb-2">
                   Frontend Stack
                 </span>
                 <div className="flex flex-wrap gap-1.5">
@@ -106,7 +114,7 @@ export default async function ProjectDetailPage({
               </div>
               {project.stack.tools && (
                 <div>
-                  <span className="text-ink-faint uppercase tracking-widest block mb-2">
+                  <span className="text-ink-muted uppercase tracking-widest block mb-2">
                     Tools
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -137,14 +145,14 @@ export default async function ProjectDetailPage({
 
             <div className="lg:col-span-8 flex flex-col gap-8 font-[family-name:var(--font-sans)] text-base sm:text-lg text-ink-muted leading-relaxed">
               <div>
-                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-muted mb-3">
                   Overview
                 </h2>
                 <p>{project.overview}</p>
               </div>
 
               <div>
-                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-muted mb-3">
                   Key Features
                 </h2>
                 <ul className="list-disc list-inside space-y-2 text-base text-ink/75">
@@ -155,7 +163,7 @@ export default async function ProjectDetailPage({
               </div>
 
               <div>
-                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-faint mb-3">
+                <h2 className="font-mono text-xs uppercase tracking-widest text-ink-muted mb-3">
                   Technical Challenges
                 </h2>
                 <ul className="list-disc list-inside space-y-2 text-base text-ink/75">
@@ -167,16 +175,24 @@ export default async function ProjectDetailPage({
             </div>
           </div>
 
-          {project.images[1] && (
-            <div className="mb-16">
-              <PixelImage
-                src={project.images[1].src}
-                alt={project.images[1].alt}
-                figureNumber="Fig. 02"
-                caption={project.images[1].caption}
-                aspectRatio="aspect-[16/10]"
-              />
-            </div>
+          {project.images.length > 0 && (
+            <section aria-label="Gallery" className="mb-16 grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+              {project.images.map((image, i) => (
+                <figure
+                  key={image.src}
+                  className={`flex flex-col gap-3 ${i === 0 ? "sm:col-span-2" : ""}`}
+                >
+                  <ProjectArt
+                    image={image}
+                    sizes={i === 0 ? CASE_STUDY_FULL : CASE_STUDY_HALF}
+                    className="border border-rule rounded-sm"
+                  />
+                  <figcaption className="font-mono text-label uppercase tracking-wider text-ink/80 tabular-nums">
+                    Fig. 0{i + 2} · {image.caption}
+                  </figcaption>
+                </figure>
+              ))}
+            </section>
           )}
 
           <div className="pt-12 border-t border-rule flex items-center justify-between font-mono text-xs uppercase tracking-widest">

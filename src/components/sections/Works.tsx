@@ -5,7 +5,7 @@ import Link from "next/link";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { projects, type Project } from "@/content/projects";
-import ProjectGallery from "@/components/ui/ProjectGallery";
+import ProjectArt from "@/components/ui/ProjectArt";
 import WorkChip from "@/components/ui/WorkChip";
 import { useThemeStore } from "@/store/useThemeStore";
 
@@ -56,6 +56,24 @@ export default function Works() {
               trigger: panel,
               start: "top 80%",
               toggleActions: "play none none reverse",
+            },
+          }
+        );
+      });
+
+      // Artwork drifts slightly inside its frame as the panel scrolls by
+      gsap.utils.toArray<HTMLElement>(".work-art-drift").forEach((art) => {
+        gsap.fromTo(
+          art,
+          { yPercent: -3 },
+          {
+            yPercent: 3,
+            ease: "none",
+            scrollTrigger: {
+              trigger: art.parentElement,
+              start: "top bottom",
+              end: "bottom top",
+              scrub: 0.6,
             },
           }
         );
@@ -123,7 +141,7 @@ export default function Works() {
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div className="flex flex-col gap-24 sm:gap-32">
-          {projects.map((project) => (
+          {projects.map((project, index) => (
             <article key={project.slug} className="flex flex-col gap-8 sm:gap-12">
               <div className="work-head flex flex-col gap-8 sm:gap-12">
                 <div className="flex items-baseline justify-between border-b border-rule pb-4 font-mono text-label text-ink/80">
@@ -179,12 +197,15 @@ export default function Works() {
                 onPointerLeave={handleTiltLeave}
               >
                 <div className="work-panel-tilt relative will-change-transform">
-                  <ProjectGallery
-                    images={project.images}
-                    title={project.title}
-                    category={project.category}
-                    aspectRatio={project.aspectRatio}
-                  />
+                  <div className="dream-glass relative overflow-hidden border border-rule">
+                    <div className="work-art-drift scale-[1.07] will-change-transform">
+                      <ProjectArt
+                        image={project.cover}
+                        sizes="(min-width: 1280px) 1152px, (min-width: 1024px) calc(100vw - 128px), (min-width: 640px) calc(100vw - 80px), calc(100vw - 48px)"
+                        loading={index === 0 ? "eager" : "lazy"}
+                      />
+                    </div>
+                  </div>
                   <Link
                     href={`/project/${project.slug}`}
                     aria-label={`Open ${project.title} case study`}
@@ -194,6 +215,9 @@ export default function Works() {
                 </div>
                 <WorkChip project={project} />
               </div>
+              <p className="-mt-4 sm:-mt-8 font-mono text-label text-ink/80">
+                {project.cover.caption}
+              </p>
 
               <div className="flex items-center justify-between font-mono text-label text-ink/80">
                 <Link

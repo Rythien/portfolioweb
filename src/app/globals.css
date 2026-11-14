@@ -387,6 +387,19 @@ textarea:focus-visible {
   backdrop-filter: none;
 }
 
+/* ── Project artwork: DREAM layer rides the flood ─────────────── */
+
+.project-art-dream {
+  opacity: var(--dream, 0);
+}
+
+/* Reduced motion flips mode without a flood: crossfade instead of a snap */
+@media (prefers-reduced-motion: reduce) {
+  .project-art-dream {
+    transition: opacity 0.4s ease;
+  }
+}
+
 /* ── Header sound toggle waveform ─────────────────────────────── */
 
 .sound-wave {

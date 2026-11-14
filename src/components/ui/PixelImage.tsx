@@ -69,11 +69,7 @@ export default function PixelImage({
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    const isPlaceholder =
-      !src ||
-      src.trim() === "" ||
-      src.includes("opengraph") ||
-      src.includes("placeholder");
+    const isPlaceholder = !src || src.trim() === "";
 
     const renderProceduralPlaceholder = () => {
       const w = container.clientWidth || 600;

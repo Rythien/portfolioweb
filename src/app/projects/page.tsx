@@ -5,7 +5,7 @@ import Link from "next/link";
 import Header from "@/components/common/Header";
 import Footer from "@/components/sections/Footer";
 import LenisProvider from "@/components/common/LenisProvider";
-import PixelImage from "@/components/ui/PixelImage";
+import ProjectArt from "@/components/ui/ProjectArt";
 import { projects } from "@/content/projects";
 
 const TYPES = ["All", "Web design", "App design", "3D / Blender"];
@@ -76,13 +76,17 @@ export default function ProjectsIndexPage() {
                     data-cursor="Open"
                     className="block mb-6 overflow-hidden"
                   >
-                    <PixelImage
-                      src={project.images[0]?.src || "/opengraph-image"}
-                      alt={project.title}
-                      figureNumber={`Fig. 0${idx + 1}`}
-                      caption={project.subtitle}
-                      aspectRatio="aspect-[16/10]"
-                    />
+                    <figure className="flex flex-col gap-2">
+                      <ProjectArt
+                        image={project.cover}
+                        sizes="(min-width: 1280px) 336px, (min-width: 1024px) calc(33vw - 90px), (min-width: 768px) calc(50vw - 92px), calc(100vw - 96px)"
+                        loading={idx === 0 ? "eager" : "lazy"}
+                        className="border border-rule rounded-sm"
+                      />
+                      <figcaption className="font-mono text-label uppercase tracking-wider text-ink/80">
+                        {project.cover.caption}
+                      </figcaption>
+                    </figure>
                   </Link>
 
                   <div className="flex items-center justify-between font-mono text-label uppercase tracking-wider text-ink-muted mb-2 tabular-nums">
@@ -111,7 +115,7 @@ export default function ProjectsIndexPage() {
                     <span>→</span>
                   </Link>
                   {project.placeholder && (
-                    <span className="text-label text-ink-faint">
+                    <span className="text-label text-ink-muted">
                       Pending
                     </span>
                   )}
