@@ -433,8 +433,42 @@ export const GLASS_LOOK = {
   envMapIntensity: 1.0,
 } as const;
 
-const LOGO_EMISSIVE = "#c4c9d4";
-const LOGO_EMISSIVE_INTENSITY = 0.75;
+/*
+ * Logo contrast. WAKE: dark slate with a reflective bevel, so the faces
+ * read darker than the page and the edges catch the lightformers.
+ * DREAM: pale lavender glowing inside the violet glass. The ghost is a
+ * flat copy drawn over the glass so the logo stays readable through
+ * refraction.
+ */
+const LOGO_LOOK = {
+  wake: {
+    color: "#4a5263",
+    emissive: "#000000",
+    emissiveIntensity: 0,
+    roughness: 0.35,
+    metalness: 0.25,
+    envMapIntensity: 1.2,
+    ghost: "#3a4150",
+  },
+  dream: {
+    color: "#e4dcff",
+    emissive: "#8f7bff",
+    emissiveIntensity: 0.45,
+    roughness: 0.35,
+    metalness: 0.25,
+    envMapIntensity: 1.2,
+    ghost: "#d9ccff",
+  },
+} as const;
+const GHOST_OPACITY = 0.22;
+const GHOST_RENDER_ORDER = 10;
+/** Intact glass: calmer surface so the interior reads, still frosty. */
+const INTACT_NORMAL_SCALE = 0.14;
+const INTACT_CHROMATIC_ABERRATION = 0.08;
+// Refraction strength of the intact glass. At 1.2 the lens-shaped crystal
+// magnified the dark WAKE logo across the whole interior (a dark mass);
+// lower keeps the logo near true size inside clear ice
+const INTACT_THICKNESS = 0.45;
 
 const INCLUSION_COUNT = 10;
 const SUBDIV_LEVELS_ROCK = 2;
@@ -508,6 +542,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake", active = true }, ref) {
     const { rockGeo: geo, shards } = useRockData(seed);
     const tint = variant === "dream" ? DREAM_TINT : WAKE_TINT;
+    const logoLook = LOGO_LOOK[variant];
     useCrystalSound();
 
     // Baked intact mesh from Blender; procedural rock stays as fallback and
@@ -565,7 +600,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const { scene: portalScene, camera: portalCamera } = useThree();
     const mergedRef = useRef<THREE.Mesh>(null);
     const heroLogoRef = useRef<THREE.Mesh>(null);
+    const heroGhostRef = useRef<THREE.Mesh>(null);
     const shardLogoRefs = useRef<(THREE.Mesh | null)[]>([]);
+    const shardGhostRefs = useRef<(THREE.Mesh | null)[]>([]);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
     const inclusionRef = useRef<THREE.InstancedMesh>(null);
     const glowRef = useRef<THREE.Sprite>(null);
@@ -588,6 +625,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       if (!active || fade < 0.01) {
         if (mergedRef.current) mergedRef.current.visible = false;
         if (heroLogoRef.current) heroLogoRef.current.visible = false;
+        if (heroGhostRef.current) heroGhostRef.current.visible = false;
         if (inclusionRef.current) inclusionRef.current.visible = false;
         if (glowRef.current) glowRef.current.visible = false;
         for (let i = 0; i < shards.length; i++) {
@@ -685,8 +723,19 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         heroMesh.scale.setScalar(Math.max(heroScale, 1e-4));
 
         heroMesh.visible = !mergedHidden;
+        const heroOpacity = (1 - crossfade) * fade * heroAlpha;
         const hMat = heroMesh.material as THREE.MeshStandardMaterial;
-        if (hMat) hMat.opacity = (1 - crossfade) * fade * heroAlpha;
+        if (hMat) hMat.opacity = heroOpacity;
+
+        const ghost = heroGhostRef.current;
+        if (ghost) {
+          if (ghost.geometry !== heroMesh.geometry) ghost.geometry = heroMesh.geometry;
+          ghost.position.copy(heroMesh.position);
+          ghost.quaternion.copy(heroMesh.quaternion);
+          ghost.scale.copy(heroMesh.scale);
+          ghost.visible = heroMesh.visible && heroOpacity > 0.001;
+          (ghost.material as THREE.MeshBasicMaterial).opacity = GHOST_OPACITY * heroOpacity;
+        }
       }
 
       if (mergedRef.current) {
@@ -709,14 +758,24 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           ? portalScene.background
           : null;
 
+      // Ghost layers sit on top of the glass; they must never be part of
+      // the backdrop the glass refracts
+      const ghosts = [heroGhostRef.current, ...shardGhostRefs.current];
+      const ghostWasVisible = ghosts.map((g) => !!g?.visible);
+      const hideGhosts = () => ghosts.forEach((g) => { if (g) g.visible = false; });
+      const restoreGhosts = () =>
+        ghosts.forEach((g, i) => { if (g) g.visible = ghostWasVisible[i]; });
+
       // Render refraction backdrop for merged mesh
       if (mergedRef.current?.visible) {
         mergedRef.current.visible = false;
+        hideGhosts();
         state.gl.setRenderTarget(mergedFbo);
         if (sceneBg) state.gl.setClearColor(sceneBg, 1);
         state.gl.clear();
         state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
+        restoreGhosts();
         mergedRef.current.visible = true;
       }
 
@@ -726,11 +785,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           const m = shardMeshRefs.current[i];
           if (m) m.visible = false;
         }
+        hideGhosts();
         state.gl.setRenderTarget(shardFbo);
         if (sceneBg) state.gl.setClearColor(sceneBg, 1);
         state.gl.clear();
         state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
+        restoreGhosts();
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];
           if (m) m.visible = true;
@@ -808,6 +869,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       }
     });
 
+    const intactNormalScale = useMemo(() => new THREE.Vector2(INTACT_NORMAL_SCALE, INTACT_NORMAL_SCALE), []);
     const normalScale = useMemo(() => new THREE.Vector2(0.25, 0.25), []);
 
     return (
@@ -834,20 +896,36 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           />
         </instancedMesh>
 
-        {/* Hero logo inside intact crystal. The portal environment is a
-            black field with thin lightformers (tuned for glass highlights),
-            so diffuse lighting alone renders the logo near-black; the
-            emissive base keeps it a light grey */}
+        {/* Hero logo inside the intact crystal (cycles, faces the camera) */}
         {heroLogos[0] && (
           <mesh ref={heroLogoRef} geometry={heroLogos[0].geometry}>
             <meshStandardMaterial
-              color="#aab0c0"
-              emissive={LOGO_EMISSIVE}
-              emissiveIntensity={LOGO_EMISSIVE_INTENSITY}
+              color={logoLook.color}
+              emissive={logoLook.emissive}
+              emissiveIntensity={logoLook.emissiveIntensity}
+              roughness={logoLook.roughness}
+              metalness={logoLook.metalness}
+              envMapIntensity={logoLook.envMapIntensity}
               transparent
               opacity={1}
-              roughness={0.6}
-              metalness={0}
+            />
+          </mesh>
+        )}
+
+        {/* Ghost of the hero logo drawn over the glass for legibility */}
+        {heroLogos[0] && (
+          <mesh
+            ref={heroGhostRef}
+            geometry={heroLogos[0].geometry}
+            renderOrder={GHOST_RENDER_ORDER}
+            frustumCulled={false}
+          >
+            <meshBasicMaterial
+              color={logoLook.ghost}
+              transparent
+              opacity={GHOST_OPACITY}
+              depthTest={false}
+              depthWrite={false}
             />
           </mesh>
         )}
@@ -856,8 +934,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         <mesh ref={mergedRef} geometry={intactGeo}>
           <MeshTransmissionMaterial
             buffer={mergedFbo.texture}
-            thickness={GLASS_LOOK.thickness}
-            chromaticAberration={GLASS_LOOK.chromaticAberration}
+            thickness={INTACT_THICKNESS}
+            chromaticAberration={INTACT_CHROMATIC_ABERRATION}
             anisotropicBlur={GLASS_LOOK.anisotropicBlur}
             roughness={GLASS_LOOK.roughness}
             distortion={GLASS_LOOK.distortion}
@@ -874,7 +952,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             backsideThickness={GLASS_LOOK.backsideThickness}
             envMapIntensity={tint.envMapIntensity}
             normalMap={bakedNormalMap ?? frostNormalMap}
-            normalScale={normalScale}
+            normalScale={intactNormalScale}
           />
         </mesh>
 
@@ -920,13 +998,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               visible={false}
             >
               <meshStandardMaterial
-                color="#aab0c0"
-                emissive={LOGO_EMISSIVE}
-                emissiveIntensity={LOGO_EMISSIVE_INTENSITY}
+                color={logoLook.color}
+                emissive={logoLook.emissive}
+                emissiveIntensity={logoLook.emissiveIntensity}
+                roughness={logoLook.roughness}
+                metalness={logoLook.metalness}
+                envMapIntensity={logoLook.envMapIntensity}
                 transparent
                 opacity={1}
-                roughness={0.6}
-                metalness={0}
               />
             </mesh>
           ) : null,
