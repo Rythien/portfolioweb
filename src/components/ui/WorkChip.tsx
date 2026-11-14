@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   siReact,
   siNextdotjs,
@@ -36,6 +36,21 @@ const MAX_ICONS = 6;
  * the panel behind it; hovering the panel deepens the refraction.
  */
 export default function WorkChip({ project }: { project: Project }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
+
+  // Lazy-run: the orbit and its backdrop blur only while on screen
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { rootMargin: "100px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const icons = useMemo(() => {
     const names = [
       ...project.stack.frontend,
@@ -59,8 +74,11 @@ export default function WorkChip({ project }: { project: Project }) {
 
   return (
     <div
+      ref={ref}
       aria-hidden="true"
-      className="work-chip hidden sm:flex absolute -top-8 -right-4 lg:-right-8 w-28 h-28 lg:w-32 lg:h-32 rounded-full items-center justify-center pointer-events-none select-none"
+      className={`work-chip hidden sm:flex absolute -top-8 -right-4 lg:-right-8 w-28 h-28 lg:w-32 lg:h-32 rounded-full items-center justify-center pointer-events-none select-none ${
+        inView ? "" : "chip-paused"
+      }`}
     >
       <div className="work-chip-orbit absolute inset-0">
         {icons.map((icon, i) => (

@@ -363,6 +363,17 @@ textarea:focus-visible {
   }
 }
 
+/* Offscreen chips neither animate nor blur */
+.chip-paused .work-chip-orbit,
+.chip-paused .work-chip-logo {
+  animation-play-state: paused;
+}
+
+.chip-paused {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* ── Footer ticker ────────────────────────────────────────────── */
 
 .ticker-track {
