@@ -331,18 +331,18 @@ function buildRockData(seed: number): RockResult {
       animRng() - 0.5, animRng() - 0.5, animRng() - 0.5,
     ).normalize();
     const tumbleSpeed = 0.3 + animRng() * 0.4;
-    // Bias drift targets toward top/bottom bands and left/right edges,
-    // avoiding the hero text centre line (y ~ 0)
+    // Bias drift targets to the top band and the right third, keeping
+    // shards off the hero centre line and the project text column
     const edgeBias = animRng();
     let dx: number, dy: number;
     if (edgeBias < 0.5) {
-      // Left/right edges
-      dx = (animRng() < 0.5 ? -1 : 1) * (2.0 + animRng() * 1.2);
-      dy = (animRng() - 0.5) * 3.0;
+      // Right third
+      dx = 1.9 + animRng() * 1.3;
+      dy = (animRng() - 0.4) * 2.6;
     } else {
-      // Top/bottom bands
-      dx = (animRng() - 0.5) * 3.5;
-      dy = (animRng() < 0.5 ? -1 : 1) * (1.4 + animRng() * 1.0);
+      // Top band
+      dx = (animRng() - 0.35) * 3.2;
+      dy = 1.3 + animRng() * 1.1;
     }
     const driftCenter = new THREE.Vector3(dx, dy, (animRng() - 0.5) * 0.6);
     const lissFreq = new THREE.Vector3(
@@ -522,7 +522,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     }, [inclusions]);
 
     useFrame((state) => {
-      if (!active) {
+      const fade = getCrystalPose().fade;
+      if (!active || fade < 0.01) {
         if (mergedRef.current) mergedRef.current.visible = false;
         if (heroLogoRef.current) heroLogoRef.current.visible = false;
         if (inclusionRef.current) inclusionRef.current.visible = false;
@@ -550,20 +551,20 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       if (inclusionRef.current) {
         inclusionRef.current.visible = !mergedHidden;
         const iMat = inclusionRef.current.material as THREE.MeshStandardMaterial;
-        if (iMat) iMat.opacity = 1 - crossfade;
+        if (iMat) iMat.opacity = (1 - crossfade) * fade;
       }
 
       if (glowRef.current) {
         glowRef.current.visible = !mergedHidden;
         const sMat = glowRef.current.material as THREE.SpriteMaterial;
-        if (sMat) sMat.opacity = (0.3 + Math.sin(elapsed * 0.8) * 0.08) * (1 - crossfade);
+        if (sMat) sMat.opacity = (0.3 + Math.sin(elapsed * 0.8) * 0.08) * (1 - crossfade) * fade;
       }
 
       // Hero logo visible when intact, fades with crossfade
       if (heroLogoRef.current) {
         heroLogoRef.current.visible = !mergedHidden;
         const hMat = heroLogoRef.current.material as THREE.MeshStandardMaterial;
-        if (hMat) hMat.opacity = 1 - crossfade;
+        if (hMat) hMat.opacity = (1 - crossfade) * fade;
       }
 
       if (mergedRef.current) {
@@ -572,8 +573,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (mat) {
           mat.visible = !mergedHidden;
           if (!mergedHidden) {
-            mat.opacity = 1 - crossfade;
-            mat.transparent = crossfade > 0;
+            mat.opacity = (1 - crossfade) * fade;
+            mat.transparent = crossfade > 0 || fade < 1;
           }
         }
       }
@@ -604,7 +605,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         }
       }
 
-      const gs = pose.scale || 0.5;
+      const gs = Math.max(pose.scale, 0.05);
       _invQ.current.setFromEuler(new THREE.Euler(pose.rotX, pose.rotY, 0));
       _invQ.current.invert();
       const explosionFade = 1 - smoothstep(0.3, 0.8, breakVal);
@@ -620,7 +621,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (logoMesh) logoMesh.visible = showShards;
         if (!showShards) continue;
 
-        const shardOpacity = smoothstep(0.05, 0.15, breakVal);
+        const shardOpacity = smoothstep(0.05, 0.15, breakVal) * fade;
         const sMat = mesh.material as THREE.MeshPhysicalMaterial;
         if (sMat) {
           sMat.opacity = shardOpacity;

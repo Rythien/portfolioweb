@@ -168,6 +168,8 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
     damp(dampedPos.current, "z", pose.z, 0.3, delta);
 
     meshRef.current.position.copy(dampedPos.current);
+    // Ring shrinks with the parked crystal so it never circles the copy
+    meshRef.current.scale.setScalar(Math.max(pose.scale, 0.05));
     meshRef.current.rotation.x = 0.5 + Math.sin(elapsed * 0.06) * 0.1;
     meshRef.current.rotation.y = elapsed * 0.08;
 
@@ -179,7 +181,7 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
     // Fade out as crystal breaks
     const breakFade = Math.max(0, 1 - pose.breakVal * 3);
     const scrollFade = scrollP < 0.6 ? 1 : 1 - (scrollP - 0.6) / 0.4;
-    const targetOpacity = 0.45 * Math.min(breakFade, scrollFade);
+    const targetOpacity = 0.45 * Math.min(breakFade, scrollFade) * pose.fade;
     dampedOpacity.current = THREE.MathUtils.lerp(
       dampedOpacity.current,
       targetOpacity,

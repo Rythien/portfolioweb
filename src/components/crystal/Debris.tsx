@@ -6,6 +6,7 @@ import { useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getSectionProgress } from "@/store/useScrollStore";
+import { getCrystalPose } from "@/hooks/useCrystalPose";
 
 const CHIP_COUNT = 35;
 const TWO_PI = Math.PI * 2;
@@ -52,12 +53,16 @@ function buildChips(seed: number): ChipData[] {
     const tumbleAxis = new THREE.Vector3(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize();
     const tumbleSpeed = 0.15 + rng() * 0.3;
 
-    const spread = 3 + rng() * 2;
-    const driftCenter = new THREE.Vector3(
-      direction.x * spread + (rng() - 0.5) * 1.5,
-      direction.y * spread + (rng() - 0.5) * 1.5,
-      direction.z * spread * 0.4 + (rng() - 0.5) * 0.8,
-    );
+    // Drift targets stay in the top band or the right third, clear of copy
+    let dcx: number, dcy: number;
+    if (rng() < 0.5) {
+      dcx = 1.8 + rng() * 1.6;
+      dcy = (rng() - 0.4) * 2.6;
+    } else {
+      dcx = (rng() - 0.35) * 3.4;
+      dcy = 1.2 + rng() * 1.3;
+    }
+    const driftCenter = new THREE.Vector3(dcx, dcy, (rng() - 0.5) * 0.8);
     const lissFreq = new THREE.Vector3(0.12 + rng() * 0.2, 0.1 + rng() * 0.18, 0.08 + rng() * 0.15);
     const lissPhase = new THREE.Vector3(rng() * TWO_PI, rng() * TWO_PI, rng() * TWO_PI);
     const lissAmp = new THREE.Vector3(0.3 + rng() * 0.6, 0.2 + rng() * 0.5, 0.15 + rng() * 0.3);
@@ -101,7 +106,8 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
     if (Math.abs(sectionFade.current - fadeTarget) < 0.005)
       sectionFade.current = fadeTarget;
 
-    const visibility = smoothstep(0.08, 0.2, breakVal) * sectionFade.current;
+    const visibility =
+      smoothstep(0.08, 0.2, breakVal) * sectionFade.current * getCrystalPose().fade;
     inst.visible = visibility > 0.001;
     if (!inst.visible) return;
 

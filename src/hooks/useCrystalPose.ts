@@ -19,6 +19,9 @@ export interface CrystalPose {
   rotX: number;
   mouseX: number;
   mouseY: number;
+  /** Global crystal-system visibility: 1 over hero→Works, 0 past Works
+   * (and during About/Disciplines on narrow viewports with no empty column). */
+  fade: number;
 }
 
 const pose: CrystalPose = {
@@ -29,9 +32,10 @@ const pose: CrystalPose = {
   rotX: 0,
   mouseX: 0,
   mouseY: 0,
+  fade: 1,
 };
 
-const _d = { s: 0, x: 0.6, y: 0, scale: 1.0, breakVal: 0 };
+const _d = { s: 0, x: 0.6, y: 0, scale: 1.0, breakVal: 0, fade: 1 };
 let _lastE = -1;
 let _prevBreak = 0;
 let _shakeEnd = 0;
@@ -71,22 +75,33 @@ if (typeof window !== "undefined") {
   );
 }
 
-function tick(elapsed: number, delta: number) {
+function tick(elapsed: number, delta: number, halfW: number) {
   if (Math.abs(elapsed - _lastE) < 0.0001) return;
   _lastE = elapsed;
 
   const rawS = getSectionProgress("works");
+  const aboutP = getSectionProgress("about");
   const l = 1 - Math.exp(-4 * delta);
   _d.s += (rawS - _d.s) * l;
   const s = _d.s;
 
-  const t25 = Math.min(s / 0.25, 1);
-  const tx = 0.6 + t25 * 1.6;
-  const ty = -t25 * 0.3;
-  const ts = 1.0 - t25 * 0.5;
+  // 0 = hero composition, 1 = parked in the right-hand empty column
+  // for About/Disciplines (x ~ +2.2 at scale 0.45, clamped on narrow views)
+  const park = smoothstep(0.08, 0.45, aboutP);
+  const narrow = halfW < 2.4;
+  const xPark = Math.min(2.2, Math.max(halfW - 1.0, 0.6));
+  const tx = 0.6 + (xPark - 0.6) * park;
+  const ty = 0;
+  const ts = 1.0 - park * 0.55;
 
-  // Scroll-driven break
-  const scrollBreak = smoothstep(0.45, 0.65, s);
+  // The crystal system leaves with Works; on narrow viewports there is
+  // no empty column, so it also sits out About/Disciplines onward
+  let fadeTarget = 1 - smoothstep(0.86, 0.985, rawS);
+  if (narrow) fadeTarget = Math.min(fadeTarget, 1 - park);
+  _d.fade += (fadeTarget - _d.fade) * (1 - Math.exp(-6 * delta));
+
+  // Scroll-driven break: starts as Works enters, fully broken by 0.25
+  const scrollBreak = smoothstep(0.05, 0.25, s);
 
   // Hover-driven break (damped spring)
   const hoverTarget = useFractureStore.getState().hoverBreak ? 1 : 0;
@@ -104,7 +119,8 @@ function tick(elapsed: number, delta: number) {
 
   const rf = 1.0 - smoothstep(0, 0.25, s) * 0.7;
   pose.x = _d.x;
-  pose.y = _d.y;
+  // Clamped so the parked crystal never leaves the viewport vertically
+  pose.y = Math.max(-0.9, Math.min(0.9, _d.y));
   pose.z = 0;
   let scaleBoost = 0;
   if (_reassembleStart >= 0) {
@@ -117,6 +133,7 @@ function tick(elapsed: number, delta: number) {
   }
   pose.scale = _d.scale + scaleBoost;
   pose.breakVal = _d.breakVal;
+  pose.fade = _d.fade;
   pose.rotY = elapsed * 0.15 * rf;
   pose.rotX = Math.sin(elapsed * 0.1) * 0.2 * rf;
 
@@ -150,7 +167,7 @@ function tick(elapsed: number, delta: number) {
 }
 
 export function useCrystalPose(): CrystalPose {
-  useFrame((st, dt) => tick(st.clock.elapsedTime, dt));
+  useFrame((st, dt) => tick(st.clock.elapsedTime, dt, st.viewport.width / 2));
   return pose;
 }
 
