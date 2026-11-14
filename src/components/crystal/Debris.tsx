@@ -5,7 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { useFractureStore } from "@/store/useFractureStore";
-import { getCrystalPose } from "@/hooks/useCrystalPose";
+import { getSectionProgress } from "@/store/useScrollStore";
 
 const CHIP_COUNT = 35;
 const TWO_PI = Math.PI * 2;
@@ -82,16 +82,26 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
   const _pos = useRef(new THREE.Vector3());
   const _quat = useRef(new THREE.Quaternion());
   const _scl = useRef(new THREE.Vector3());
+  const sectionFade = useRef(0);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const inst = meshRef.current;
     if (!inst) return;
 
     const breakVal = useFractureStore.getState().breakVal;
     const elapsed = state.clock.elapsedTime;
-    const pose = getCrystalPose();
 
-    const visibility = smoothstep(0.08, 0.2, breakVal);
+    // Chips only live over the hero and the Works section
+    const heroP = getSectionProgress("top");
+    const worksP = getSectionProgress("works");
+    const inScope = heroP < 1 || (worksP > 0 && worksP < 1);
+    const fadeTarget = inScope ? 1 : 0;
+    sectionFade.current +=
+      (fadeTarget - sectionFade.current) * (1 - Math.exp(-6 * delta));
+    if (Math.abs(sectionFade.current - fadeTarget) < 0.005)
+      sectionFade.current = fadeTarget;
+
+    const visibility = smoothstep(0.08, 0.2, breakVal) * sectionFade.current;
     inst.visible = visibility > 0.001;
     if (!inst.visible) return;
 
@@ -106,7 +116,7 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
     const physMat = inst.material as THREE.MeshPhysicalMaterial;
     if (physMat) {
       physMat.opacity = visibility;
-      physMat.transparent = visibility < 1;
+      physMat.transparent = true;
     }
 
     const driftFade = smoothstep(0.1, 0.4, breakVal);
