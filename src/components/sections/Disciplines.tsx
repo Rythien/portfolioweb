@@ -45,7 +45,7 @@ export default function Disciplines() {
       ref={sectionRef}
       id="disciplines"
       aria-label="Disciplines and Expertise"
-      className="scroll-mt-24 py-16 sm:py-24 lg:py-32 border-t border-rule"
+      className="scroll-mt-32 pt-32 pb-16 sm:pb-24 lg:pb-32 border-t border-rule"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div
@@ -66,7 +66,7 @@ export default function Disciplines() {
                 {item.title}
               </div>
 
-              <div className="md:col-span-6 font-[family-name:var(--font-sans)] text-body text-ink/70 leading-relaxed group-hover:text-ink/80 transition-colors [text-wrap:pretty]">
+              <div className="md:col-span-4 font-[family-name:var(--font-sans)] text-body text-ink/70 leading-relaxed group-hover:text-ink/80 transition-colors [text-wrap:pretty]">
                 {item.description}
               </div>
             </div>

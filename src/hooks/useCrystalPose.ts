@@ -75,7 +75,7 @@ if (typeof window !== "undefined") {
   );
 }
 
-function tick(elapsed: number, delta: number, halfW: number) {
+function tick(elapsed: number, delta: number, halfW: number, pxW: number) {
   if (Math.abs(elapsed - _lastE) < 0.0001) return;
   _lastE = elapsed;
 
@@ -89,7 +89,14 @@ function tick(elapsed: number, delta: number, halfW: number) {
   // for About/Disciplines (x ~ +2.2 at scale 0.45, clamped on narrow views)
   const park = smoothstep(0.08, 0.45, aboutP);
   const narrow = halfW < 2.4;
-  const xPark = Math.min(2.45, Math.max(halfW - 0.9, 0.6));
+  // Parked just right of the About body / Disciplines description column
+  // (text columns end at 10/12 of the max-w-7xl grid), clamped on-screen
+  const container = Math.min(pxW, 1280);
+  const pad = pxW >= 1024 ? 64 : pxW >= 640 ? 40 : 24;
+  const colRightPx = (pxW - container) / 2 + pad + (container - 2 * pad) * (10 / 12);
+  const pxPerUnit = pxW / (2 * halfW);
+  const colRightWorld = (colRightPx - pxW / 2) / pxPerUnit;
+  const xPark = Math.max(0.6, Math.min(colRightWorld + 0.7, halfW - 0.55));
   const tx = 0.6 + (xPark - 0.6) * park;
   // Parked slightly below centre, in the pocket right of the body copy
   const ty = -0.5 * park;
@@ -168,7 +175,15 @@ function tick(elapsed: number, delta: number, halfW: number) {
 }
 
 export function useCrystalPose(): CrystalPose {
-  useFrame((st, dt) => tick(st.clock.elapsedTime, dt, st.viewport.width / 2));
+  useFrame((st, dt) => {
+    // World half-width at z=0 for the portal camera (st.viewport reports
+    // pixels inside these portals, not world units)
+    const cam = st.camera as { fov?: number; position: { z: number } };
+    const fov = cam.fov ?? 50;
+    const halfH = Math.tan((fov * Math.PI) / 360) * Math.abs(cam.position.z);
+    const halfW = halfH * (st.size.width / Math.max(st.size.height, 1));
+    tick(st.clock.elapsedTime, dt, halfW, st.size.width);
+  });
   return pose;
 }
 
