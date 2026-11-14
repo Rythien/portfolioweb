@@ -392,6 +392,9 @@ export const GLASS_LOOK = {
   envMapIntensity: 1.0,
 } as const;
 
+const LOGO_EMISSIVE = "#c4c9d4";
+const LOGO_EMISSIVE_INTENSITY = 0.75;
+
 const INCLUSION_COUNT = 10;
 const SUBDIV_LEVELS_ROCK = 2;
 const SUBDIV_LEVELS_SHARD = 1;
@@ -491,7 +494,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         Math.max(size.x, size.y, size.z);
       g.scale(s, s, s);
       const mat = node.material as THREE.MeshStandardMaterial | undefined;
-      return { intactGeo: g, bakedNormalMap: mat?.normalMap ?? null };
+      const nm = mat?.normalMap ?? null;
+      if (nm) {
+        // Normal data is linear and GLB textures are not flipped
+        nm.colorSpace = THREE.NoColorSpace;
+        nm.flipY = false;
+        nm.needsUpdate = true;
+      }
+      return { intactGeo: g, bakedNormalMap: nm };
     }, [nodes, geo]);
 
     const frostNormalMap = useMemo(() => createFrostNormalMap(256), []);
@@ -579,10 +589,19 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         }
       }
 
+      // Backdrop FBOs must clear to the scene background, not the
+      // compositor's transparent black, or the glass refracts a dark
+      // void and the interior logo reads black
+      const sceneBg =
+        portalScene.background instanceof THREE.Color
+          ? portalScene.background
+          : null;
+
       // Render refraction backdrop for merged mesh
       if (mergedRef.current?.visible) {
         mergedRef.current.visible = false;
         state.gl.setRenderTarget(mergedFbo);
+        if (sceneBg) state.gl.setClearColor(sceneBg, 1);
         state.gl.clear();
         state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
@@ -596,6 +615,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           if (m) m.visible = false;
         }
         state.gl.setRenderTarget(shardFbo);
+        if (sceneBg) state.gl.setClearColor(sceneBg, 1);
         state.gl.clear();
         state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
@@ -604,6 +624,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           if (m) m.visible = true;
         }
       }
+      if (sceneBg) state.gl.setClearColor(0x000000, 0);
 
       const gs = Math.max(pose.scale, 0.05);
       _invQ.current.setFromEuler(new THREE.Euler(pose.rotX, pose.rotY, 0));
@@ -701,11 +722,16 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           />
         </instancedMesh>
 
-        {/* Hero logo inside intact crystal */}
+        {/* Hero logo inside intact crystal. The portal environment is a
+            black field with thin lightformers (tuned for glass highlights),
+            so diffuse lighting alone renders the logo near-black; the
+            emissive base keeps it a light grey */}
         {heroLogo && (
           <mesh ref={heroLogoRef} geometry={heroLogo.geometry}>
             <meshStandardMaterial
               color="#aab0c0"
+              emissive={LOGO_EMISSIVE}
+              emissiveIntensity={LOGO_EMISSIVE_INTENSITY}
               transparent
               opacity={1}
               roughness={0.6}
@@ -783,6 +809,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             >
               <meshStandardMaterial
                 color="#aab0c0"
+                emissive={LOGO_EMISSIVE}
+                emissiveIntensity={LOGO_EMISSIVE_INTENSITY}
                 transparent
                 opacity={1}
                 roughness={0.6}

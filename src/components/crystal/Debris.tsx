@@ -111,12 +111,19 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
     inst.visible = visibility > 0.001;
     if (!inst.visible) return;
 
-    // Shared transmission FBO
+    // Shared transmission FBO — cleared to the scene background so the
+    // chips refract the page, not the compositor's transparent black
+    const sceneBg =
+      portalScene.background instanceof THREE.Color
+        ? portalScene.background
+        : null;
     inst.visible = false;
     state.gl.setRenderTarget(debrisFbo);
+    if (sceneBg) state.gl.setClearColor(sceneBg, 1);
     state.gl.clear();
     state.gl.render(portalScene, portalCamera);
     state.gl.setRenderTarget(null);
+    if (sceneBg) state.gl.setClearColor(0x000000, 0);
     inst.visible = true;
 
     const physMat = inst.material as THREE.MeshPhysicalMaterial;
