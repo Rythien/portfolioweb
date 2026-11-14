@@ -33,6 +33,8 @@ export const viewport: Viewport = {
   themeColor: "#E9E7E2",
   width: "device-width",
   initialScale: 1,
+  // Lets env(safe-area-inset-*) report the iOS home-indicator inset
+  viewportFit: "cover",
 };
 
 export const metadata: Metadata = {

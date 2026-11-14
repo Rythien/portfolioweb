@@ -21,7 +21,7 @@ export default function Home() {
       <Preloader />
       <a
         href="#works"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-surface focus:text-ink font-mono text-xs uppercase tracking-widest outline-none border border-rule"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-surface focus:text-ink font-mono text-sm uppercase tracking-widest outline-none border border-rule"
       >
         Skip to main content
       </a>

@@ -46,7 +46,10 @@ export default function ModePill() {
   );
 
   return (
-    <div data-reveal className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100]">
+    <div
+      data-reveal
+      className="fixed left-1/2 -translate-x-1/2 z-[100] bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))]"
+    >
       <div
         role="group"
         aria-label="Site mode"

@@ -6,7 +6,7 @@ import { useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getSectionProgress } from "@/store/useScrollStore";
-import { getCrystalPose } from "@/hooks/useCrystalPose";
+import { getCrystalPose, MOBILE_MAX_PX } from "@/hooks/useCrystalPose";
 
 const CHIP_COUNT = 35;
 const TWO_PI = Math.PI * 2;
@@ -92,6 +92,12 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
   useFrame((state, delta) => {
     const inst = meshRef.current;
     if (!inst) return;
+
+    // No chips on phones: no free column for them and the FBO pass is costly
+    if (state.size.width < MOBILE_MAX_PX) {
+      inst.visible = false;
+      return;
+    }
 
     const breakVal = useFractureStore.getState().breakVal;
     const elapsed = state.clock.elapsedTime;

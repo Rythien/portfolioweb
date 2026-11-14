@@ -36,6 +36,11 @@ const pose: CrystalPose = {
 };
 
 const _d = { s: 0, x: 0.6, y: 0, scale: 1.0, breakVal: 0, fade: 1 };
+
+/** Matches SceneRoot's isMobile breakpoint. */
+export const MOBILE_MAX_PX = 768;
+/** Mobile hero crystal centre, world units above the viewport midline. */
+const MOBILE_HERO_Y = 0.8;
 let _lastE = -1;
 let _prevBreak = 0;
 let _shakeEnd = 0;
@@ -97,10 +102,16 @@ function tick(elapsed: number, delta: number, halfW: number, pxW: number) {
   const pxPerUnit = pxW / (2 * halfW);
   const colRightWorld = (colRightPx - pxW / 2) / pxPerUnit;
   const xPark = Math.max(0.6, Math.min(colRightWorld + 0.7, halfW - 0.55));
-  const tx = 0.6 + (xPark - 0.6) * park;
+  // Phones: centred at 0.7 in the band between the role label and the
+  // headline (the marquee drops to match); it sits out About onward
+  const mobile = pxW < MOBILE_MAX_PX;
+  const heroX = mobile ? 0 : 0.6;
+  const heroY = mobile ? MOBILE_HERO_Y : 0;
+  const heroScale = mobile ? 0.7 : 1.0;
+  const tx = heroX + (xPark - heroX) * park;
   // Parked slightly below centre, in the pocket right of the body copy
-  const ty = -0.5 * park;
-  const ts = 1.0 - park * 0.55;
+  const ty = heroY + (-0.5 - heroY) * park;
+  const ts = heroScale + (0.45 - heroScale) * park;
 
   // The crystal system leaves with Works; on narrow viewports there is
   // no empty column, so it also sits out About/Disciplines onward

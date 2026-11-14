@@ -457,8 +457,25 @@ textarea:focus-visible {
   animation: rail-label-in 0.4s var(--ease-out-expo) both;
 }
 
+/* Horizontal strip variant: same entrance, no vertical-text flip */
+@keyframes strip-label-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.strip-label-in {
+  animation: strip-label-in 0.4s var(--ease-out-expo) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .rail-label-in {
+  .rail-label-in,
+  .strip-label-in {
     animation: none;
   }
 }

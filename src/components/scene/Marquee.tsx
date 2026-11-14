@@ -15,6 +15,8 @@ const FBO_HALF_FOV_RAD = (50 / 2) * (Math.PI / 180);
 const FBO_CAM_Z = 6;
 const TEXT_Z = -3;
 const CAM_TO_TEXT = FBO_CAM_Z - TEXT_Z;
+// Phones: headline sits just below the crystal (~66px under centre at 844 tall)
+const MOBILE_TEXT_Y = -0.66;
 
 interface MarqueeProps {
   color: string;
@@ -124,9 +126,11 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
     }
   });
 
+  const textY = isMobile ? MOBILE_TEXT_Y : 0;
+
   if (reducedMotion) {
     return (
-      <group position={[0, 0, TEXT_Z]}>
+      <group position={[0, textY, TEXT_Z]}>
         <Text
           font={FONT_URL}
           fontSize={fontSize}
@@ -148,7 +152,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
   }
 
   return (
-    <group ref={groupRef} position={[0, 0, TEXT_Z]}>
+    <group ref={groupRef} position={[0, textY, TEXT_Z]}>
       {Array.from({ length: tileCount }, (_, i) => (
         <Text
           key={i}

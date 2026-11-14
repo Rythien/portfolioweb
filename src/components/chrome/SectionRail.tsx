@@ -20,13 +20,15 @@ const SECTIONS: { id: string; label: string }[] = [
 /**
  * Fixed left rail: active section name (rotated), 1px scroll progress
  * line, local time. Replaces the in-flow "(01) · ABOUT" section headers.
- * Desktop only; purely informational, duplicated by real headings.
+ * Below lg it collapses to a horizontal strip under the header. Purely
+ * informational, duplicated by real headings.
  */
 export default function SectionRail() {
   const mounted = useMounted();
   const [active, setActive] = useState("Intro");
   const [timeStr, setTimeStr] = useState("--:--");
   const fillRef = useRef<HTMLDivElement | null>(null);
+  const stripFillRef = useRef<HTMLDivElement | null>(null);
 
   // Local time (rail owns the clock)
   useEffect(() => {
@@ -69,30 +71,53 @@ export default function SectionRail() {
     return () => observer.disconnect();
   }, []);
 
-  // 1px progress line, scrubbed over the whole document
+  // 1px progress line, scrubbed over the whole document (vertical on the
+  // desktop rail, horizontal on the narrow-screen strip)
   useEffect(() => {
-    if (!fillRef.current) return;
-    const tween = gsap.fromTo(
-      fillRef.current,
-      { scaleY: 0 },
-      {
-        scaleY: 1,
-        ease: "none",
-        scrollTrigger: {
-          trigger: document.documentElement,
-          start: "top top",
-          end: "bottom bottom",
-          scrub: true,
-        },
-      }
-    );
+    const tweens = [
+      fillRef.current &&
+        gsap.fromTo(fillRef.current, { scaleY: 0 }, { scaleY: 1, ease: "none" }),
+      stripFillRef.current &&
+        gsap.fromTo(stripFillRef.current, { scaleX: 0 }, { scaleX: 1, ease: "none" }),
+    ].filter(Boolean) as gsap.core.Tween[];
+    const trigger = ScrollTrigger.create({
+      trigger: document.documentElement,
+      start: "top top",
+      end: "bottom bottom",
+      scrub: true,
+      onUpdate: (self) => tweens.forEach((t) => t.progress(self.progress)),
+    });
+    tweens.forEach((t) => t.pause(0));
     return () => {
-      tween.scrollTrigger?.kill();
-      tween.kill();
+      trigger.kill();
+      tweens.forEach((t) => t.kill());
     };
   }, []);
 
   return (
+    <>
+      {/* Narrow screens: the rail collapses to a strip under the header */}
+      <div
+        aria-hidden="true"
+        data-reveal
+        data-rail-strip
+        className="fixed left-0 right-0 top-20 z-40 lg:hidden h-7 px-6 sm:px-10 flex items-center gap-3 bg-surface border-b border-rule pointer-events-none select-none"
+      >
+        <span
+          key={active}
+          className="font-mono text-label text-ink/80 whitespace-nowrap strip-label-in"
+        >
+          {active}
+        </span>
+        <div className="relative flex-1 h-px bg-rule">
+          <div
+            ref={stripFillRef}
+            className="absolute inset-0 bg-ink origin-left"
+            style={{ transform: "scaleX(0)" }}
+          />
+        </div>
+      </div>
+
     <div
       aria-hidden="true"
       data-reveal
@@ -122,5 +147,6 @@ export default function SectionRail() {
         {mounted ? timeStr : "--:--"}
       </div>
     </div>
+    </>
   );
 }

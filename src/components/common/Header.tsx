@@ -41,10 +41,12 @@ export default function Header() {
 
   return (
     <header data-reveal className="fixed top-0 left-0 right-0 z-50 pointer-events-none text-ink">
-      {/* Mode-aware scrim: legibility over the scene in both WAKE and DREAM */}
+      {/* Mode-aware scrim: legibility over the scene in both WAKE and DREAM.
+          Below lg it is solid so header + rail strip form one clean band
+          that copy scrolls under instead of colliding with */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-b from-surface/90 via-surface/40 to-transparent"
+        className="absolute inset-0 max-lg:bg-surface lg:bg-gradient-to-b lg:from-surface/90 lg:via-surface/40 lg:to-transparent"
       />
       <div className="relative max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between w-full">
         {/* Brand Name */}
