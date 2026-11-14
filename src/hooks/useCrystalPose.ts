@@ -89,9 +89,10 @@ function tick(elapsed: number, delta: number, halfW: number) {
   // for About/Disciplines (x ~ +2.2 at scale 0.45, clamped on narrow views)
   const park = smoothstep(0.08, 0.45, aboutP);
   const narrow = halfW < 2.4;
-  const xPark = Math.min(2.2, Math.max(halfW - 1.0, 0.6));
+  const xPark = Math.min(2.45, Math.max(halfW - 0.9, 0.6));
   const tx = 0.6 + (xPark - 0.6) * park;
-  const ty = 0;
+  // Parked slightly below centre, in the pocket right of the body copy
+  const ty = -0.5 * park;
   const ts = 1.0 - park * 0.55;
 
   // The crystal system leaves with Works; on narrow viewports there is

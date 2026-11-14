@@ -50,18 +50,20 @@ export default function About() {
       className="scroll-mt-24 py-16 sm:py-24 lg:py-32 border-t border-rule relative"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
-        <div className="max-w-4xl">
-          <p
-            ref={statementRef}
-            className="font-[family-name:var(--font-sans)] text-h1 uppercase text-ink [text-wrap:pretty]"
-          >
-            {SITE_DATA.about.statementPrefix}{" "}
-            <span className="accent-word text-ink">
-              {SITE_DATA.about.statementItalic}
-            </span>{" "}
-            {SITE_DATA.about.statementSuffix}
-          </p>
+        {/* Statement spans the full grid at h2 so it holds 3–4 lines
+            on laptop widths instead of wrapping to 7 and clipping */}
+        <p
+          ref={statementRef}
+          className="font-[family-name:var(--font-sans)] text-h2 text-ink [text-wrap:pretty]"
+        >
+          {SITE_DATA.about.statementPrefix}{" "}
+          <span className="accent-word text-ink">
+            {SITE_DATA.about.statementItalic}
+          </span>{" "}
+          {SITE_DATA.about.statementSuffix}
+        </p>
 
+        <div className="max-w-4xl">
           <p
             ref={bodyRef}
             className="mt-10 sm:mt-14 font-[family-name:var(--font-sans)] text-body-lg text-ink/70 leading-relaxed max-w-[60ch] [text-wrap:pretty]"
