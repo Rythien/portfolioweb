@@ -78,11 +78,17 @@ export default function Header() {
           {/* Sound Toggle */}
           <button
             onClick={toggleSound}
-            aria-label={soundOn ? "Mute sound" : "Unmute sound"}
-            className="flex items-center gap-2 hover:opacity-70 transition-opacity py-2"
+            className="flex items-center gap-2 hover:opacity-70 transition-opacity py-2 font-mono text-[0.875rem] font-medium uppercase tracking-widest"
           >
-            <span>Sound</span>
-            <span>{soundOn ? "On" : "Off"}</span>
+            <span
+              aria-hidden="true"
+              className={`sound-wave ${soundOn ? "is-on" : ""}`}
+            >
+              <span />
+              <span />
+              <span />
+            </span>
+            <span>Sound {soundOn ? "On" : "Off"}</span>
           </button>
 
           <a
@@ -143,10 +149,24 @@ export default function Header() {
           <a
             href="#contact"
             onClick={() => setIsMobileMenuOpen(false)}
-            className="py-2"
+            className="py-2 border-b border-rule"
           >
             Contact
           </a>
+          <button
+            onClick={toggleSound}
+            className="py-2 flex items-center gap-2 font-mono text-label uppercase tracking-widest text-left"
+          >
+            <span
+              aria-hidden="true"
+              className={`sound-wave ${soundOn ? "is-on" : ""}`}
+            >
+              <span />
+              <span />
+              <span />
+            </span>
+            <span>Sound {soundOn ? "On" : "Off"}</span>
+          </button>
         </nav>
       )}
     </header>
