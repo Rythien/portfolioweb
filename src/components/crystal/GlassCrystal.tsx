@@ -8,6 +8,8 @@ import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js"
 import { useFractureStore } from "@/store/useFractureStore";
 import { getCrystalPose } from "@/hooks/useCrystalPose";
 import { useCrystalSound } from "@/hooks/useCrystalSound";
+import { initAudioContext } from "@/hooks/crystalAudio";
+import { useSoundStore } from "@/store/useSoundStore";
 import {
   subdivideNonIndexed,
   displaceAlongNormals,
@@ -15,7 +17,58 @@ import {
   createFrostNormalMap,
   createGlowTexture,
 } from "./frostUtils";
-import { getHeroLogo, getShardLogos, type LogoData } from "./logoGeometry";
+import { getHeroLogos, getUnitLogos } from "./logoGeometry";
+
+/** Seconds between hero logo swaps in the intact crystal. */
+export const LOGO_CYCLE_SECONDS = 3.5;
+/** Reduced motion: slower cycle, crossfade instead of scale + spin. */
+const LOGO_CYCLE_SECONDS_REDUCED = 6;
+const SWAP_OUT = 0.35;
+const SWAP_IN = 0.45;
+const SWAP_SPIN = THREE.MathUtils.degToRad(25);
+
+/*
+ * Hero logo cycle state, shared by the WAKE and DREAM instances so both
+ * show the same logo when the mode flips. Only the active instance runs
+ * its frame loop, so only one advances it.
+ */
+const heroCycle = {
+  index: 0,
+  phase: "hold" as "hold" | "out" | "in",
+  t: 0,
+};
+
+const expoIn = (x: number) => (x <= 0 ? 0 : Math.pow(2, 10 * x - 10));
+const backOut = (x: number, s = 1.6) => {
+  const u = x - 1;
+  return 1 + (s + 1) * u * u * u + s * u * u;
+};
+
+/** A very quiet glass tick for each logo swap (only when sound is on). */
+function playSwapTick() {
+  if (!useSoundStore.getState().enabled) return;
+  try {
+    const ctx = initAudioContext();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(3400, now);
+    osc.frequency.exponentialRampToValueAtTime(2600, now + 0.05);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.012, now + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  } catch {
+    // Audio is decoration; never let it break the frame loop
+  }
+}
+
+const _swayEuler = new THREE.Euler();
+const _swayQ = new THREE.Quaternion();
+const _parentInvQ = new THREE.Quaternion();
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -279,7 +332,6 @@ function buildRockData(seed: number): RockResult {
 
   const animRng = seededRandom(seed + 7777);
   const shards: ShardData[] = [];
-  let idx = 0;
 
   for (let i = 0; i < SHARD_COUNT; i++) {
     const P: HalfPlane[] = active.map(p => ({ n: p.n.clone(), d: p.d }));
@@ -350,7 +402,6 @@ function buildRockData(seed: number): RockResult {
       geometry: geo, centroid, direction, tumbleAxis, tumbleSpeed,
       driftCenter, lissFreq, lissPhase, lissAmp, brokenScale,
     });
-    idx++;
   }
 
   return { rockGeo, shards };
@@ -484,9 +535,10 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         Math.max(size.x, size.y, size.z);
       g.scale(s, s, s);
       const mat = node.material as THREE.MeshStandardMaterial | undefined;
-      const nm = mat?.normalMap ?? null;
+      // Local clone (shares the image): normal data is linear and GLB
+      // textures are not flipped
+      const nm = mat?.normalMap ? mat.normalMap.clone() : null;
       if (nm) {
-        // Normal data is linear and GLB textures are not flipped
         nm.colorSpace = THREE.NoColorSpace;
         nm.flipY = false;
         nm.needsUpdate = true;
@@ -497,8 +549,18 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const frostNormalMap = useMemo(() => createFrostNormalMap(256), []);
     const glowTex = useMemo(() => createGlowTexture(128), []);
     const inclusions = useMemo(() => buildInclusions(seed, INCLUSION_COUNT, R), [seed]);
-    const heroLogo = useMemo(() => getHeroLogo(), []);
-    const shardLogos = useMemo(() => getShardLogos(shards.length), [shards.length]);
+    const heroLogos = useMemo(() => getHeroLogos(), []);
+    const unitLogos = useMemo(() => getUnitLogos(), []);
+    const shardLogos = useMemo(
+      () => shards.map((_, i) => unitLogos[i % unitLogos.length] ?? null),
+      [shards, unitLogos],
+    );
+    const reducedMotion = useMemo(
+      () =>
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      [],
+    );
 
     const { scene: portalScene, camera: portalCamera } = useThree();
     const mergedRef = useRef<THREE.Mesh>(null);
@@ -521,7 +583,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       inclusionRef.current.instanceMatrix.needsUpdate = true;
     }, [inclusions]);
 
-    useFrame((state) => {
+    useFrame((state, rawDelta) => {
       const fade = getCrystalPose().fade;
       if (!active || fade < 0.01) {
         if (mergedRef.current) mergedRef.current.visible = false;
@@ -560,11 +622,71 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (sMat) sMat.opacity = (0.3 + Math.sin(elapsed * 0.8) * 0.08) * (1 - crossfade) * fade;
       }
 
-      // Hero logo visible when intact, fades with crossfade
-      if (heroLogoRef.current) {
-        heroLogoRef.current.visible = !mergedHidden;
-        const hMat = heroLogoRef.current.material as THREE.MeshStandardMaterial;
-        if (hMat) hMat.opacity = (1 - crossfade) * fade;
+      // ── Hero logo: cycles through every icon, always facing the camera
+      const delta = Math.min(rawDelta, 0.1);
+      const cyc = heroCycle;
+      const nLogos = heroLogos.length;
+      const paused = useFractureStore.getState().hoverBreak || breakVal > 0.05;
+      const period = reducedMotion ? LOGO_CYCLE_SECONDS_REDUCED : LOGO_CYCLE_SECONDS;
+      if (nLogos > 1) {
+        if (cyc.phase === "hold") {
+          if (!paused) cyc.t += delta;
+          if (cyc.t >= period - SWAP_OUT - SWAP_IN) {
+            cyc.phase = "out";
+            cyc.t = 0;
+          }
+        } else {
+          cyc.t += delta;
+          if (cyc.phase === "out" && cyc.t >= SWAP_OUT) {
+            cyc.index = (cyc.index + 1) % nLogos;
+            cyc.phase = "in";
+            cyc.t = 0;
+            playSwapTick();
+          } else if (cyc.phase === "in" && cyc.t >= SWAP_IN) {
+            cyc.phase = "hold";
+            cyc.t = 0;
+          }
+        }
+      }
+      let heroScale = 1;
+      let heroAlpha = 1;
+      let heroSpin = 0;
+      if (cyc.phase === "out") {
+        const p = Math.min(cyc.t / SWAP_OUT, 1);
+        if (reducedMotion) heroAlpha = 1 - p;
+        else {
+          heroScale = 1 - expoIn(p);
+          heroSpin = SWAP_SPIN * 0.5 * p;
+        }
+      } else if (cyc.phase === "in") {
+        const p = Math.min(cyc.t / SWAP_IN, 1);
+        if (reducedMotion) heroAlpha = p;
+        else {
+          heroScale = backOut(p);
+          heroSpin = -SWAP_SPIN * 0.5 * (1 - p);
+        }
+      }
+
+      const heroMesh = heroLogoRef.current;
+      if (heroMesh) {
+        const geo = heroLogos[cyc.index % Math.max(nLogos, 1)]?.geometry;
+        if (geo && heroMesh.geometry !== geo) heroMesh.geometry = geo;
+
+        // Cancel the crystal group's rotation so the logo faces the
+        // camera, then add a gentle sway that never reaches edge-on
+        const swayY = reducedMotion ? 0 : Math.sin(elapsed * 0.6) * 0.35;
+        const swayX = reducedMotion ? 0 : Math.sin(elapsed * 0.45) * 0.15;
+        _swayEuler.set(swayX, swayY + heroSpin, 0);
+        _swayQ.setFromEuler(_swayEuler);
+        if (heroMesh.parent) _parentInvQ.copy(heroMesh.parent.quaternion).invert();
+        else _parentInvQ.identity();
+        heroMesh.quaternion.multiplyQuaternions(_parentInvQ, _swayQ);
+        heroMesh.position.set(0, 0, 0);
+        heroMesh.scale.setScalar(Math.max(heroScale, 1e-4));
+
+        heroMesh.visible = !mergedHidden;
+        const hMat = heroMesh.material as THREE.MeshStandardMaterial;
+        if (hMat) hMat.opacity = (1 - crossfade) * fade * heroAlpha;
       }
 
       if (mergedRef.current) {
@@ -679,7 +801,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (logoMesh) {
           logoMesh.position.copy(mesh.position);
           logoMesh.quaternion.copy(mesh.quaternion);
-          logoMesh.scale.setScalar(scaleVal);
+          logoMesh.scale.setScalar(scaleVal * 0.45);
           const lMat = logoMesh.material as THREE.MeshStandardMaterial;
           if (lMat) lMat.opacity = shardOpacity;
         }
@@ -716,8 +838,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             black field with thin lightformers (tuned for glass highlights),
             so diffuse lighting alone renders the logo near-black; the
             emissive base keeps it a light grey */}
-        {heroLogo && (
-          <mesh ref={heroLogoRef} geometry={heroLogo.geometry}>
+        {heroLogos[0] && (
+          <mesh ref={heroLogoRef} geometry={heroLogos[0].geometry}>
             <meshStandardMaterial
               color="#aab0c0"
               emissive={LOGO_EMISSIVE}
