@@ -225,22 +225,17 @@ interface RockResult {
 function buildRockData(seed: number): RockResult {
   const planes = buildRockPlanes(seed);
 
-  if (!planes) {
-    const fb = new THREE.IcosahedronGeometry(1.2, 1);
-    const g = fb.toNonIndexed();
-    fb.dispose();
+  // Polyhedron and Convex geometries are already non-indexed
+  const fallback = () => {
+    const g = new THREE.IcosahedronGeometry(1.2, 1);
     g.computeVertexNormals();
-    return { rockGeo: g, shards: [] };
-  }
+    return { rockGeo: g as THREE.BufferGeometry, shards: [] };
+  };
+
+  if (!planes) return fallback();
 
   const rockV = solveHalfSpaces(planes);
-  if (rockV.length < 8) {
-    const fb = new THREE.IcosahedronGeometry(1.2, 1);
-    const g = fb.toNonIndexed();
-    fb.dispose();
-    g.computeVertexNormals();
-    return { rockGeo: g, shards: [] };
-  }
+  if (rockV.length < 8) return fallback();
 
   const active = planes.filter(p =>
     rockV.filter(v => Math.abs(p.n.dot(v) - p.d) < 1e-4).length >= 3
@@ -261,11 +256,8 @@ function buildRockData(seed: number): RockResult {
 
   const finalVerts = rockV.map(xf);
   const rockConvex = new ConvexGeometry(finalVerts);
-  const rawRock = rockConvex.toNonIndexed();
+  const rockSub = subdivideNonIndexed(rockConvex, SUBDIV_LEVELS_ROCK);
   rockConvex.dispose();
-
-  const rockSub = subdivideNonIndexed(rawRock, SUBDIV_LEVELS_ROCK);
-  rawRock.dispose();
   displaceAlongNormals(rockSub, DISPLACE_STRENGTH, DISPLACE_FREQ, seed * 0.13);
   generateSphericalUVs(rockSub);
   const rockGeo = rockSub;
@@ -305,10 +297,8 @@ function buildRockData(seed: number): RockResult {
     if (V.length < 4) continue;
 
     const sConvex = new ConvexGeometry(V);
-    const rawShard = sConvex.toNonIndexed();
+    const geo = subdivideNonIndexed(sConvex, SUBDIV_LEVELS_SHARD);
     sConvex.dispose();
-    const geo = subdivideNonIndexed(rawShard, SUBDIV_LEVELS_SHARD);
-    rawShard.dispose();
     displaceAlongNormals(geo, DISPLACE_STRENGTH * 0.6, DISPLACE_FREQ * 1.2, seed * 0.13 + i);
     generateSphericalUVs(geo);
 

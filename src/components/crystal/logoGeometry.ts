@@ -48,7 +48,7 @@ function pathToGeometry(
     const parsed = loader.parse(svg);
     const shapes: THREE.Shape[] = [];
     for (const p of parsed.paths) {
-      shapes.push(...SVGLoader.createShapes(p));
+      shapes.push(...p.toShapes());
     }
     if (!shapes.length) return null;
 

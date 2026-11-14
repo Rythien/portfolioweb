@@ -3,9 +3,15 @@
 import { useSyncExternalStore, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import type { RootState } from "@react-three/fiber";
+import * as THREE from "three";
 import Compositor from "./Compositor";
 import CrystalCursor from "@/components/crystal/CrystalCursor";
 import { SITE_DATA } from "@/content/site";
+import { TimerClock, muteClockDeprecationUntilSwapped } from "./timerClock";
+
+// Armed before the Canvas builds its store; released in onCreated
+let restoreConsole: (() => void) | null =
+  typeof window !== "undefined" ? muteClockDeprecationUntilSwapped() : null;
 
 /* ── External store subscriptions ─────────────────────────────── */
 
@@ -112,6 +118,10 @@ export default function SceneRoot() {
         frameloop={reducedMotion ? "demand" : "always"}
         onCreated={(state) => {
           canvasRef.current = state;
+          // Frame timing on THREE.Timer instead of the deprecated Clock
+          state.set({ clock: new TimerClock() as unknown as THREE.Clock });
+          restoreConsole?.();
+          restoreConsole = null;
         }}
       >
         <Compositor reducedMotion={reducedMotion} isMobile={isMobile} />
