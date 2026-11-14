@@ -85,7 +85,7 @@ export default function PixelImage({
 
       const style = getComputedStyle(document.documentElement);
       const surfaceEl = style.getPropertyValue("--t-surface-el").trim() || "#dfdcd6";
-      const inkMuted = style.getPropertyValue("--t-ink-muted").trim() || "#6b6b76";
+      const inkMuted = style.getPropertyValue("--t-ink-muted").trim() || "#5f5f6c";
 
       ctx.fillStyle = surfaceEl;
       ctx.fillRect(0, 0, w, h);

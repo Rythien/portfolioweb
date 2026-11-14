@@ -89,7 +89,6 @@ export default function Footer() {
           <button
             onClick={handleCopy}
             data-magnetic
-            aria-label="Copy email address to clipboard"
             className="pressable w-fit px-6 py-4 border border-rule text-ink font-mono text-label hover:border-rule-hover"
           >
             {copied ? "Copied ✓" : `Copy: ${SITE_DATA.contact.email}`}

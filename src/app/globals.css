@@ -32,7 +32,7 @@ html[data-mode="wake"] {
   --t-surface: #E9E7E2;
   --t-surface-el: #dfdcd6;
   --t-ink: #1a1a1e;
-  --t-ink-muted: #6b6b76;
+  --t-ink-muted: #5f5f6c; /* ≥4.5:1 on paper and elevated surfaces */
   --t-ink-faint: #a0a0a8;
   --t-rule: rgba(26, 26, 30, 0.1);
   --t-rule-hover: rgba(26, 26, 30, 0.25);
@@ -58,6 +58,13 @@ html[data-mode="dream"] {
 @layer base {
   html {
     scroll-behavior: initial;
+    /* Keep the gutter while the preloader holds scroll, or the whole
+       centered layout jumps left when the scrollbar appears */
+    scrollbar-gutter: stable;
+    /* body's overflow-x propagates to the viewport and leaves body
+       visible, so mobile Chrome zooms out to fit decorative bleed
+       (0.20 CLS at hydration); clipping at the root prevents it */
+    overflow-x: clip;
     background-color: var(--t-surface);
     color: var(--t-ink);
     /* Mode change rides the power2.inOut family, like the flood */
