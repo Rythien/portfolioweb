@@ -348,6 +348,49 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     crystalEvents.dreamLevel = f.level;
   }, [gl, brushTargetA, brushTargetB]);
 
+  // Shader warm-up during the preloader: precompile both portal scenes
+  // (including hidden shard/dream materials) and run one hidden frame of
+  // the flood shader so the first WAKE→DREAM click starts within a frame.
+  // The crystal GLB is preloaded at module scope in GlassCrystal.
+  const warmupRef = useRef(false);
+  useEffect(() => {
+    const warm = () => {
+      try {
+        gl.compile(wakeScene, fboCamera);
+        gl.compile(dreamScene, fboCamera);
+
+        const u = brushMaterial.uniforms;
+        u.uFloodActive.value = 1.0;
+        u.uFloodRadius.value = 0.4;
+        u.uFloodCenter.value.set(0.5, 0.5);
+        u.uPrevFrame.value = brushTargetA.texture;
+        gl.setRenderTarget(brushTargetB);
+        gl.render(brushQuadScene, brushOrthoCamera);
+        u.uFloodActive.value = 0.0;
+
+        // Restore the rest-state mask the flood frame just overwrote
+        const restColor =
+          useThemeStore.getState().mode === "dream" ? "#ffffff" : "#000000";
+        gl.setRenderTarget(brushTargetB);
+        gl.setClearColor(restColor, 1);
+        gl.clear();
+        gl.setRenderTarget(null);
+        gl.setClearColor("#000000", 0);
+        warmupRef.current = true;
+      } catch {
+        // A lost context during boot must never break the page
+      }
+    };
+    // Twice under the preloader: early, and again once the suspended
+    // crystal GLB has joined the scene graph
+    const t1 = window.setTimeout(warm, 600);
+    const t2 = window.setTimeout(warm, 1800);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [gl, wakeScene, dreamScene, brushTargetA, brushTargetB]);
+
   // Brush state
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
   const prevMouseRef = useRef({ x: 0.5, y: 0.5 });
