@@ -214,10 +214,10 @@ export function useCrystalData(seed = DEFAULT_SEED) {
  */
 const LOGO_LOOK = {
   wake: {
-    color: "#b4bcc8",
+    color: "#6c7482",
     emissive: "#5d6472",
     emissiveIntensity: 0.15,
-    side: "#3b414c",
+    side: "#262a31",
     roughness: 0.45,
     metalness: 0.0,
     envMapIntensity: 0.9,
@@ -227,10 +227,10 @@ const LOGO_LOOK = {
     color: "#ffffff",
     emissive: "#ffffff",
     emissiveIntensity: 0.6,
-    side: "#3d3170",
+    side: "#8f80d6",
     roughness: 0.3,
     metalness: 0.1,
-    envMapIntensity: 3.0,
+    envMapIntensity: 4.0,
     rim: "#c8b8ff",
   },
 } as const;

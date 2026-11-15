@@ -8,6 +8,8 @@ import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { getSectionProgress, useScrollStore } from "@/store/useScrollStore";
 
+const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("crystalfreeze");
+
 const HEADLINE_TILE = `${SITE_DATA.hero.headlineLine1}  ${SITE_DATA.hero.headlineLine2}  ·  `;
 const FONT_URL = "/fonts/inter-tight-bold.ttf";
 
@@ -117,7 +119,9 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
     const raw = baseSpeed + scrollKick;
     const speed = Math.sign(raw) * Math.min(Math.abs(raw), baseSpeed * 2.5);
 
-    offsetRef.current -= speed * delta;
+    // Test hook: crystalfreeze pins the marquee too, so pixel comparisons
+    // between two loads see the same type behind the crystal
+    if (!FREEZE) offsetRef.current -= speed * delta;
     const totalWidth = tileCount * tw;
     offsetRef.current = ((offsetRef.current % totalWidth) + totalWidth) % totalWidth;
 
