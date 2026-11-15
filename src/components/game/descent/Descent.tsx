@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/store/useGameStore";
 import { createGame, step, takeEvents, STEP, type GameState, type Input } from "./engine.ts";
 import { applyEvents, createView, fitDisplay, logicalSize, renderFrame, type View } from "./render.ts";
-import { playEvents } from "./audio.ts";
+import { playEvents, resetPad, updatePad } from "./audio.ts";
 
 interface DescentProps {
   /** Called with the run's score (metres) on every exit path. */
@@ -269,6 +269,7 @@ export default function Descent({ onExit }: DescentProps) {
       playEvents(events);
       applyEvents(view, events);
       scoreRef.current = Math.floor(game.score);
+      updatePad(game.depth);
       for (const e of events) {
         if (e.type !== "dead") continue;
         const newBest = e.score > save.best;
@@ -285,6 +286,7 @@ export default function Descent({ onExit }: DescentProps) {
 
     return () => {
       cancelAnimationFrame(raf);
+      resetPad();
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useSoundStore } from "@/store/useSoundStore";
 import { useThemeStore } from "@/store/useThemeStore";
 import { crystalEvents } from "@/hooks/crystalState";
-import { initAudioContext } from "@/hooks/crystalAudio";
+import { initAudioContext, getPadOpen } from "@/hooks/crystalAudio";
 
 const NAV_SELECTOR =
   'header a, header button, [role="group"][aria-label="Site mode"] button, footer a, footer button';
@@ -26,6 +26,7 @@ function playHoverTick() {
 
 interface Pad {
   gain: GainNode;
+  filter: BiquadFilterNode;
   nodes: AudioScheduledSourceNode[];
 }
 
@@ -64,7 +65,7 @@ function createPad(ctx: AudioContext): Pad {
   lfo.start();
 
   filter.connect(gain).connect(ctx.destination);
-  return { gain, nodes };
+  return { gain, filter, nodes };
 }
 
 export default function SoundLayer() {
@@ -114,7 +115,11 @@ export default function SoundLayer() {
       // (the toggle click already resumed it: that is our user gesture).
       const ctx = initAudioContext();
       if (!pad && enabled && target > 0) pad = createPad(ctx);
-      if (pad) pad.gain.gain.setTargetAtTime(target, ctx.currentTime, 0.3);
+      if (pad) {
+        pad.gain.gain.setTargetAtTime(target, ctx.currentTime, 0.3);
+        // DESCENT opens the filter with depth (0 when not playing)
+        pad.filter.frequency.setTargetAtTime(380 + getPadOpen() * 1600, ctx.currentTime, 0.5);
+      }
     };
 
     raf = requestAnimationFrame(loop);
