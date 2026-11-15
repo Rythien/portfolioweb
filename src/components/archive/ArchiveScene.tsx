@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useFBO } from "@react-three/drei";
+import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
+import { applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import * as THREE from "three";
 import { setPadOpen } from "@/hooks/crystalAudio";
 import {
@@ -11,7 +12,7 @@ import {
 } from "./flight";
 import { readFlightInput, type InputState } from "./input";
 import { SEALS, VIEW_DISTANCE, VOID } from "./layout";
-import Seal, { type SealRegistry } from "./Seal";
+import Seal, { SEAL_RIM, SEAL_SIZE, SHARD_RIM, type SealRegistry } from "./Seal";
 import Play from "./Play";
 import { CHARGE_FULL, type ArchiveState, type HudEls } from "./archiveState";
 import { ENDING } from "./game";
@@ -584,8 +585,35 @@ function writeHud(g: ArchiveState, h: HudEls, camera: THREE.Camera) {
   }
 }
 
+function setInfoAutoReset(gl: THREE.WebGLRenderer, on: boolean) {
+  gl.info.autoReset = on;
+}
+
+/** Test hook plumbing: copy and reset the renderer's counters once per frame. */
+function snapshotInfo(out: { calls: number; triangles: number }, gl: THREE.WebGLRenderer) {
+  out.calls = gl.info.render.calls;
+  out.triangles = gl.info.render.triangles;
+  gl.info.reset();
+}
+
 function HudDriver({ game, hud }: { game: React.RefObject<ArchiveState>; hud: React.RefObject<HudEls> }) {
-  useFrame(({ camera }) => writeHud(game.current, hud.current, camera));
+  const { gl } = useThree();
+  // Test hook: Playwright reads draw calls / triangles per frame (perf checks)
+  // Totals over one whole frame (backdrop pass included), not the last render
+  const frameInfo = useRef({ calls: 0, triangles: 0 });
+  useEffect(() => {
+    const w = window as unknown as { __archiveInfo?: () => { calls: number; triangles: number; programs: number } };
+    setInfoAutoReset(gl, false);
+    w.__archiveInfo = () => ({ ...frameInfo.current, programs: gl.info.programs?.length ?? 0 });
+    return () => {
+      setInfoAutoReset(gl, true);
+      delete w.__archiveInfo;
+    };
+  }, [gl]);
+  useFrame(({ camera }) => {
+    snapshotInfo(frameInfo.current, gl);
+    writeHud(game.current, hud.current, camera);
+  });
   return null;
 }
 
@@ -602,6 +630,19 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
   const backdrop = useFBO(Math.max(256, Math.round(size.width * 0.6)), Math.max(256, Math.round(size.height * 0.6)));
   const registry = useMemo<SealRegistry>(() => ({ backdropHidden: new Set(), bodies: [], targets: [] }), []);
   const hideCrystal = useCallback((o: THREE.Object3D | null) => hideFromBackdrop(registry, o), [registry]);
+  // ONE material for every seal body, ONE for every orbiting shard: owned
+  // here (on a hidden holder mesh), handed to the three seals
+  const glassProps = useMemo(() => crystalGlassProps("dream"), []);
+  const [sealGlass, setSealGlass] = useState<THREE.Material | null>(null);
+  const [shardGlass, setShardGlass] = useState<THREE.Material | null>(null);
+  const holdSealGlass = useCallback((m: unknown) => {
+    applyCrystalShader(m as THREE.Material | null, SEAL_RIM);
+    if (m) setSealGlass(m as THREE.Material);
+  }, []);
+  const holdShardGlass = useCallback((m: unknown) => {
+    applyCrystalShader(m as THREE.Material | null, SHARD_RIM);
+    if (m) setShardGlass(m as THREE.Material);
+  }, []);
   return (
     <>
       <color attach="background" args={[VOID.fog]} />
@@ -616,7 +657,13 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
       {/* The same studio the hero crystal is lit by, so the ice matches */}
       <StudioEnvironment variant="dream" />
       <SealBackdrop registry={registry} fbo={backdrop} />
-      {SEALS.map((spot, i) => {
+      <mesh visible={false}>
+        <MeshTransmissionMaterial {...glassProps} buffer={backdrop.texture} thickness={thicknessFor(SEAL_SIZE)} resolution={32} ref={holdSealGlass} />
+      </mesh>
+      <mesh visible={false}>
+        <MeshTransmissionMaterial {...glassProps} buffer={backdrop.texture} thickness={thicknessFor(1.2, true)} resolution={32} flatShading ref={holdShardGlass} />
+      </mesh>
+      {sealGlass && shardGlass && SEALS.map((spot, i) => {
         const pr = projects[spot.project];
         return (
           <Seal
@@ -627,7 +674,8 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
             label={pr ? `${pr.title}  ·  ${pr.category}  ·  ${pr.year}`.toUpperCase() : ""}
             project={pr}
             reduced={reduced}
-            buffer={backdrop.texture}
+            glassMaterial={sealGlass}
+            shardMaterial={shardGlass}
             registry={registry}
             state={game.current}
           />

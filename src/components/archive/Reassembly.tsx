@@ -12,8 +12,9 @@ import type { ArchiveState } from "./archiveState";
 /**
  * The ending: every shard has converged (Seal.tsx moves them) and the
  * intact crystal (the hero's own procedural chunk, the same ice) forms in
- * front of the visitor. Mounted from the start, visible but vanishingly
- * small, so the Archive's warm-up compiles it and it never hitches in.
+ * front of the visitor. Mounted from the start but hidden (userData.warm
+ * asks the Archive's warm-up to compile it anyway), so it costs nothing
+ * per frame and never hitches in.
  */
 
 const CRYSTAL_URL = "/models/crystal-chunk.bin";
@@ -49,10 +50,8 @@ export default function Reassembly({ game, buffer, hide, glowTex, reduced }: Pro
     const end = g.ending;
     const grp = group.current;
     if (!grp) return;
+    grp.visible = !!end;
     if (!end) {
-      // Parked out of sight, still drawn (compiled), at no real cost
-      grp.position.set(0, -9999, 0);
-      grp.scale.setScalar(1e-4);
       if (flash.current) flash.current.visible = false;
       return;
     }
@@ -81,9 +80,9 @@ export default function Reassembly({ game, buffer, hide, glowTex, reduced }: Pro
 
   return (
     <group>
-      <group ref={group} position={[0, -9999, 0]} scale={1e-4}>
+      <group ref={group} visible={false}>
         <pointLight ref={light} color="#e9dfff" intensity={0} distance={14} decay={1.4} />
-        <mesh ref={hide} geometry={geo} frustumCulled={false}>
+        <mesh ref={hide} geometry={geo} frustumCulled={false} userData={{ warm: true }}>
           <MeshTransmissionMaterial
             {...glass}
             buffer={buffer}

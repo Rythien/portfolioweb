@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { MeshTransmissionMaterial } from "@react-three/drei";
 import * as THREE from "three";
-import { applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import { SEAL, type SealSpot } from "./layout";
 import { sealProgress, sealSlug, type ArchiveState, type SealState } from "./archiveState";
 import { ENDING, FREE, type SealTarget, type V3 } from "./game";
@@ -359,8 +357,10 @@ interface SealProps {
   /** The project held inside (its panel when freed). */
   project: Project | undefined;
   reduced: boolean;
-  /** Shared backdrop the seals' glass refracts (one pass for all three). */
-  buffer: THREE.Texture;
+  /** ONE glass material for every seal body and ONE for every orbiting
+   * shard (ArchiveScene owns them; they read the shared backdrop). */
+  glassMaterial: THREE.Material;
+  shardMaterial: THREE.Material;
   registry: SealRegistry;
   state: ArchiveState;
 }
@@ -388,10 +388,12 @@ const _end = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 /** A brighter rim than the hero's: it has to separate a seal from violet fog at any distance. */
-const SEAL_RIM = { intensity: 1.1, power: 2.6 };
-const SHARD_RIM = { intensity: 1.0, power: 2.4 };
+export const SEAL_RIM = { intensity: 1.1, power: 2.6 };
+export const SHARD_RIM = { intensity: 1.0, power: 2.4 };
+/** Seal body size (tallest side), for its glass thickness. */
+export const SEAL_SIZE = SEAL.radius * 2 * 1.22;
 
-export default function Seal({ spot, index, cover, label, project, reduced, buffer, registry, state }: SealProps) {
+export default function Seal({ spot, index, cover, label, project, reduced, glassMaterial, shardMaterial, registry, state }: SealProps) {
   const body = useRef<THREE.Group>(null);
   const coverRef = useRef<THREE.Mesh>(null);
   const facetMesh = useRef<THREE.Mesh>(null);
@@ -430,8 +432,6 @@ export default function Seal({ spot, index, cover, label, project, reduced, buff
   const facets = useMemo(() => Array.from({ length: 12 }, (_, f) => facetGeometry(geo, f)), [geo]);
   const orbiters = useMemo(() => makeOrbiters(900 + index * 53), [index]);
   const fragments = useMemo(() => makeFragments(1300 + index * 71), [index]);
-  const glassProps = useMemo(() => crystalGlassProps("dream"), []);
-  const sealSize = SEAL.radius * 2 * 1.22;
   const facetUniforms = useMemo(
     () => ({
       uTime: { value: 0 },
@@ -632,15 +632,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, buff
       <group ref={body}>
         <pointLight ref={light} color="#a78bfa" intensity={5} distance={SEAL.radius * 4} decay={1.4} />
         {/* The ice: the shared crystal material, DREAM tint */}
-        <mesh ref={glass} geometry={geo}>
-          <MeshTransmissionMaterial
-            {...glassProps}
-            buffer={buffer}
-            thickness={thicknessFor(sealSize)}
-            resolution={32}
-            ref={(m: unknown) => applyCrystalShader(m as THREE.Material | null, SEAL_RIM)}
-          />
-        </mesh>
+        <mesh ref={glass} geometry={geo} material={glassMaterial} />
         {/* Crisp cut edges */}
         <lineSegments ref={edges}>
           <edgesGeometry args={[geo, 20]} />
@@ -672,16 +664,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, buff
       </mesh>
       {/* Shards in orbit: three tilted rings, the middle one counter-rotating */}
       {_shardGeo && (
-        <instancedMesh ref={swarm} args={[_shardGeo, undefined, orbiters.length + BURST]} frustumCulled={false}>
-          <MeshTransmissionMaterial
-            {...glassProps}
-            buffer={buffer}
-            thickness={thicknessFor(1.2, true)}
-            resolution={32}
-            flatShading
-            ref={(m: unknown) => applyCrystalShader(m as THREE.Material | null, SHARD_RIM)}
-          />
-        </instancedMesh>
+        <instancedMesh ref={swarm} args={[_shardGeo, shardMaterial, orbiters.length + BURST]} frustumCulled={false} />
       )}
       {/* The burst: one white-violet flash as the glass gives way */}
       <sprite ref={flash} visible={false} renderOrder={4}>
