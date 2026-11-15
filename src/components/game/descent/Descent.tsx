@@ -84,6 +84,27 @@ export default function Descent({ onExit }: DescentProps) {
     let last = performance.now();
     let acc = 0;
 
+    // Keyboard steering and dash (pointer and touch arrive with input)
+    const held = { left: false, right: false };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const k = e.key;
+      if (k === "ArrowLeft" || k === "a" || k === "A") held.left = true;
+      else if (k === "ArrowRight" || k === "d" || k === "D") held.right = true;
+      else if (k === " " || k === "ArrowDown") {
+        if (!e.repeat) input.dash = true;
+      } else return;
+      e.preventDefault();
+      input.steer = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const k = e.key;
+      if (k === "ArrowLeft" || k === "a" || k === "A") held.left = false;
+      else if (k === "ArrowRight" || k === "d" || k === "D") held.right = false;
+      input.steer = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+
     const onResize = () => fitDisplay(view);
     onResize();
     window.addEventListener("resize", onResize);
@@ -108,6 +129,8 @@ export default function Descent({ onExit }: DescentProps) {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, [size]);
 
