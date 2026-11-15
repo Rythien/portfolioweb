@@ -54,6 +54,8 @@ export default function Descent({ onExit }: DescentProps) {
   const [death, setDeath] = useState<Death | null>(null);
   /** Current run's score, read by every exit path. */
   const scoreRef = useRef(0);
+  /** Decided once per open (refs survive StrictMode's double effect). */
+  const firstRunRef = useRef<boolean | null>(null);
   const exitRef = useRef(onExit);
   useEffect(() => {
     exitRef.current = onExit;
@@ -87,6 +89,7 @@ export default function Descent({ onExit }: DescentProps) {
   // Pause on blur / hidden tab; Esc exits
   useEffect(() => {
     const pause = () => {
+      if (pausedRef.current) return;
       pausedRef.current = true;
       setPaused(true);
     };
@@ -117,6 +120,8 @@ export default function Descent({ onExit }: DescentProps) {
     const params = new URLSearchParams(window.location.search);
     const debug = params.get("descentdebug") === "1";
     const save = loadSave();
+    if (firstRunRef.current === null) firstRunRef.current = !save.seenControls;
+    const firstRun = firstRunRef.current;
     const input: Input = { steer: 0, targetX: null, dash: false };
     const hooks: { game?: GameState; input: Input; runs: number } = { input, runs: 0 };
     if (debug) (window as unknown as { __descent?: unknown }).__descent = hooks;
@@ -131,6 +136,12 @@ export default function Descent({ onExit }: DescentProps) {
         best: save.best,
       });
       view.hud = { shown: g.score, bestFlash: 0, deadT: -1, best: save.best };
+      // Controls hint: the first run on this browser only
+      view.controls = firstRun && hooks.runs === 0 ? 0 : -1;
+      if (!save.seenControls) {
+        save.seenControls = true;
+        writeSave(save);
+      }
       view.particles = [];
       view.trail = [];
       scoreRef.current = 0;
@@ -144,11 +155,71 @@ export default function Descent({ onExit }: DescentProps) {
       game = newGame();
       acc = 0;
       setDeath(null);
+      setPausedState(false);
     };
+    const setPausedState = (v: boolean) => {
+      pausedRef.current = v;
+      setPaused(v);
+    };
+
+    /* Pointer: mouse eases toward the cursor x and clicks to dash; touch
+       drags relative to where the finger went down and taps to dash */
+    const toWorldX = (clientX: number) => {
+      const r = canvas.getBoundingClientRect();
+      return ((clientX - r.left) / r.width) * size.w;
+    };
+    let touchStart: { x: number; y: number; t: number; gemX: number; id: number } | null = null;
+    const onPointerDown = (e: PointerEvent) => {
+      canvas.focus();
+      if (pausedRef.current && !game.over) {
+        setPausedState(false);
+        return;
+      }
+      if (game.over) {
+        if (view.hud.deadT > 0.5) restart();
+        return;
+      }
+      if (e.pointerType === "mouse") {
+        if (e.button === 0) input.dash = true;
+        input.targetX = toWorldX(e.clientX);
+        return;
+      }
+      touchStart = { x: e.clientX, y: e.clientY, t: performance.now(), gemX: game.gem.x, id: e.pointerId };
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        // capture is a nicety: steering still works without it
+      }
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") {
+        input.targetX = toWorldX(e.clientX);
+        return;
+      }
+      if (!touchStart || e.pointerId !== touchStart.id) return;
+      const r = canvas.getBoundingClientRect();
+      input.targetX = touchStart.gemX + ((e.clientX - touchStart.x) / r.width) * size.w;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" || !touchStart || e.pointerId !== touchStart.id) return;
+      const moved = Math.hypot(e.clientX - touchStart.x, e.clientY - touchStart.y);
+      if (moved < 10 && performance.now() - touchStart.t < 250) input.dash = true;
+      touchStart = null;
+      input.targetX = null;
+    };
+    const onPointerLeave = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") input.targetX = null;
+    };
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerUp);
+    canvas.addEventListener("pointerleave", onPointerLeave);
 
     let raf = 0;
     let last = performance.now();
     let acc = 0;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
 
     // Keyboard steering and dash (pointer and touch arrive with input)
     const held = { left: false, right: false };
@@ -156,6 +227,9 @@ export default function Descent({ onExit }: DescentProps) {
       const k = e.key;
       if (k === "ArrowLeft" || k === "a" || k === "A") held.left = true;
       else if (k === "ArrowRight" || k === "d" || k === "D") held.right = true;
+      else if (k === "p" || k === "P") {
+        if (!e.repeat && !game.over) setPausedState(!pausedRef.current);
+      }
       else if (k === " " || k === "ArrowDown") {
         if (!e.repeat) input.dash = true;
       } else if (k === "r" || k === "R") {
@@ -163,6 +237,8 @@ export default function Descent({ onExit }: DescentProps) {
       } else return;
       e.preventDefault();
       input.steer = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+      // Keys take over from the mouse until it moves again
+      if (input.steer !== 0) input.targetX = null;
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const k = e.key;
@@ -200,7 +276,10 @@ export default function Descent({ onExit }: DescentProps) {
         writeSave(save);
         setDeath({ score: e.score, best: save.best, newBest });
       }
-      renderFrame(view, game, pausedRef.current ? 1 : acc / STEP, pausedRef.current ? 0 : dt, fullBleed);
+      renderFrame(view, game, pausedRef.current ? 1 : acc / STEP, pausedRef.current ? 0 : dt, {
+        touch: coarse,
+        paused: pausedRef.current,
+      });
     };
     raf = requestAnimationFrame(frame);
 
@@ -209,6 +288,11 @@ export default function Descent({ onExit }: DescentProps) {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
     };
   }, [size, fullBleed]);
 
@@ -223,7 +307,7 @@ export default function Descent({ onExit }: DescentProps) {
         ref={canvasRef}
         tabIndex={0}
         aria-label="DESCENT game canvas"
-        className={fullBleed ? "h-full w-full" : "h-full max-h-[100dvh]"}
+        className={`touch-none select-none outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#8f7bff] ${fullBleed ? "h-full w-full" : "h-full max-h-[100dvh]"}`}
         style={fullBleed ? undefined : { aspectRatio: `${size.w} / ${size.h}` }}
       />
       {paused && <p className="sr-only" aria-live="polite">Paused</p>}

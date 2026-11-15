@@ -54,6 +54,13 @@ export interface View {
     /** Stored best before this run, for the death screen. */
     best: number;
   };
+  /** First-run controls hint: elapsed seconds, or -1 when not shown. */
+  controls: number;
+}
+
+export interface FrameOptions {
+  touch: boolean;
+  paused: boolean;
 }
 
 /* ── Pre-rendered layers ───────────────────────────────────── */
@@ -189,6 +196,7 @@ export function createView(display: HTMLCanvasElement, w: number, h: number, red
     scanlines: null,
     fullBleed,
     hud: { shown: 0, bestFlash: 0, deadT: -1, best: 0 },
+    controls: -1,
   };
 }
 
@@ -710,9 +718,102 @@ function drawDeath(v: View, s: GameState, dt: number, touch: boolean): void {
   ctx.globalAlpha = 1;
 }
 
+/* ── Controls hint and pause ─────────────────────────────── */
+
+/** Pixel keycap: a 1 px outlined box with a glyph inside. */
+function keycap(ctx: CanvasRenderingContext2D, x: number, y: number, label: string): number {
+  const w = Math.max(9, textWidth(label) + 6);
+  ctx.fillStyle = PALETTE.hudDim;
+  ctx.fillRect(x + 1, y, w - 2, 1);
+  ctx.fillRect(x + 1, y + 10, w - 2, 1);
+  ctx.fillRect(x, y + 1, 1, 9);
+  ctx.fillRect(x + w - 1, y + 1, 1, 9);
+  ctx.fillStyle = PALETTE.bgDeep;
+  ctx.fillRect(x + 1, y + 1, w - 2, 9);
+  drawText(ctx, label, x + Math.round((w - textWidth(label)) / 2), y + 3, PALETTE.highlight);
+  return w;
+}
+
+/** Arrow glyphs (the font has none): 3x5, pointing left or right. */
+function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, dir: -1 | 1): void {
+  ctx.fillStyle = PALETTE.highlight;
+  const rows = dir < 0 ? ["001", "011", "111", "011", "001"] : ["100", "110", "111", "110", "100"];
+  rows.forEach((r, j) => [...r].forEach((c, i) => c === "1" && ctx.fillRect(x + i, y + j, 1, 1)));
+}
+
+const CONTROLS_SECONDS = 3;
+
+/** Shown for the first 3 s of the first run only. */
+function drawControls(v: View, dt: number, touch: boolean): void {
+  if (v.controls < 0) return;
+  v.controls += dt;
+  if (v.controls >= CONTROLS_SECONDS) {
+    v.controls = -1;
+    return;
+  }
+  const { ctx, w, h } = v;
+  const t = v.controls;
+  const a = Math.min(1, t / 0.25, (CONTROLS_SECONDS - t) / 0.3);
+  ctx.globalAlpha = a;
+  const y0 = Math.round(h * 0.5);
+  ctx.globalAlpha = a * 0.8;
+  ctx.fillStyle = PALETTE.bgDeep;
+  ctx.fillRect(Math.round(w / 2 - 74), y0 - 6, 148, touch ? 34 : 50);
+  ctx.globalAlpha = a;
+  if (touch) {
+    const l1 = "DRAG TO STEER";
+    const l2 = "TAP TO DASH";
+    drawText(ctx, l1, Math.round((w - textWidth(l1)) / 2), y0 + 2, PALETTE.highlight);
+    drawText(ctx, l2, Math.round((w - textWidth(l2)) / 2), y0 + 14, PALETTE.highlight);
+  } else {
+    let x = Math.round(w / 2 - 66);
+    const cap = (label: string) => {
+      const cw = keycap(ctx, x, y0, label);
+      x += cw + 2;
+      return cw;
+    };
+    const lx = x;
+    cap("  ");
+    arrow(ctx, lx + 3, y0 + 3, -1);
+    const rx = x;
+    cap("  ");
+    arrow(ctx, rx + 4, y0 + 3, 1);
+    x += 2;
+    cap("A");
+    cap("D");
+    drawText(ctx, "STEER", x + 4, y0 + 3, PALETTE.hud);
+    x = Math.round(w / 2 - 66);
+    const y1 = y0 + 15;
+    const sx = x;
+    const sw = keycap(ctx, sx, y1, "SPACE");
+    x = sx + sw + 2;
+    keycap(ctx, x, y1, "  ");
+    // Down arrow
+    ctx.fillStyle = PALETTE.highlight;
+    ["11111", ".111.", "..1.."].forEach((r, j) => [...r].forEach((c, i) => c === "1" && ctx.fillRect(x + 2 + i, y1 + 4 + j, 1, 1)));
+    drawText(ctx, "DASH", x + 15, y1 + 3, PALETTE.hud);
+    const l3 = "OR MOUSE: MOVE + CLICK";
+    drawText(ctx, l3, Math.round((w - textWidth(l3)) / 2), y1 + 17, PALETTE.hudDim);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPaused(v: View, touch: boolean): void {
+  const { ctx, w, h } = v;
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = PALETTE.bgDeep;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalAlpha = 1;
+  const t1 = "PAUSED";
+  const t2 = touch ? "TAP TO RESUME" : "P TO RESUME";
+  drawText(ctx, t1, Math.round((w - textWidth(t1, 2)) / 2), Math.round(h * 0.42), PALETTE.highlight, 2);
+  drawText(ctx, t2, Math.round((w - textWidth(t2)) / 2), Math.round(h * 0.42) + 18, PALETTE.hud);
+}
+
 /* ── Frame ─────────────────────────────────────────────────── */
 
-export function renderFrame(v: View, s: GameState, alpha: number, dt: number, touch = false): void {
+export function renderFrame(v: View, s: GameState, alpha: number, dt: number, opts: FrameOptions): void {
+  const { touch } = opts;
   const { ctx, w, h } = v;
   let camY = lerp(s.prev.camY, s.camY, alpha);
   // Screen shake: decaying, cosmetic, off under reduced motion
@@ -759,7 +860,9 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number, to
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;
   }
+  drawControls(v, dt, touch);
   drawDeath(v, s, dt, touch);
+  if (opts.paused && !s.over) drawPaused(v, touch);
 
   blit(v);
 }
