@@ -95,6 +95,8 @@ export interface GameConfig {
   invulnerable?: boolean;
   /** Test hook: begin this many metres down. */
   startDepth?: number;
+  /** Personal best score (m) from storage; 0 when none. */
+  best?: number;
 }
 
 export type GameEvent =
@@ -111,7 +113,8 @@ export type GameEvent =
   | { type: "life"; x: number; y: number; lives: number }
   | { type: "combo"; combo: number; mult: number }
   | { type: "dead"; score: number; depth: number }
-  | { type: "band"; band: number; name: string };
+  | { type: "band"; band: number; name: string }
+  | { type: "best"; best: number };
 
 export interface Gem {
   x: number;
@@ -169,6 +172,8 @@ export interface GameState {
   lastPass: [number, number] | null;
   lastRowY: number | null;
   band: number;
+  /** True once this run's score passed the stored best. */
+  passedBest: boolean;
   events: GameEvent[];
   over: boolean;
 }
@@ -237,6 +242,7 @@ export function createGame(cfg: GameConfig): GameState {
     lastPass: null,
     lastRowY: null,
     band: bandAt(startM),
+    passedBest: false,
     events: [{ type: "start" }, { type: "band", band: bandAt(startM), name: bandName(bandAt(startM)) }],
     over: false,
   };
@@ -489,6 +495,11 @@ export function step(s: GameState, input: Input, dt: number = STEP): void {
   const newDepth = Math.max(s.depth, g.y / PX_PER_METRE);
   s.score += (newDepth - s.depth) * comboMultiplier(s.combo);
   s.depth = newDepth;
+  const best = s.cfg.best ?? 0;
+  if (!s.passedBest && best > 0 && s.score > best) {
+    s.passedBest = true;
+    s.events.push({ type: "best", best });
+  }
   const band = bandAt(s.depth);
   if (band > s.band) {
     s.band = band;
@@ -502,4 +513,14 @@ export function takeEvents(s: GameState): GameEvent[] {
   const e = s.events;
   s.events = [];
   return e;
+}
+
+/**
+ * World y of the personal-best line: where the score will equal the best
+ * at the current multiplier. It drifts up as the gem approaches it.
+ */
+export function bestLineY(s: GameState): number | null {
+  const best = s.cfg.best ?? 0;
+  if (best <= 0 || s.passedBest) return null;
+  return s.gem.y + ((best - s.score) / comboMultiplier(s.combo)) * PX_PER_METRE;
 }

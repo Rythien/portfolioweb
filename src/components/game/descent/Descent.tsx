@@ -14,10 +14,46 @@ interface DescentProps {
 /** Longest frame fed to the accumulator; a hitch never fast-forwards. */
 const MAX_FRAME = 0.25;
 
+/* ── Save: one localStorage key, and a blocked context still plays ── */
+
+const SAVE_KEY = "descent";
+interface Save {
+  best: number;
+  seenControls: boolean;
+}
+function loadSave(): Save {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) {
+      const v = JSON.parse(raw) as Partial<Save>;
+      return { best: Math.max(0, Number(v.best) || 0), seenControls: !!v.seenControls };
+    }
+  } catch {
+    // blocked or corrupt storage: play without a best
+  }
+  return { best: 0, seenControls: false };
+}
+function writeSave(v: Save): void {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(v));
+  } catch {
+    // blocked storage: the run still counts on the page
+  }
+}
+
+interface Death {
+  score: number;
+  best: number;
+  newBest: boolean;
+}
+
 export default function Descent({ onExit }: DescentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
+  const [death, setDeath] = useState<Death | null>(null);
+  /** Current run's score, read by every exit path. */
+  const scoreRef = useRef(0);
   const exitRef = useRef(onExit);
   useEffect(() => {
     exitRef.current = onExit;
@@ -58,7 +94,7 @@ export default function Descent({ onExit }: DescentProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        exitRef.current();
+        exitRef.current(scoreRef.current > 0 ? scoreRef.current : undefined);
       }
     };
     window.addEventListener("blur", pause);
@@ -76,19 +112,39 @@ export default function Descent({ onExit }: DescentProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const view: View = createView(canvas, size.w, size.h, reducedMotion);
+    const view: View = createView(canvas, size.w, size.h, reducedMotion, fullBleed);
     // Test hooks, only behind URL params (Playwright checks); never in the UI
     const params = new URLSearchParams(window.location.search);
     const debug = params.get("descentdebug") === "1";
-    const game: GameState = createGame({
-      seed: debug && params.get("descentseed") ? Number(params.get("descentseed")) : (Date.now() >>> 0) ^ 0x9e3779b9,
-      viewH: size.h,
-      reducedMotion,
-      invulnerable: debug && params.get("descentgod") === "1",
-      startDepth: debug ? Number(params.get("descentstart") || 0) : 0,
-    });
+    const save = loadSave();
     const input: Input = { steer: 0, targetX: null, dash: false };
-    if (debug) (window as unknown as { __descent?: unknown }).__descent = { game, input };
+    const hooks: { game?: GameState; input: Input; runs: number } = { input, runs: 0 };
+    if (debug) (window as unknown as { __descent?: unknown }).__descent = hooks;
+
+    const newGame = (): GameState => {
+      const g = createGame({
+        seed: debug && params.get("descentseed") ? Number(params.get("descentseed")) + hooks.runs : (Date.now() >>> 0) ^ 0x9e3779b9,
+        viewH: size.h,
+        reducedMotion,
+        invulnerable: debug && params.get("descentgod") === "1",
+        startDepth: debug ? Number(params.get("descentstart") || 0) : 0,
+        best: save.best,
+      });
+      view.hud = { shown: g.score, bestFlash: 0, deadT: -1, best: save.best };
+      view.particles = [];
+      view.trail = [];
+      scoreRef.current = 0;
+      hooks.game = g;
+      hooks.runs += 1;
+      return g;
+    };
+    let game = newGame();
+
+    const restart = () => {
+      game = newGame();
+      acc = 0;
+      setDeath(null);
+    };
 
     let raf = 0;
     let last = performance.now();
@@ -102,6 +158,8 @@ export default function Descent({ onExit }: DescentProps) {
       else if (k === "ArrowRight" || k === "d" || k === "D") held.right = true;
       else if (k === " " || k === "ArrowDown") {
         if (!e.repeat) input.dash = true;
+      } else if (k === "r" || k === "R") {
+        if (!e.repeat) restart();
       } else return;
       e.preventDefault();
       input.steer = (held.right ? 1 : 0) - (held.left ? 1 : 0);
@@ -134,7 +192,15 @@ export default function Descent({ onExit }: DescentProps) {
       const events = takeEvents(game);
       playEvents(events);
       applyEvents(view, events);
-      renderFrame(view, game, pausedRef.current ? 1 : acc / STEP, pausedRef.current ? 0 : dt);
+      scoreRef.current = Math.floor(game.score);
+      for (const e of events) {
+        if (e.type !== "dead") continue;
+        const newBest = e.score > save.best;
+        if (newBest) save.best = e.score;
+        writeSave(save);
+        setDeath({ score: e.score, best: save.best, newBest });
+      }
+      renderFrame(view, game, pausedRef.current ? 1 : acc / STEP, pausedRef.current ? 0 : dt, fullBleed);
     };
     raf = requestAnimationFrame(frame);
 
@@ -144,7 +210,7 @@ export default function Descent({ onExit }: DescentProps) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [size]);
+  }, [size, fullBleed]);
 
   return (
     <div
@@ -161,9 +227,14 @@ export default function Descent({ onExit }: DescentProps) {
         style={fullBleed ? undefined : { aspectRatio: `${size.w} / ${size.h}` }}
       />
       {paused && <p className="sr-only" aria-live="polite">Paused</p>}
+      <p className="sr-only" aria-live="assertive" aria-atomic="true">
+        {death
+          ? `The fall ended at ${death.score} metres. ${death.newBest ? "A new best." : `Best ${death.best} metres.`} Press R to fall again or Escape to return to the page.`
+          : ""}
+      </p>
       <button
         type="button"
-        onClick={() => exitRef.current()}
+        onClick={() => exitRef.current(scoreRef.current > 0 ? scoreRef.current : undefined)}
         aria-label="Exit the game"
         className="absolute right-3 top-3 grid h-11 w-11 place-items-center font-mono text-[#e4dcff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8f7bff]"
       >

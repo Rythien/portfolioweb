@@ -3,10 +3,10 @@
  * resolution into an offscreen canvas, then upscaled to the display
  * canvas with image smoothing off, so pixels stay hard at any size.
  */
-import { WORLD_W, TUNING, type GameEvent, type GameState } from "./engine.ts";
+import { WORLD_W, TUNING, bestLineY, comboMultiplier, type GameEvent, type GameState } from "./engine.ts";
 import { ICE_THICKNESS, DIFFICULTY_CAP_METRES, type Shard } from "./entities.ts";
 import { PALETTE, BAND_TINTS, hexToRgb, mixHex } from "./palette.ts";
-import { drawText, textWidth } from "./font.ts";
+import { drawText, textWidth, glyph, GLYPH_W, GLYPH_H } from "./font.ts";
 
 interface Particle {
   x: number;
@@ -42,6 +42,18 @@ export interface View {
   vignette: HTMLCanvasElement;
   fringe: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; mask: HTMLCanvasElement };
   scanlines: HTMLCanvasElement | null;
+  /** Phones: the canvas is full-bleed and the X button sits over it. */
+  fullBleed: boolean;
+  hud: {
+    /** Odometer value, easing toward the score. */
+    shown: number;
+    /** Flash after passing the best line (s remaining). */
+    bestFlash: number;
+    /** Seconds since death, or -1. */
+    deadT: number;
+    /** Stored best before this run, for the death screen. */
+    best: number;
+  };
 }
 
 /* ── Pre-rendered layers ───────────────────────────────────── */
@@ -144,7 +156,7 @@ export function logicalSize(cssW: number, cssH: number, fullBleed: boolean): { w
   return { w: WORLD_W, h: Math.round(Math.max(480, Math.min(760, (WORLD_W * cssH) / cssW))) };
 }
 
-export function createView(display: HTMLCanvasElement, w: number, h: number, reducedMotion: boolean): View {
+export function createView(display: HTMLCanvasElement, w: number, h: number, reducedMotion: boolean, fullBleed = false): View {
   const buf = document.createElement("canvas");
   buf.width = w;
   buf.height = h;
@@ -175,6 +187,8 @@ export function createView(display: HTMLCanvasElement, w: number, h: number, red
     vignette: vignetteLayer(w, h),
     fringe: { canvas: fringeCanvas, ctx: fringeCanvas.getContext("2d")!, mask: edgeMask(w, h) },
     scanlines: null,
+    fullBleed,
+    hud: { shown: 0, bestFlash: 0, deadT: -1, best: 0 },
   };
 }
 
@@ -363,6 +377,10 @@ export function applyEvents(v: View, events: GameEvent[]): void {
       burst(v, e.x, e.y, 10, 6, [PALETTE.highlight, PALETTE.glow, PALETTE.ice], 0.7);
     } else if (e.type === "band") {
       v.banner = { name: e.name, t: 0 };
+    } else if (e.type === "best") {
+      v.hud.bestFlash = 0.6;
+    } else if (e.type === "dead") {
+      v.hud.deadT = 0;
     }
   }
 }
@@ -534,7 +552,11 @@ function drawBanner(v: View, dt: number): void {
   const scale = 2;
   const tw = textWidth(b.name, scale, 1);
   const x = Math.round((w - tw) / 2);
-  const y = Math.round(h * 0.56) + dy;
+  // Above the gem, in space already fallen through: never over what is coming
+  const y = Math.round(h * 0.15) + dy;
+  ctx.globalAlpha = a * 0.75;
+  ctx.fillStyle = PALETTE.bgDeep;
+  ctx.fillRect(x - 18, y - 4, tw + 36, 18);
   ctx.globalAlpha = a;
   // Hairlines either side, like a depth marker on a chart
   ctx.fillStyle = PALETTE.glow;
@@ -544,9 +566,153 @@ function drawBanner(v: View, dt: number): void {
   ctx.globalAlpha = 1;
 }
 
+/* ── HUD ───────────────────────────────────────────────────── */
+
+const HUD_PAD = 8;
+
+/**
+ * Odometer: each digit cell scrolls. The lowest digit rolls with the
+ * fractional part; a higher digit rolls only while every digit below it
+ * is passing 9, like a mechanical counter. Only the last 35% of each
+ * step moves, so digits read as settled most of the time.
+ */
+function drawOdometer(ctx: CanvasRenderingContext2D, value: number, right: number, y: number, scale: number, color: string, roll: boolean): number {
+  const v = Math.max(0, value);
+  const digits = Math.max(1, Math.floor(v).toString().length);
+  const adv = (GLYPH_W + 1) * scale;
+  const cellH = GLYPH_H * scale;
+  let x = right - digits * adv + scale;
+  let carry = roll ? v % 1 : 0;
+  const offsets: number[] = [];
+  for (let i = 0; i < digits; i++) {
+    const place = 10 ** i;
+    const d = Math.floor(v / place) % 10;
+    const k = carry <= 0.65 ? 0 : (carry - 0.65) / 0.35;
+    offsets[i] = k;
+    carry = d === 9 ? carry : 0;
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - 1, y, digits * adv + 2, cellH);
+  ctx.clip();
+  ctx.fillStyle = color;
+  for (let i = digits - 1; i >= 0; i--) {
+    const d = Math.floor(v / 10 ** i) % 10;
+    const off = Math.round(offsets[i] * (cellH + scale));
+    for (const [digit, dy] of [[d, -off], [(d + 1) % 10, cellH + scale - off]]) {
+      if (dy <= -cellH - scale || dy >= cellH + scale) continue;
+      const bits = glyph(String(digit));
+      for (let b = 0; b < 15; b++) {
+        if (bits[b] === "1") ctx.fillRect(x + (b % 3) * scale, y + dy + Math.floor(b / 3) * scale, scale, scale);
+      }
+    }
+    x += adv;
+  }
+  ctx.restore();
+  return digits * adv - scale;
+}
+
+/** A life crystal: filled when held, outline when lost. */
+function drawLife(ctx: CanvasRenderingContext2D, x: number, y: number, full: boolean): void {
+  const rows = ["..#..", ".###.", "#####", "#####", ".###.", "..#.."];
+  rows.forEach((r, j) =>
+    [...r].forEach((c, i) => {
+      if (c !== "#") return;
+      const edge = j === 0 || j === rows.length - 1 || i === 0 || i === 4 || r[i - 1] !== "#" || r[i + 1] !== "#";
+      if (full) ctx.fillStyle = edge ? PALETTE.highlight : PALETTE.glow;
+      else if (edge) ctx.fillStyle = PALETTE.hudDim;
+      else return;
+      ctx.fillRect(x + i, y + j, 1, 1);
+    }),
+  );
+}
+
+function drawBestLine(v: View, s: GameState, camY: number): void {
+  const y = bestLineY(s);
+  if (y === null) return;
+  const sy = Math.round(y - camY);
+  if (sy < -4 || sy > v.h + 4) return;
+  const { ctx, w } = v;
+  ctx.fillStyle = PALETTE.highlight;
+  ctx.globalAlpha = 0.7;
+  for (let x = 0; x < w; x += 4) ctx.fillRect(x, sy, 2, 1);
+  ctx.globalAlpha = 1;
+  const label = "BEST " + Math.floor(s.cfg.best ?? 0) + " M";
+  const tw = textWidth(label);
+  ctx.fillStyle = PALETTE.bgDeep;
+  ctx.fillRect(w - HUD_PAD - tw - 3, sy - 4, tw + 6, 9);
+  drawText(ctx, label, w - HUD_PAD - tw, sy - 2, PALETTE.highlight);
+}
+
+function drawHud(v: View, s: GameState, dt: number): void {
+  const { ctx, w } = v;
+  const hud = v.hud;
+  // Odometer eases toward the score; reduced motion cuts to it
+  hud.shown = v.reducedMotion ? s.score : hud.shown + (s.score - hud.shown) * (1 - Math.exp(-14 * dt));
+  if (Math.abs(s.score - hud.shown) < 0.02) hud.shown = s.score;
+
+  // Depth: the one large element. Tabular by construction.
+  const scale = 2;
+  const digits = Math.max(1, Math.floor(hud.shown).toString().length);
+  const width = digits * (GLYPH_W + 1) * scale - scale;
+  drawOdometer(ctx, hud.shown, HUD_PAD + width, HUD_PAD, scale, PALETTE.hud, !v.reducedMotion);
+  drawText(ctx, "M", HUD_PAD + width + 3, HUD_PAD + GLYPH_H * scale - GLYPH_H, PALETTE.hudDim);
+
+  // Combo under the depth, only above 1x
+  const mult = comboMultiplier(s.combo);
+  if (mult > 1) {
+    const label = "x" + (mult % 1 ? mult.toFixed(1) : String(mult)) + "  " + s.combo;
+    drawText(ctx, label, HUD_PAD, HUD_PAD + GLYPH_H * scale + 4, PALETTE.glow);
+  }
+
+  // Lives, top right; on phones they sit left of the X button
+  const livesRight = v.fullBleed ? w - HUD_PAD - 34 : w - HUD_PAD;
+  for (let i = 0; i < TUNING.lives; i++) {
+    drawLife(ctx, livesRight - (TUNING.lives - i) * 8 + 3, HUD_PAD + 1, i < s.lives);
+  }
+
+  if (hud.bestFlash > 0) {
+    hud.bestFlash = Math.max(0, hud.bestFlash - dt);
+    const label = "NEW BEST";
+    ctx.globalAlpha = Math.min(1, hud.bestFlash / 0.2);
+    drawText(ctx, label, Math.round((w - textWidth(label, 2)) / 2), Math.round(v.h * 0.22), PALETTE.highlight, 2);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/** Death screen: depth, best, how to leave or go again. */
+function drawDeath(v: View, s: GameState, dt: number, touch: boolean): void {
+  const hud = v.hud;
+  if (hud.deadT < 0) return;
+  hud.deadT += dt;
+  const { ctx, w, h } = v;
+  const a = v.reducedMotion ? 1 : Math.min(1, hud.deadT / 0.3);
+  ctx.globalAlpha = 0.86 * a;
+  ctx.fillStyle = PALETTE.bgDeep;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalAlpha = a;
+  const cx = (t: string, sc: number) => Math.round((w - textWidth(t, sc)) / 2);
+  let y = Math.round(h * 0.3);
+  drawText(ctx, "DEPTH", cx("DEPTH", 1), y, PALETTE.hudDim);
+  y += 10;
+  const score = Math.floor(s.score) + " M";
+  drawText(ctx, score, cx(score, 3), y, PALETTE.highlight, 3);
+  y += 26;
+  const best = Math.max(hud.best, Math.floor(s.score));
+  const bestLabel = s.score > hud.best && hud.best > 0 ? "NEW BEST" : "BEST " + best + " M";
+  drawText(ctx, bestLabel, cx(bestLabel, 1), y, s.score > hud.best && hud.best > 0 ? PALETTE.glow : PALETTE.hud);
+  y += 30;
+  const lines = touch ? ["TAP TO FALL AGAIN", "X TO WAKE"] : ["R TO FALL AGAIN", "ESC TO WAKE"];
+  for (const l of lines) {
+    drawText(ctx, l, cx(l, 1), y, PALETTE.hud);
+    y += 12;
+  }
+  ctx.globalAlpha = 1;
+}
+
 /* ── Frame ─────────────────────────────────────────────────── */
 
-export function renderFrame(v: View, s: GameState, alpha: number, dt: number): void {
+export function renderFrame(v: View, s: GameState, alpha: number, dt: number, touch = false): void {
   const { ctx, w, h } = v;
   let camY = lerp(s.prev.camY, s.camY, alpha);
   // Screen shake: decaying, cosmetic, off under reduced motion
@@ -562,6 +728,7 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number): v
 
   ctx.save();
   ctx.translate(shakeX, 0);
+  drawBestLine(v, s, camY);
   drawRows(v, s, camY);
   drawDrifts(v, s, camY, alpha);
   drawPickups(v, s, camY);
@@ -584,6 +751,7 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number): v
 
   ctx.drawImage(v.vignette, 0, 0);
   drawBanner(v, dt);
+  drawHud(v, s, dt);
 
   if (s.flash > 0) {
     ctx.globalAlpha = 0.28 * (s.flash / TUNING.flashTime);
@@ -591,6 +759,7 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number): v
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;
   }
+  drawDeath(v, s, dt, touch);
 
   blit(v);
 }
