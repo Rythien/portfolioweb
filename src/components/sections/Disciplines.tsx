@@ -66,7 +66,7 @@ export default function Disciplines() {
                 {item.title}
               </div>
 
-              <div className="md:col-span-4 font-[family-name:var(--font-sans)] text-body text-ink/70 leading-relaxed group-hover:text-ink/80 transition-colors [text-wrap:pretty]">
+              <div data-crystal-avoid className="md:col-span-4 font-[family-name:var(--font-sans)] text-body text-ink/70 leading-relaxed group-hover:text-ink/80 transition-colors [text-wrap:pretty]">
                 {item.description}
               </div>
             </div>

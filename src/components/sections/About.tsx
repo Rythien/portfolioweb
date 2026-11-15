@@ -63,7 +63,7 @@ export default function About() {
           {SITE_DATA.about.statementSuffix}
         </p>
 
-        <div className="max-w-4xl">
+        <div className="max-w-4xl" data-crystal-avoid>
           <p
             ref={bodyRef}
             className="mt-10 sm:mt-14 font-[family-name:var(--font-sans)] text-body-lg text-ink/70 leading-relaxed max-w-[60ch] [text-wrap:pretty]"

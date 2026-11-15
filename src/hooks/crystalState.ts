@@ -44,7 +44,30 @@ const _d = { s: 0, x: 0.6, y: 0, scale: 1.0, breakVal: 0, fade: 1 };
 /** Matches SceneRoot's isMobile breakpoint. */
 export const MOBILE_MAX_PX = 768;
 /** Mobile hero crystal centre, world units above the viewport midline. */
-const MOBILE_HERO_Y = 0.8;
+const MOBILE_HERO_Y = 0.55;
+/** Crystal scale when parked beside the About/Disciplines copy. */
+const PARK_SCALE = 0.6;
+/** Below this the parked crystal is too small to bother: it fades out. */
+const PARK_SCALE_MIN = 0.4;
+/** Visible silhouette radius at scale 1 (the rock's R is 1.4 at its spikes). */
+const CRYSTAL_VISIBLE_R = 1.25;
+/** Clearance from the copy column, and from the viewport edge. */
+const PARK_GAP_PX = 24;
+const PARK_EDGE_PX = 16;
+const COPY_REMEASURE_S = 0.5;
+let _copyRightPx = -1;
+let _copyMeasuredAt = -Infinity;
+let _copyPxW = 0;
+
+/** Right edge (px) of the copy the parked crystal must clear, or -1. */
+function measureCopyRight(): number {
+  if (typeof document === "undefined") return -1;
+  let right = -1;
+  document.querySelectorAll("[data-crystal-avoid]").forEach((el) => {
+    right = Math.max(right, el.getBoundingClientRect().right);
+  });
+  return right;
+}
 let _lastE = -1;
 let _prevBreak = 0;
 let _shakeEnd = 0;
@@ -95,32 +118,47 @@ export function tickCrystalPose(elapsed: number, delta: number, halfW: number, p
   const s = _d.s;
 
   // 0 = hero composition, 1 = parked in the right-hand empty column
-  // for About/Disciplines (x ~ +2.2 at scale 0.45, clamped on narrow views)
+  // for About/Disciplines
   const park = smoothstep(0.08, 0.45, aboutP);
   const narrow = halfW < 2.4;
-  // Parked just right of the About body / Disciplines description column
-  // (text columns end at 10/12 of the max-w-7xl grid), clamped on-screen
-  const container = Math.min(pxW, 1280);
-  const pad = pxW >= 1024 ? 64 : pxW >= 640 ? 40 : 24;
-  const colRightPx = (pxW - container) / 2 + pad + (container - 2 * pad) * (10 / 12);
+  // Parked just right of the About body / Disciplines description columns
+  // (measured), shrunk to fit the space left before the viewport edge
+  if (elapsed - _copyMeasuredAt > COPY_REMEASURE_S || pxW !== _copyPxW) {
+    _copyRightPx = measureCopyRight();
+    _copyMeasuredAt = elapsed;
+    _copyPxW = pxW;
+  }
   const pxPerUnit = pxW / (2 * halfW);
-  const colRightWorld = (colRightPx - pxW / 2) / pxPerUnit;
-  const xPark = Math.max(0.6, Math.min(colRightWorld + 0.7, halfW - 0.55));
-  // Phones: centred at 0.7 in the band between the role label and the
-  // headline (the marquee drops to match); it sits out About onward
+  let copyRightPx = _copyRightPx;
+  if (copyRightPx < 0) {
+    // Sections not mounted yet: text columns end at 10/12 of the grid
+    const container = Math.min(pxW, 1280);
+    const pad = pxW >= 1024 ? 64 : pxW >= 640 ? 40 : 24;
+    copyRightPx = (pxW - container) / 2 + pad + (container - 2 * pad) * (10 / 12);
+  }
+  const slotLeft = copyRightPx + PARK_GAP_PX;
+  const slotRight = pxW - PARK_EDGE_PX;
+  const fitScale = (slotRight - slotLeft) / (2 * CRYSTAL_VISIBLE_R * pxPerUnit);
+  const parkScale = Math.min(PARK_SCALE, fitScale);
+  // No usable column: sit out About/Disciplines like narrow viewports
+  const noRoom = parkScale < PARK_SCALE_MIN;
+  const parkRadiusPx = CRYSTAL_VISIBLE_R * Math.max(parkScale, PARK_SCALE_MIN) * pxPerUnit;
+  const xPark = Math.max(0.6, (slotLeft + parkRadiusPx - pxW / 2) / pxPerUnit);
+  // Phones: centred just under the role label (MOBILE_HERO_Y), its lower
+  // half crossing the marquee as on desktop; it sits out About onward
   const mobile = pxW < MOBILE_MAX_PX;
   const heroX = mobile ? 0 : 0.6;
   const heroY = mobile ? MOBILE_HERO_Y : 0;
-  const heroScale = mobile ? 0.7 : 1.0;
+  const heroScale = mobile ? 0.9 : 1.35;
   const tx = heroX + (xPark - heroX) * park;
   // Parked slightly below centre, in the pocket right of the body copy
   const ty = heroY + (-0.5 - heroY) * park;
-  const ts = heroScale + (0.45 - heroScale) * park;
+  const ts = heroScale + (Math.max(parkScale, PARK_SCALE_MIN) - heroScale) * park;
 
   // The crystal system leaves with Works; on narrow viewports there is
   // no empty column, so it also sits out About/Disciplines onward
   let fadeTarget = 1 - smoothstep(0.86, 0.985, rawS);
-  if (narrow) fadeTarget = Math.min(fadeTarget, 1 - park);
+  if (narrow || noRoom) fadeTarget = Math.min(fadeTarget, 1 - park);
   _d.fade += (fadeTarget - _d.fade) * (1 - Math.exp(-6 * delta));
 
   // Scroll-driven break: starts as Works enters, fully broken by 0.25
