@@ -2,7 +2,7 @@ import LenisProvider from "@/components/common/LenisProvider";
 import Header from "@/components/common/Header";
 import Preloader from "@/components/common/Preloader";
 import ModePill from "@/components/chrome/ModePill";
-import DescentLauncher from "@/components/game/DescentLauncher";
+import DescentSlot from "@/components/game/DescentSlot";
 import SectionRail from "@/components/chrome/SectionRail";
 import SoundLayer from "@/components/chrome/SoundLayer";
 import TransitionLayer from "@/components/chrome/TransitionLayer";
@@ -39,7 +39,7 @@ export default function Home() {
       </main>
       <Footer />
       <ModePill />
-      <DescentLauncher />
+      <DescentSlot />
       <SoundLayer />
       <TransitionLayer />
     </LenisProvider>
