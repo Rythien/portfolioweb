@@ -205,7 +205,7 @@ export function useCrystalData(seed = DEFAULT_SEED) {
  * Logo look. A logo reads by its silhouette plus its edge shading, so the
  * faces stay lit by the environment (low emissive: at 2.0 the WAKE logo
  * blew out into a flat grey disc) and the extrusion walls get a darker
- * material so the edge shows. DREAM may glow, never above 0.6. No
+ * material so the edge shows. DREAM may glow, never above 0.9. No
  * ghost copies anywhere: the glass makes a logo readable, not an overlay.
  * The rim is an inverted hull that keeps a
  * defined outline against the light page.
@@ -227,7 +227,7 @@ const LOGO_LOOK = {
   dream: {
     color: "#ffffff",
     emissive: "#ffffff",
-    emissiveIntensity: 0.6,
+    emissiveIntensity: 0.9,
     side: "#8f80d6",
     roughness: 0.3,
     metalness: 0.1,

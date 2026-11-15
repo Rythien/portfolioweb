@@ -53,7 +53,7 @@ export const CRYSTAL_MATERIAL = {
   resolution: { intact: 1024, shard: 768 },
   tint: {
     wake: { color: "#e8f1f5", attenuationColor: "#d8edf8" },
-    dream: { color: "#c4b5fd", attenuationColor: "#b4a0e8" },
+    dream: { color: "#c4b5fd", attenuationColor: "#c9bcf2" },
   },
 } as const;
 
