@@ -20,7 +20,7 @@ import {
   getCreviceMap,
   thicknessFor,
 } from "./crystalMaterial";
-import { getHeroLogos, getUnitLogos } from "./logoGeometry";
+import { HERO_LOGO_FILL, getHeroLogos, getUnitLogos } from "./logoGeometry";
 
 /** Seconds between hero logo swaps in the intact crystal. */
 export const LOGO_CYCLE_SECONDS = 3.5;
@@ -72,19 +72,21 @@ function playSwapTick() {
 /*
  * Test-only views behind URL params (Playwright comparisons; the UI never
  * sets them): crystalview=assembled shows the shards laid back together in
- * place of the intact mesh; crystalfreeze=<s> pins rotation and the logo.
+ * place of the intact mesh; crystalfreeze=<s> pins rotation and the logo;
+ * crystallogo=0 hides the hero logo (to sample the glass behind it).
  */
 const DEBUG = (() => {
   if (typeof window === "undefined") return null;
   const q = new URLSearchParams(window.location.search);
   const freeze = q.has("crystalfreeze") ? Number(q.get("crystalfreeze")) : null;
   if (freeze !== null) setCrystalTimeOverride(freeze);
-  return { assembled: q.get("crystalview") === "assembled", freeze };
+  return { assembled: q.get("crystalview") === "assembled", freeze, noLogo: q.get("crystallogo") === "0" };
 })();
 
 const _swayEuler = new THREE.Euler();
 const _swayQ = new THREE.Quaternion();
 const _parentInvQ = new THREE.Quaternion();
+const _identityQ = new THREE.Quaternion();
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -180,18 +182,20 @@ export function useCrystalData(seed = DEFAULT_SEED) {
 }
 
 /*
- * Logo contrast. WAKE: matte mid-grey metal, clearly lighter than the
- * black marquee type behind it. No metalness: a metallic logo mirrored
- * the large dark lightformer panels and went near-black. DREAM: pale
- * lavender glowing inside the violet glass. The ghost is a flat copy
- * drawn over the glass for readability through refraction; the rim is
- * an inverted hull that keeps a defined edge against the light page.
+ * Logo look. A logo reads by its silhouette plus its edge shading, so the
+ * faces stay lit by the environment (low emissive: at 2.0 the WAKE logo
+ * blew out into a flat grey disc) and the extrusion walls get a darker
+ * material so the edge shows. DREAM may glow, never above 0.6. Shard
+ * logos keep a faint ghost copy over the glass; the hero logo has none
+ * (it flattened the shading). The rim is an inverted hull that keeps a
+ * defined outline against the light page.
  */
 const LOGO_LOOK = {
   wake: {
     color: "#b4bcc8",
     emissive: "#5d6472",
-    emissiveIntensity: 2.0,
+    emissiveIntensity: 0.15,
+    side: "#3b414c",
     roughness: 0.45,
     metalness: 0.0,
     envMapIntensity: 0.9,
@@ -199,17 +203,19 @@ const LOGO_LOOK = {
     rim: "#6f7889",
   },
   dream: {
-    color: "#efe9ff",
-    emissive: "#9b89ff",
-    emissiveIntensity: 0.5,
-    roughness: 0.35,
-    metalness: 0.25,
-    envMapIntensity: 1.2,
+    color: "#ffffff",
+    emissive: "#ffffff",
+    emissiveIntensity: 0.6,
+    side: "#3d3170",
+    roughness: 0.3,
+    metalness: 0.1,
+    envMapIntensity: 2.2,
     ghost: "#d9ccff",
     rim: "#c8b8ff",
   },
 } as const;
-const GHOST_OPACITY = 0.14;
+/** Shard logos only; the intact hero logo has no ghost. */
+const GHOST_OPACITY = 0.1;
 const RIM_SCALE = 1.02;
 const RIM_OPACITY = 0.35;
 const GHOST_RENDER_ORDER = 10;
@@ -225,12 +231,12 @@ const SHARD_RIM_RENDER_ORDER = 8;
 // Hero rim draws after the hero logo so the logo's depth hides its centre
 const HERO_RIM_RENDER_ORDER = 1;
 
-/** Broken state: logos on the largest shards only. */
-const SHARD_LOGO_COUNT = 8;
-const SHARD_LOGO_FILL = 0.7;
-/** Minimum logo width in group units (world units at pose scale 1). */
-const SHARD_LOGO_MIN = 0.35;
-const SHARD_LOGO_SWAY = THREE.MathUtils.degToRad(20);
+/** Broken state: logos on the 5 largest shards only (fewer, bigger). */
+const SHARD_LOGO_COUNT = 5;
+/** Logo size as a fraction of its shard's smallest projected dimension. */
+const SHARD_LOGO_FILL = 0.75;
+/** Vertices sampled per shard to measure its projected silhouette. */
+const SHARD_SAMPLE = 192;
 const INCLUSION_COUNT = CRYSTAL_MATERIAL.slivers;
 
 /* ── Component ───────────────────────────────────────────────── */
@@ -284,6 +290,34 @@ const CLOUD = CRYSTAL_MATERIAL.cloud;
 const SLIVER_OPACITY = 0.5;
 
 /** Set every material under an internal-cloud group to its base opacity x k. */
+/** Opacity on a mesh with one material or a [caps, walls] pair. */
+function setOpacity(mesh: THREE.Mesh, a: number) {
+  const m = mesh.material;
+  if (Array.isArray(m)) for (const x of m) x.opacity = a;
+  else if (m) m.opacity = a;
+}
+
+const _sv = new THREE.Vector3();
+const _sq = new THREE.Quaternion();
+/**
+ * Smallest side of a shard's silhouette as the camera sees it, in group
+ * units: sampled vertices rotated by the group and the shard's tumble,
+ * scaled by the shard, measured across the view plane (the camera looks
+ * down -Z, so view x/y are world x/y).
+ */
+function projectedShortSide(samples: Float32Array, shard: THREE.Mesh, parentQ: THREE.Quaternion): number {
+  _sq.multiplyQuaternions(parentQ, shard.quaternion);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let k = 0; k < samples.length; k += 3) {
+    _sv.set(samples[k], samples[k + 1], samples[k + 2]).applyQuaternion(_sq);
+    if (_sv.x < x0) x0 = _sv.x;
+    if (_sv.x > x1) x1 = _sv.x;
+    if (_sv.y < y0) y0 = _sv.y;
+    if (_sv.y > y1) y1 = _sv.y;
+  }
+  return Math.min(x1 - x0, y1 - y0) * shard.scale.x;
+}
+
 function setCloudOpacity(g: THREE.Object3D, k: number) {
   g.traverse((o) => {
     const m = (o as THREE.Mesh).material as THREE.Material | undefined;
@@ -333,7 +367,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
     const glowTex = useMemo(() => createGlowTexture(128), []);
     const inclusions = useMemo(() => buildInclusions(seed, INCLUSION_COUNT, R), [seed]);
-    const heroLogos = useMemo(() => getHeroLogos(), []);
+    // Hero logo size: HERO_LOGO_FILL of the intact crystal's smallest side,
+    // computed from the mesh (its thinnest caliper is still wider, so the
+    // logo never pokes out of the silhouette at any angle)
+    const heroLogos = useMemo(() => {
+      intactGeo.computeBoundingBox();
+      const d = intactGeo.boundingBox!.getSize(new THREE.Vector3());
+      return getHeroLogos(HERO_LOGO_FILL * Math.min(d.x, d.y, d.z));
+    }, [intactGeo]);
     const unitLogos = useMemo(() => getUnitLogos(), []);
     // The largest shards (by volume) each carry a logo, sized from the
     // shard's own bounds; smaller shards and debris carry none
@@ -353,7 +394,11 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         // Face-on silhouette: the two largest dims; its short side is the
         // middle one (the smallest is the slab's thickness)
         const dims = [size.x, size.y, size.z].sort((p, q) => p - q);
-        return { shard: i, vol: Math.abs(vol), shortSide: dims[1] };
+        // A spread of vertices to measure the projected silhouette each frame
+        const step = Math.max(1, Math.floor(pos.count / SHARD_SAMPLE));
+        const samples: number[] = [];
+        for (let v = 0; v < pos.count; v += step) samples.push(pos.getX(v), pos.getY(v), pos.getZ(v));
+        return { shard: i, vol: Math.abs(vol), shortSide: dims[1], samples: new Float32Array(samples) };
       });
       return info
         .sort((p, q) => q.vol - p.vol)
@@ -361,11 +406,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         .map((r, rank) => ({
           shard: r.shard,
           rank,
+          samples: r.samples,
+          /** Starting size until the first projection is measured. */
           size: SHARD_LOGO_FILL * r.shortSide,
-          swayFreq: 0.45 + rank * 0.07,
-          swayPhase: rank * 1.7,
         }));
     }, [shards]);
+    /** Smoothed per-slot logo size (group units), so tumbling never pulses it. */
+    const shardLogoSize = useRef<number[]>([]);
     // Internal cloud for the shards: each of the largest shards also
     // carries one sliver, so shattered ice is no emptier than intact ice
     const shardSlivers = useMemo(() => {
@@ -393,7 +440,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const { scene: portalScene, camera: portalCamera } = useThree();
     const mergedRef = useRef<THREE.Mesh>(null);
     const heroLogoRef = useRef<THREE.Mesh>(null);
-    const heroGhostRef = useRef<THREE.Mesh>(null);
     const heroRimRef = useRef<THREE.Mesh>(null);
     const shardLogoRefs = useRef<(THREE.Mesh | null)[]>([]);
     const shardGhostRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -422,7 +468,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       if (!active || fade < 0.01) {
         if (mergedRef.current) mergedRef.current.visible = false;
         if (heroLogoRef.current) heroLogoRef.current.visible = false;
-        if (heroGhostRef.current) heroGhostRef.current.visible = false;
         if (heroRimRef.current) heroRimRef.current.visible = false;
         if (inclusionRef.current) inclusionRef.current.visible = false;
         if (intactCloudRef.current) intactCloudRef.current.visible = false;
@@ -532,20 +577,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         heroMesh.position.set(0, 0, 0);
         heroMesh.scale.setScalar(Math.max(heroScale, 1e-4));
 
-        heroMesh.visible = !mergedHidden || assembled;
+        heroMesh.visible = (!mergedHidden || assembled) && !DEBUG?.noLogo;
         const heroOpacity = (assembled ? 1 : 1 - crossfade) * fade * heroAlpha;
-        const hMat = heroMesh.material as THREE.MeshStandardMaterial;
-        if (hMat) hMat.opacity = heroOpacity;
-
-        const ghost = heroGhostRef.current;
-        if (ghost) {
-          if (ghost.geometry !== heroMesh.geometry) ghost.geometry = heroMesh.geometry;
-          ghost.position.copy(heroMesh.position);
-          ghost.quaternion.copy(heroMesh.quaternion);
-          ghost.scale.copy(heroMesh.scale);
-          ghost.visible = heroMesh.visible && heroOpacity > 0.001;
-          (ghost.material as THREE.MeshBasicMaterial).opacity = GHOST_OPACITY * heroOpacity;
-        }
+        setOpacity(heroMesh, heroOpacity);
 
         const rim = heroRimRef.current;
         if (rim) {
@@ -581,7 +615,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       // Ghost layers (and the over-glass shard logos) sit on top of the
       // glass; they must never be part of the backdrop the glass refracts
       const ghosts = [
-        heroGhostRef.current,
         ...shardGhostRefs.current,
         ...shardLogoRefs.current,
         ...shardRimRefs.current,
@@ -699,8 +732,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       }
 
       // ── Shard logos: follow their shard's position, not its tumble.
-      // Each faces the camera with its own small sway, and fades in as
-      // the shard separates; fully gone (alpha 0 at breakVal .15) before
+      // Each always faces the camera, is sized to 75% of its shard's
+      // smallest projected side (smoothed), and fades in as the shard
+      // separates; fully gone (alpha 0 at breakVal .15) before
       // the intact crystal starts to reappear, so nothing is left behind
       const logoAlpha = showShards && !assembled ? smoothstep(0.15, 0.4, breakVal) * fade : 0;
       const parent = heroLogoRef.current?.parent ?? null;
@@ -722,16 +756,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (geo && logo.geometry !== geo) logo.geometry = geo;
 
         logo.position.copy(shardMesh.position);
-        const sway = reducedMotion ? 0 : SHARD_LOGO_SWAY;
-        _swayEuler.set(
-          Math.sin(elapsed * slot.swayFreq * 0.8 + slot.swayPhase) * sway * 0.5,
-          Math.sin(elapsed * slot.swayFreq + slot.swayPhase) * sway,
-          0,
-        );
-        _swayQ.setFromEuler(_swayEuler);
-        logo.quaternion.multiplyQuaternions(_parentInvQ, _swayQ);
-        logo.scale.setScalar(Math.max(SHARD_LOGO_MIN, slot.size * shardMesh.scale.x));
-        (logo.material as THREE.MeshStandardMaterial).opacity = logoAlpha;
+        logo.quaternion.copy(_parentInvQ);
+        const target = SHARD_LOGO_FILL * projectedShortSide(slot.samples, shardMesh, parent ? parent.quaternion : _identityQ);
+        const sizes = shardLogoSize.current;
+        sizes[slot.rank] = sizes[slot.rank] === undefined
+          ? target
+          : sizes[slot.rank] + (target - sizes[slot.rank]) * (1 - Math.exp(-3 * delta));
+        logo.scale.setScalar(Math.max(1e-4, sizes[slot.rank]));
+        setOpacity(logo, logoAlpha);
 
         if (ghost) {
           if (ghost.geometry !== logo.geometry) ghost.geometry = logo.geometry;
@@ -786,9 +818,22 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         {heroLogos[0] && (
           <mesh ref={heroLogoRef} geometry={heroLogos[0].geometry}>
             <meshStandardMaterial
+              attach="material-0"
               color={logoLook.color}
               emissive={logoLook.emissive}
               emissiveIntensity={logoLook.emissiveIntensity}
+              roughness={logoLook.roughness}
+              metalness={logoLook.metalness}
+              envMapIntensity={logoLook.envMapIntensity}
+              transparent
+              opacity={1}
+            />
+            {/* Darker walls: the extrusion edge is what gives it form */}
+            <meshStandardMaterial
+              attach="material-1"
+              color={logoLook.side}
+              emissive={logoLook.emissive}
+              emissiveIntensity={logoLook.emissiveIntensity * 0.25}
               roughness={logoLook.roughness}
               metalness={logoLook.metalness}
               envMapIntensity={logoLook.envMapIntensity}
@@ -810,24 +855,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               side={THREE.BackSide}
               transparent
               opacity={RIM_OPACITY}
-              depthWrite={false}
-            />
-          </mesh>
-        )}
-
-        {/* Ghost of the hero logo drawn over the glass for legibility */}
-        {heroLogos[0] && (
-          <mesh
-            ref={heroGhostRef}
-            geometry={heroLogos[0].geometry}
-            renderOrder={GHOST_RENDER_ORDER}
-            frustumCulled={false}
-          >
-            <meshBasicMaterial
-              color={logoLook.ghost}
-              transparent
-              opacity={GHOST_OPACITY}
-              depthTest={false}
               depthWrite={false}
             />
           </mesh>
@@ -880,8 +907,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           </group>
         ))}
 
-        {/* Shard logos: one per large shard, each a different icon, with a
-            ghost copy over the glass like the hero logo */}
+        {/* Shard logos: one per large shard (5), each a different icon, with
+            a faint ghost copy over the glass */}
         {unitLogos[0] &&
           shardLogoSlots.map((slot) => (
             <group key={`slot-${slot.rank}`}>
@@ -909,9 +936,23 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
                 visible={false}
               >
                 <meshStandardMaterial
+                  attach="material-0"
                   color={logoLook.color}
                   emissive={logoLook.emissive}
                   emissiveIntensity={logoLook.emissiveIntensity}
+                  roughness={logoLook.roughness}
+                  metalness={logoLook.metalness}
+                  envMapIntensity={logoLook.envMapIntensity}
+                  transparent
+                  opacity={0}
+                  depthTest={false}
+                  depthWrite={false}
+                />
+                <meshStandardMaterial
+                  attach="material-1"
+                  color={logoLook.side}
+                  emissive={logoLook.emissive}
+                  emissiveIntensity={logoLook.emissiveIntensity * 0.25}
                   roughness={logoLook.roughness}
                   metalness={logoLook.metalness}
                   envMapIntensity={logoLook.envMapIntensity}

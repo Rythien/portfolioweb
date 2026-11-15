@@ -29,18 +29,24 @@ const ICONS = [
   siGit,
 ];
 
-/** Hero logo inside the intact crystal (crystal is ~2.4 wide). */
-export const HERO_LOGO_WIDTH = 1.25;
-export const HERO_LOGO_DEPTH = 0.18;
+/**
+ * Hero logo size as a fraction of the intact crystal's smallest bounding
+ * box side; GlassCrystal computes the actual size from the mesh. "Size" is
+ * the logo's larger extent, so tall icons fit as well as wide ones.
+ */
+export const HERO_LOGO_FILL = 0.62;
+export const HERO_LOGO_DEPTH = 0.26;
 
-/** Shard logos are built at unit width and scaled to fit their shard. */
-const UNIT_DEPTH = HERO_LOGO_DEPTH / HERO_LOGO_WIDTH;
+/** Shard logos are built at unit size and scaled to fit their shard; same
+ * depth-to-size ratio as a hero logo of ~1.4. */
+const UNIT_DEPTH = HERO_LOGO_DEPTH / 1.4;
 
-// Bevel in SVG units (icons are 24 units wide); large enough that the
-// edge catches the environment's lightformers
-const BEVEL = 0.5;
+// Bevel in SVG units (icons are 24 units wide): wide enough that the
+// rounded edge reads as form and catches the strip light
+const BEVEL = 0.8;
 
 interface LogoShape {
+  /** Larger extent (x or y) after fitting. */
   width: number;
   depth: number;
   bevel: number;
@@ -78,11 +84,14 @@ function pathToGeometry(pathData: string, shape: LogoShape): THREE.BufferGeometr
 
     geo.computeBoundingBox();
     bb = geo.boundingBox!;
-    const width = bb.max.x - bb.min.x;
+    const extent = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y);
     const depth = bb.max.z - bb.min.z;
-    if (width < 1e-6 || depth < 1e-6) return null;
-    geo.scale(shape.width / width, shape.width / width, shape.depth / depth);
+    if (extent < 1e-6 || depth < 1e-6) return null;
+    geo.scale(shape.width / extent, shape.width / extent, shape.depth / depth);
 
+    // ExtrudeGeometry keeps two groups: 0 = front/back caps, 1 = side
+    // walls + bevel. GlassCrystal gives the walls a darker material so the
+    // extrusion edge shows.
     geo.computeVertexNormals();
     geo.computeBoundingBox();
     return geo;
@@ -113,9 +122,9 @@ function buildSet(shape: LogoShape): LogoData[] {
   return logos;
 }
 
-/** Every icon at hero size (1.25 wide, 0.18 deep), in cycle order. */
-export function getHeroLogos(): LogoData[] {
-  return buildSet({ width: HERO_LOGO_WIDTH, depth: HERO_LOGO_DEPTH, bevel: BEVEL });
+/** Every icon at hero size (larger extent `size`, 0.26 deep), in cycle order. */
+export function getHeroLogos(size: number): LogoData[] {
+  return buildSet({ width: size, depth: HERO_LOGO_DEPTH, bevel: BEVEL });
 }
 
 /** Every icon at unit width, same order as getHeroLogos; scale to size. */
