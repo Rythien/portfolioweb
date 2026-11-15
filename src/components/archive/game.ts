@@ -42,6 +42,59 @@ export const PULSE = {
 export const CHARGE_FULL = 3;
 export const HITS_TO_FREE = 3;
 
+/** A facet hit on a seal: it cracks, or (the third) frees the project. */
+export function resolveFacetHit(s: { hits: number; freed: boolean }): "crack" | "freed" | "none" {
+  if (s.freed || s.hits >= HITS_TO_FREE) return "none";
+  s.hits += 1;
+  if (s.hits >= HITS_TO_FREE) {
+    s.freed = true;
+    return "freed";
+  }
+  return "crack";
+}
+
+/* ── Freeing and the ending (seconds) ─────────────────────────── */
+
+export const FREE = {
+  /** The glass bursts over this long. */
+  burst: 0.55,
+  /** Shards fly out, slowing to a drift (exponential, this time constant). */
+  flyTau: 0.9,
+  /** How far out the orbiting shards end up, as a multiple of their ring. */
+  flyOut: 1.55,
+  /** The panel blooms over this long, starting a beat into the burst. */
+  bloomDelay: 0.25,
+  bloom: 1.6,
+  /** Panel size (world units, width); it floats where the seal stood. */
+  panelWidth: 13,
+  /** Floating into the panel: the camera comes within this of its centre
+   * (the panel always faces you, so distance is the test). */
+  touchRadius: 4.6,
+};
+
+export const ENDING = {
+  /** The ending starts this long after the last seal is freed, or at once
+   * when the visitor floats into that last panel. */
+  wait: 9,
+  /** In front of the visitor, where the crystal reassembles. */
+  distance: 9,
+  /** Shards converge over [0, converge]. */
+  converge: 2.8,
+  /** The intact crystal grows in over [converge - 0.4, converge + 0.8]. */
+  form: 1.2,
+  /** Fog lifts to pale violet over [1.5, 1.5 + lift]. */
+  lift: 4,
+  /** "The archive is yours." appears at this time. */
+  line: 4.2,
+  /** Then the visitor wakes, at Contact. */
+  exit: 10,
+};
+
+/** True once the ending should begin. */
+export function endingDue(allFreed: boolean, lastFreedAt: number, lastTouched: boolean, t: number): boolean {
+  return allFreed && (lastTouched || t - lastFreedAt >= ENDING.wait);
+}
+
 /* ── Seeded randomness ────────────────────────────────────────── */
 
 function lcg(seed: number) {

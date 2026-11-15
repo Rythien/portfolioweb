@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useArchiveProgress } from "@/store/useArchiveProgress";
+import { getProjectBySlug } from "@/content/projects";
 import { useThemeStore } from "@/store/useThemeStore";
 import { useArchiveStore } from "@/store/useArchiveStore";
 import { crystalEvents } from "@/hooks/crystalState";
@@ -27,7 +30,13 @@ const CLIP_LEAD = 1.02;
  * WAKE: the page resumes at its scroll position, the flood runs back from
  * the WAKE control and the Archive's circle shrinks into it.
  */
+/** Where the visitor lands on waking: back where they were, or at Contact (the ending). */
+export interface WakeOptions {
+  to?: "contact";
+}
+
 export default function ArchiveSlot() {
+  const router = useRouter();
   const open = useArchiveStore((s) => s.open);
   const [warm, setWarm] = useState(false);
   /** Archive rendering (any part of it on screen). */
@@ -128,7 +137,25 @@ export default function ArchiveSlot() {
     };
   }, [open]);
 
-  const wake = useCallback((origin: { x: number; y: number }) => {
+  const wake = useCallback((origin: { x: number; y: number }, opts: WakeOptions = {}) => {
+    // The ending wakes at Contact: the page resumes there, not where it was
+    if (opts.to === "contact") {
+      const el = document.getElementById("contact");
+      if (el) useArchiveStore.getState().setSavedScroll(el.getBoundingClientRect().top + window.scrollY);
+    }
+    // A panel floated into this visit opens its case study once awake
+    // (the ending's Contact wins over it)
+    const pending = useArchiveProgress.getState().takePendingCase();
+    const slug = opts.to === "contact" ? null : pending && getProjectBySlug(pending) ? pending : null;
+    if (slug) {
+      const go = () => router.push(`/project/${slug}`);
+      const unsub = useThemeStore.subscribe((s) => {
+        if (s.mode === "wake" && !s.transitioning) {
+          unsub();
+          go();
+        }
+      });
+    }
     // Page and scene resume first so the flood can run back over them
     useArchiveStore.getState().setOpen(false);
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -136,7 +163,7 @@ export default function ArchiveSlot() {
       return;
     }
     useThemeStore.getState().startTransition(origin);
-  }, []);
+  }, [router]);
 
   if (!warm) return null;
   return <Archive rootRef={rootRef} active={active} open={open} onWake={wake} />;

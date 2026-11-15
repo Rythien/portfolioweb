@@ -6,8 +6,10 @@ import { MeshTransmissionMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import { SEAL, type SealSpot } from "./layout";
-import { sealProgress, type ArchiveState } from "./archiveState";
-import type { SealTarget, V3 } from "./game";
+import { sealProgress, sealSlug, type ArchiveState, type SealState } from "./archiveState";
+import { ENDING, FREE, type SealTarget, type V3 } from "./game";
+import type { Project } from "@/content/projects";
+import { useArchiveProgress } from "@/store/useArchiveProgress";
 
 /** Test hook (archivefreeze=1): seals hold still, for repeatable hit shots. */
 const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("archivefreeze") === "1";
@@ -215,6 +217,101 @@ function makeOrbiters(seed: number): Orbiter[] {
   return out;
 }
 
+/** Panel layout (world units): the cover (16:10) over its caption block. */
+const PANEL = (() => {
+  const w = FREE.panelWidth;
+  const coverH = w * 0.625;
+  const textH = w * (420 / 2048);
+  const gap = w * 0.035;
+  const total = coverH + gap + textH;
+  return { w, coverH, textH, coverY: total / 2 - coverH / 2, textY: -total / 2 + textH / 2 };
+})();
+
+/** Fragments of the body itself, thrown out when the seal bursts. */
+const BURST = 14;
+interface Fragment {
+  dir: THREE.Vector3;
+  /** Distance it settles at, from the seal centre. */
+  out: number;
+  scale: number;
+  spin: THREE.Vector3;
+  phase: number;
+}
+function makeFragments(seed: number): Fragment[] {
+  const rnd = lcg(seed);
+  return Array.from({ length: BURST }, () => {
+    const th = Math.acos(2 * rnd() - 1);
+    const ph = rnd() * Math.PI * 2;
+    return {
+      dir: new THREE.Vector3(Math.sin(th) * Math.cos(ph), Math.cos(th) * 1.1, Math.sin(th) * Math.sin(ph)).normalize(),
+      // Clear of the panel's face (half width ~6.5) once they settle
+      out: SEAL.radius * (2.4 + rnd() * 1.1),
+      scale: 0.32 + rnd() * 0.36,
+      spin: new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(1.2),
+      phase: rnd() * Math.PI * 2,
+    };
+  });
+}
+
+/** 0 at the moment of freeing, easing to 1 as the burst slows to a drift. */
+const flyK = (age: number) => (age <= 0 ? 0 : 1 - Math.exp(-age / FREE.flyTau));
+const easeInOut = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+const easeOutBack = (x: number) => {
+  const c = 1.4;
+  const u = Math.min(1, Math.max(0, x)) - 1;
+  return 1 + (c + 1) * u * u * u + c * u * u;
+};
+
+/* ── The freed project's panel: cover, then title, roles and year ── */
+
+/** Title, roles and year in the site's own type, under the cover. */
+function panelTextTexture(p: Project): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 2048;
+  c.height = 420;
+  const x = c.getContext("2d")!;
+  const css = getComputedStyle(document.documentElement);
+  const sans = css.getPropertyValue("--font-sans").trim() || "system-ui, sans-serif";
+  const mono = css.getPropertyValue("--font-mono").trim() || "monospace";
+  const ls = (v: string) => ((x as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = v);
+  x.textBaseline = "alphabetic";
+  // Hairline and the counter row, as on the awake page's cards
+  x.fillStyle = "rgba(244,240,255,0.35)";
+  x.fillRect(0, 8, c.width, 3);
+  x.font = `500 46px ${mono}`;
+  ls("6px");
+  x.fillStyle = "rgba(244,240,255,0.78)";
+  x.fillText(`${p.counter}   ${p.category}`.toUpperCase(), 0, 84);
+  x.textAlign = "right";
+  x.fillText(p.year, c.width, 84);
+  x.textAlign = "left";
+  x.font = `700 168px ${sans}`;
+  ls("-4px");
+  x.fillStyle = "#f6f2ff";
+  x.fillText(p.title.toUpperCase(), -6, 270);
+  // Roles: one line, shrunk to fit the panel's width
+  const roles = `ROLES: ${p.roles.join(", ")}`.toUpperCase();
+  let px = 44;
+  ls("5px");
+  do {
+    x.font = `500 ${px}px ${mono}`;
+    px -= 2;
+  } while (x.measureText(roles).width > c.width && px > 20);
+  x.fillStyle = "rgba(244,240,255,0.78)";
+  x.fillText(roles, 0, 370);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Freeing and touching write the shared state (module helpers: React-compiler rules). */
+function markTouched(s: SealState, slug: string) {
+  s.touched = true;
+  useArchiveProgress.getState().recover(slug);
+  window.dispatchEvent(new CustomEvent("archive-recovered", { detail: slug }));
+}
+
 /* ── Name ring: the project's name around the seal ────────────── */
 
 function nameRingTexture(text: string): THREE.CanvasTexture {
@@ -257,6 +354,8 @@ interface SealProps {
   cover: string;
   /** The ring label, e.g. "PIXEL PLUS · WEB APPLICATION · 2024". */
   label: string;
+  /** The project held inside (its panel when freed). */
+  project: Project | undefined;
   reduced: boolean;
   /** Shared backdrop the seals' glass refracts (one pass for all three). */
   buffer: THREE.Texture;
@@ -282,12 +381,15 @@ const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
+const _w = new THREE.Vector3();
+const _end = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 
 /** A brighter rim than the hero's: it has to separate a seal from violet fog at any distance. */
 const SEAL_RIM = { intensity: 1.1, power: 2.6 };
 const SHARD_RIM = { intensity: 1.0, power: 2.4 };
 
-export default function Seal({ spot, index, cover, label, reduced, buffer, registry, state }: SealProps) {
+export default function Seal({ spot, index, cover, label, project, reduced, buffer, registry, state }: SealProps) {
   const body = useRef<THREE.Group>(null);
   const coverRef = useRef<THREE.Mesh>(null);
   const facetMesh = useRef<THREE.Mesh>(null);
@@ -300,6 +402,15 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
   const glow = useRef<THREE.Sprite>(null);
   const cracks = useRef<THREE.LineSegments>(null);
   const crackCount = useRef(0);
+  const panel = useRef<THREE.Group>(null);
+  const panelCover = useRef<THREE.MeshBasicMaterial>(null);
+  const panelText = useRef<THREE.MeshBasicMaterial>(null);
+  const panelGlow = useRef<THREE.Sprite>(null);
+  const flash = useRef<THREE.Sprite>(null);
+  /** Panel art is fetched when the seal is freed, not up front. */
+  const panelTex = useRef<{ cover: THREE.Texture; text: THREE.CanvasTexture } | null>(null);
+  /** Last shard positions (local) and scale, so the ending converges from where they are. */
+  const endFrom = useRef<THREE.Vector3[] | null>(null);
   /** Reused every frame for the hit target (no per-frame allocation). */
   const target = useRef<SealTarget>({
     center: [0, 0, 0],
@@ -316,6 +427,7 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
   // Every facet's overlay, built once: the lit one moves after each hit
   const facets = useMemo(() => Array.from({ length: 12 }, (_, f) => facetGeometry(geo, f)), [geo]);
   const orbiters = useMemo(() => makeOrbiters(900 + index * 53), [index]);
+  const fragments = useMemo(() => makeFragments(1300 + index * 71), [index]);
   const glassProps = useMemo(() => crystalGlassProps("dream"), []);
   const sealSize = SEAL.radius * 2 * 1.22;
   const facetUniforms = useMemo(
@@ -331,20 +443,57 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
   // Glass, its edges, the lit facet and the name ring stay out of the
   // backdrop the glass refracts; the cover, glow and orbiters are in it
   useEffect(() => {
-    const hide = [glass.current, edges.current, facetMesh.current, ring.current, cracks.current].filter(Boolean) as THREE.Object3D[];
+    // The panel too: nothing refracts it (the glass is gone by then)
+    const hide = [glass.current, edges.current, facetMesh.current, ring.current, cracks.current, panel.current, flash.current].filter(Boolean) as THREE.Object3D[];
     registerSeal(registry, index, body.current, hide);
     return () => unregisterSeal(registry, index, hide);
   }, [registry, index]);
+
+  /** Orbit angle per orbiter, accumulated (its speed changes when freed). */
+  const angles = useRef<number[] | null>(null);
 
   useFrame((frame, delta) => {
     const t = frame.clock.elapsedTime;
     const k = FREEZE ? 0 : reduced ? 0.35 : 1;
     const s = state.seals[index];
     const progress = sealProgress(s);
+    // Seconds since freed (Infinity: freed on an earlier visit)
+    const age = s.freed ? state.t - s.freedAt : -1;
+    const fly = s.freed ? flyK(age) : 0;
+    const burstGone = s.freed && age > 0.12;
+    const end = state.ending;
+    const et = end ? state.t - end.t0 : -1;
+    const conv = end ? easeInOut(et / ENDING.converge) : 0;
+
     if (body.current) {
       body.current.rotation.y += delta * 0.08 * k * (index % 2 ? -1 : 1);
       body.current.position.y = reduced || FREEZE ? 0 : Math.sin(t * 0.4 + index) * 0.25;
     }
+    const by = body.current?.position.y ?? 0;
+
+    // The glass bursts: it swells for a beat, then it is shards
+    if (glass.current) {
+      glass.current.visible = !burstGone;
+      glass.current.scale.setScalar(s.freed ? 1 + Math.min(1, Math.max(0, age) / 0.12) * 0.15 : 1);
+    }
+    if (edges.current) edges.current.visible = !burstGone;
+    if (cracks.current) cracks.current.visible = !burstGone;
+    if (coverRef.current) coverRef.current.visible = !burstGone;
+    if (ring.current) {
+      const m = ring.current.material as THREE.MeshBasicMaterial;
+      m.opacity = 1 - Math.min(1, fly * 2.5);
+      ring.current.visible = m.opacity > 0.01;
+    }
+    if (flash.current) {
+      const a = s.freed ? age / FREE.burst : 1;
+      flash.current.visible = a >= 0 && a < 1;
+      if (flash.current.visible) {
+        const sz = SEAL.radius * (1.5 + 5 * Math.sqrt(a));
+        flash.current.scale.set(sz, sz, 1);
+        (flash.current.material as THREE.SpriteMaterial).opacity = 1 - a;
+      }
+    }
+
     // The lit facet follows the state
     const f = facets[s.litFacet % facets.length];
     if (facetMesh.current) {
@@ -355,42 +504,106 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
       facetMat.current.uniforms.uTime.value = reduced ? 0 : t;
       facetMat.current.uniforms.uCenter.value.copy(f.center);
     }
-    // Lit from within: brighter the closer the project is to being freed
-    if (light.current) light.current.intensity = 5 + progress * 18;
+    // Lit from within: brighter the closer the project is to being freed,
+    // a flare when it is, then a low glow; all of it goes with the ending
+    const lightK = s.freed ? 6 + 34 * Math.exp(-Math.max(0, age) * 2.2) : 5 + progress * 18;
+    if (light.current) light.current.intensity = lightK * (1 - conv);
     if (glow.current) {
-      (glow.current.material as THREE.SpriteMaterial).opacity = 0.35 + progress * 0.5;
-      glow.current.position.y = body.current?.position.y ?? 0;
+      const g = s.freed ? 0.22 + 0.7 * Math.exp(-Math.max(0, age) * 1.4) : 0.35 + progress * 0.5;
+      (glow.current.material as THREE.SpriteMaterial).opacity = g * (1 - conv);
+      glow.current.position.y = by;
     }
     if (coverRef.current) {
       coverRef.current.quaternion.copy(frame.camera.quaternion);
-      coverRef.current.position.y = body.current?.position.y ?? 0;
+      coverRef.current.position.y = by;
     }
     if (ring.current) {
       ring.current.rotation.y -= delta * 0.12 * k;
-      ring.current.position.y = (body.current?.position.y ?? 0) - SEAL.radius * 0.75;
+      ring.current.position.y = by - SEAL.radius * 0.75;
     }
+
+    // Shards: orbiters fly out and slow to a drift when freed; the body's
+    // own fragments burst from its surface; the ending gathers them all
+    const n = orbiters.length;
+    const ang = (angles.current ??= orbiters.map((o) => o.phase));
+    const tg = target.current;
     const sw = swarm.current;
-    if (sw) {
-      orbiters.forEach((o, i) => {
-        const a = o.phase + t * o.speed * k;
-        _p.set(Math.cos(a) * o.radius, Math.sin(t * 0.5 + o.bob) * 0.3 * k, Math.sin(a) * o.radius).applyQuaternion(o.tilt);
+    const local = end ? _end.set(end.point[0] - spot.pos[0], end.point[1] - spot.pos[1], end.point[2] - spot.pos[2]) : null;
+    if (end && !endFrom.current) endFrom.current = Array.from({ length: n + BURST }, () => new THREE.Vector3());
+    for (let i = 0; i < n + BURST; i++) {
+      let scale: number;
+      if (i < n) {
+        const o = orbiters[i];
+        ang[i] += delta * o.speed * k * (1 - 0.7 * fly);
+        const r = o.radius * (1 + (FREE.flyOut - 1) * fly);
+        _p.set(Math.cos(ang[i]) * r, Math.sin(t * 0.5 + o.bob) * 0.3 * k, Math.sin(ang[i]) * r).applyQuaternion(o.tilt);
         _e.set(o.spin.x * t * k, o.spin.y * t * k, o.spin.z * t * k);
+        scale = o.scale;
+        const sh = tg.shards[i];
+        sh.p[0] = spot.pos[0] + _p.x;
+        sh.p[1] = spot.pos[1] + _p.y;
+        sh.p[2] = spot.pos[2] + _p.z;
+        sh.r = o.scale * 1.15;
+      } else {
+        const fr = fragments[i - n];
+        const d = SEAL.radius * 0.6 + (fr.out - SEAL.radius * 0.6) * fly;
+        _p.copy(fr.dir).multiplyScalar(d).applyAxisAngle(_up, t * 0.04 * k + fr.phase * 0.1);
+        _p.y += by + Math.sin(t * 0.45 + fr.phase) * 0.35 * k * fly;
+        _e.set(fr.spin.x * t * k, fr.spin.y * t * k, fr.spin.z * t * k);
+        scale = s.freed ? fr.scale * Math.min(1, Math.max(0, age) / 0.08) : 0;
+      }
+      if (local && endFrom.current) {
+        // Converge from wherever each shard was when the ending began
+        const from = endFrom.current[i];
+        if (from.lengthSq() === 0) from.copy(_p);
+        _p.lerpVectors(from, local, conv);
+        scale *= 1 - 0.75 * conv;
+        if (et > ENDING.converge) scale = 0;
+      }
+      if (sw) {
         _q.setFromEuler(_e);
-        _s.setScalar(o.scale);
+        _s.setScalar(Math.max(scale, 1e-4));
         _m.compose(_p, _q, _s);
         sw.setMatrixAt(i, _m);
-      });
-      sw.instanceMatrix.needsUpdate = true;
+      }
     }
+    if (sw) sw.instanceMatrix.needsUpdate = true;
+
     // Cracks: rebuilt when a facet hit adds one
     if (cracks.current && s.cracks.length !== crackCount.current) {
       crackCount.current = s.cracks.length;
       cracks.current.geometry.dispose();
       cracks.current.geometry = crackGeometry(s.cracks, 31 + index * 7);
     }
+
+    // The panel: blooms where the seal stood, always turned to you
+    if (s.freed && !panelTex.current && project && panelCover.current && panelText.current) {
+      panelTex.current = { cover: coverTexture(project.cover.dreamSrc ?? project.cover.src), text: panelTextTexture(project) };
+      panelCover.current.map = panelTex.current.cover;
+      panelText.current.map = panelTex.current.text;
+      panelCover.current.needsUpdate = true;
+      panelText.current.needsUpdate = true;
+    }
+    const bloomT = s.freed ? (age - FREE.bloomDelay) / FREE.bloom : 0;
+    const alpha = Math.min(1, Math.max(0, bloomT / 0.6)) * (end ? 1 - Math.min(1, Math.max(0, et) / 1.2) : 1);
+    if (panel.current) {
+      panel.current.visible = alpha > 0.001;
+      if (panel.current.visible) {
+        panel.current.position.y = by + (reduced ? 0 : Math.sin(t * 0.35 + index) * 0.2);
+        panel.current.quaternion.copy(frame.camera.quaternion);
+        panel.current.scale.setScalar(Math.max(0.001, reduced ? Math.min(1, bloomT) : easeOutBack(bloomT)));
+      }
+    }
+    if (panelCover.current) panelCover.current.opacity = alpha;
+    if (panelText.current) panelText.current.opacity = alpha;
+    if (panelGlow.current) (panelGlow.current.material as THREE.SpriteMaterial).opacity = alpha * (s.touched ? 0.75 : 0.45);
+    // Floating into the panel marks the project (its case study opens on waking)
+    if (s.freed && !s.touched && alpha > 0.6 && !end && panel.current) {
+      _w.set(spot.pos[0], spot.pos[1] + panel.current.position.y, spot.pos[2]);
+      if (frame.camera.position.distanceTo(_w) < FREE.touchRadius) markTouched(s, sealSlug(index));
+    }
+
     // Hit target for the pulse, in world space
-    const tg = target.current;
-    const by = body.current?.position.y ?? 0;
     tg.center[0] = spot.pos[0];
     tg.center[1] = spot.pos[1] + by;
     tg.center[2] = spot.pos[2];
@@ -399,15 +612,6 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
     tg.facet[1] = f.center.y;
     tg.facet[2] = f.center.z;
     tg.freed = s.freed;
-    orbiters.forEach((o, i) => {
-      const a = o.phase + t * o.speed * k;
-      _p.set(Math.cos(a) * o.radius, Math.sin(t * 0.5 + o.bob) * 0.3 * k, Math.sin(a) * o.radius).applyQuaternion(o.tilt);
-      const sh = tg.shards[i];
-      sh.p[0] = spot.pos[0] + _p.x;
-      sh.p[1] = spot.pos[1] + _p.y;
-      sh.p[2] = spot.pos[2] + _p.z;
-      sh.r = o.scale * 1.15;
-    });
     writeTarget(registry, index, tg);
   });
 
@@ -466,7 +670,7 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
       </mesh>
       {/* Shards in orbit: three tilted rings, the middle one counter-rotating */}
       {_shardGeo && (
-        <instancedMesh ref={swarm} args={[_shardGeo, undefined, orbiters.length]} frustumCulled={false}>
+        <instancedMesh ref={swarm} args={[_shardGeo, undefined, orbiters.length + BURST]} frustumCulled={false}>
           <MeshTransmissionMaterial
             {...glassProps}
             buffer={buffer}
@@ -477,6 +681,24 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
           />
         </instancedMesh>
       )}
+      {/* The burst: one white-violet flash as the glass gives way */}
+      <sprite ref={flash} visible={false} renderOrder={4}>
+        <spriteMaterial map={glowTex} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} toneMapped={false} />
+      </sprite>
+      {/* The freed project: its dream cover, then title, roles and year */}
+      <group ref={panel} visible={false}>
+        <sprite ref={panelGlow} scale={[PANEL.w * 1.7, PANEL.w * 1.25, 1]} renderOrder={-1}>
+          <spriteMaterial map={glowTex} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} opacity={0} />
+        </sprite>
+        <mesh position={[0, PANEL.coverY, 0]} renderOrder={5}>
+          <planeGeometry args={[PANEL.w, PANEL.coverH]} />
+          <meshBasicMaterial ref={panelCover} color="#f6f3ff" transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} fog={false} />
+        </mesh>
+        <mesh position={[0, PANEL.textY, 0]} renderOrder={5}>
+          <planeGeometry args={[PANEL.w, PANEL.textH]} />
+          <meshBasicMaterial ref={panelText} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} fog={false} />
+        </mesh>
+      </group>
     </group>
   );
 }

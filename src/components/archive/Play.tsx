@@ -4,10 +4,11 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import {
-  CHARGE_FULL, HITS_TO_FREE, MOTES, createMotes, nextFacet, releasePulse, stepMotes, stepPulse,
+  CHARGE_FULL, MOTES, createMotes, nextFacet, releasePulse, resolveFacetHit, stepMotes, stepPulse,
   type Hit, type Mote, type Pulse, type V3,
 } from "./game";
-import type { ArchiveState, HudEls } from "./archiveState";
+import { sealSlug, type ArchiveState, type HudEls } from "./archiveState";
+import { useArchiveProgress } from "@/store/useArchiveProgress";
 import type { InputState } from "./input";
 import type { SealRegistry } from "./Seal";
 import { SEAL, SEALS } from "./layout";
@@ -53,16 +54,28 @@ function textures() {
 
 /* ── Rules applied to the shared state (outside React) ─────────── */
 
-function applyHit(g: ArchiveState, hit: Hit, reduced: boolean) {
+/** Applies a pulse's end; returns what it did to the seal. */
+function applyHit(g: ArchiveState, hit: Hit, reduced: boolean): "crack" | "freed" | "none" {
   const w = window as unknown as { __archiveHits?: string[] };
   (w.__archiveHits ??= []).push(hit.kind);
-  if (hit.kind !== "facet") return; // body, shard, fizzle: the pulse is wasted
+  if (hit.kind !== "facet") return "none"; // body, shard, fizzle: the pulse is wasted
   const s = g.seals[hit.seal];
-  if (s.freed || s.hits >= HITS_TO_FREE) return;
-  s.hits += 1;
+  const r = resolveFacetHit(s);
+  if (r === "none") return r;
   if (hit.local) s.cracks.push(hit.local);
+  if (r === "freed") {
+    s.freedAt = g.t;
+    useArchiveProgress.getState().free(sealSlug(hit.seal));
+    g.shake = reduced ? 0 : 0.6;
+    return r;
+  }
   s.litFacet = nextFacet(s.litFacet, s.hits);
   g.shake = reduced ? 0 : 0.35;
+  return r;
+}
+
+function tickClock(g: ArchiveState, t: number) {
+  g.t = t;
 }
 
 function nudgeReticle(h: HudEls) {
@@ -155,6 +168,7 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
     const dt = Math.min(delta, MAX_DT);
     clock.current += dt;
     const t = clock.current;
+    tickClock(g, t);
     if (!started.current) {
       started.current = true;
       setStartCharge(g);

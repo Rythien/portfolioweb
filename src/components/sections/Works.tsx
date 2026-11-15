@@ -8,6 +8,7 @@ import { projects, type Project } from "@/content/projects";
 import ProjectArt from "@/components/ui/ProjectArt";
 import WorkChip from "@/components/ui/WorkChip";
 import { useThemeStore } from "@/store/useThemeStore";
+import { useArchiveProgress } from "@/store/useArchiveProgress";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -32,6 +33,11 @@ export default function Works() {
   const reducedRef = useRef(false);
   const mode = useThemeStore((s) => s.mode);
   const isDream = mode === "dream";
+  // Projects recovered in THE ARCHIVE carry a mark (saved across visits)
+  const recovered = useArchiveProgress((s) => s.recovered);
+  useEffect(() => {
+    useArchiveProgress.getState().hydrate();
+  }, []);
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia(
@@ -151,7 +157,17 @@ export default function Works() {
                     </span>
                     <span>{project.category}</span>
                   </div>
-                  <div className="tabular-nums">{project.year}</div>
+                  <div className="flex items-baseline gap-4">
+                    {recovered.includes(project.slug) && (
+                      <span className="inline-flex items-center gap-2 uppercase tracking-[0.12em] text-ink">
+                        <svg aria-hidden="true" viewBox="0 0 10 10" className="size-2.5 shrink-0">
+                          <path d="M5 0.5 9.5 5 5 9.5 0.5 5Z" fill="currentColor" />
+                        </svg>
+                        Recovered from the dream
+                      </span>
+                    )}
+                    <span className="tabular-nums">{project.year}</span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-baseline">

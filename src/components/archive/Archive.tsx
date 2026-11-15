@@ -7,6 +7,7 @@ import * as THREE from "three";
 import ArchiveScene from "./ArchiveScene";
 import { FIRE_KEYS, FLIGHT_KEYS, TAP_MS, TAP_PX, createInput, setPointer, type InputState } from "./input";
 import { createArchiveState, createHudEls, type ArchiveState, type HudEls } from "./archiveState";
+import { useArchiveProgress } from "@/store/useArchiveProgress";
 
 /** SVG arc path on a circle of radius r from angle a0 to a1 (degrees, 0 = right, clockwise). */
 function arc(r: number, a0: number, a1: number): string {
@@ -23,7 +24,7 @@ interface ArchiveProps {
   /** Fully open (flood settled): input, focus and the hint are live. */
   open: boolean;
   /** Back to the awake page; origin is where the flood retracts from. */
-  onWake: (origin: { x: number; y: number }) => void;
+  onWake: (origin: { x: number; y: number }, opts?: { to?: "contact" }) => void;
 }
 
 const HINT_KEY = "archive-hint-seen";
@@ -91,7 +92,13 @@ function Warmup() {
 
 export default function Archive({ rootRef, active, open, onWake }: ArchiveProps) {
   const inputRef = useRef<InputState>(createInput());
-  const gameRef = useRef<ArchiveState>(createArchiveState());
+  // Seals freed on an earlier visit arrive already open
+  const [initialGame] = useState(() => {
+    const p = useArchiveProgress.getState();
+    p.hydrate();
+    return createArchiveState(useArchiveProgress.getState().freed);
+  });
+  const gameRef = useRef<ArchiveState>(initialGame);
   const hudRef = useRef<HudEls>(createHudEls());
   // Armed before the Canvas builds its store; released in onCreated
   const [restoreConsole] = useState(() => (typeof window !== "undefined" ? muteClockDeprecationUntilSwapped() : null));

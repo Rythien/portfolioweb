@@ -342,6 +342,7 @@ function decayShake(g: ArchiveState, dt: number): number {
 
 function Pilot({ input, reduced, game, registry }: PilotProps) {
   const aimed = useRef(AIM === null);
+  const aimIdx = useRef(AIM === null ? 0 : Number(AIM));
   const flight = useRef<FlightState>(createFlight());
   // Test hook (archiveat=<i>): start in front of seal i, facing it
   useEffect(() => {
@@ -364,10 +365,16 @@ function Pilot({ input, reduced, game, registry }: PilotProps) {
 
   // Test hook: Playwright reads the flight state (never used by the UI)
   useEffect(() => {
-    const w = window as unknown as { __archiveFlight?: FlightState };
+    const w = window as unknown as { __archiveFlight?: FlightState; __archiveAim?: (i: number) => void };
     w.__archiveFlight = flight.current;
+    // Re-park facing seal i's lit facet (it moves after every hit)
+    w.__archiveAim = (i: number) => {
+      aimIdx.current = i;
+      aimed.current = false;
+    };
     return () => {
       delete w.__archiveFlight;
+      delete w.__archiveAim;
       setPadOpen(0);
     };
   }, []);
@@ -381,7 +388,7 @@ function Pilot({ input, reduced, game, registry }: PilotProps) {
     const dt = Math.min(delta, MAX_DT);
     // Test hook: once the seal has published its target, park in front of its lit facet
     if (!aimed.current) {
-      const tg = registry.targets[Number(AIM)];
+      const tg = registry.targets[aimIdx.current];
       if (tg) {
         aimed.current = true;
         const c = Math.cos(tg.rotY), sn = Math.sin(tg.rotY);
@@ -535,6 +542,7 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
             index={i}
             cover={(pr?.cover.src ?? "").replace(".webp", "-800.webp")}
             label={pr ? `${pr.title}  ·  ${pr.category}  ·  ${pr.year}`.toUpperCase() : ""}
+            project={pr}
             reduced={reduced}
             buffer={backdrop.texture}
             registry={registry}

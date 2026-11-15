@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  CHARGE_FULL, MOTES, PULSE, createMotes, nextFacet, releasePulse, stepMotes, stepPulse,
+  CHARGE_FULL, ENDING, HITS_TO_FREE, MOTES, PULSE, createMotes, endingDue, nextFacet, releasePulse, resolveFacetHit, stepMotes, stepPulse,
   type SealTarget, type V3,
 } from "./game.ts";
 
@@ -105,4 +105,19 @@ test("each hit moves the lit facet somewhere new and not adjacent", () => {
     seen.add(f);
   }
   assert.equal(seen.size, 4);
+});
+
+test("the third facet hit frees the seal; later hits do nothing", () => {
+  const s = { hits: 0, freed: false };
+  const out = Array.from({ length: HITS_TO_FREE + 1 }, () => resolveFacetHit(s));
+  assert.deepEqual(out, ["crack", "crack", "freed", "none"]);
+  assert.equal(s.freed, true);
+  assert.equal(s.hits, HITS_TO_FREE);
+});
+
+test("the ending waits for all three, then for the last panel or the timeout", () => {
+  assert.equal(endingDue(false, 0, true, 100), false, "not before every seal is freed");
+  assert.equal(endingDue(true, 10, false, 10 + ENDING.wait - 0.1), false, "waits after the last freeing");
+  assert.equal(endingDue(true, 10, true, 10.5), true, "floating into the last panel starts it at once");
+  assert.equal(endingDue(true, 10, false, 10 + ENDING.wait), true, "or the wait runs out");
 });
