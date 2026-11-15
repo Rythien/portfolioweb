@@ -6,6 +6,13 @@ import { Canvas, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import ArchiveScene from "./ArchiveScene";
 import { FLIGHT_KEYS, createInput, setPointer, type InputState } from "./input";
+import { createArchiveState, createHudEls, type ArchiveState, type HudEls } from "./archiveState";
+
+/** SVG arc path on a circle of radius r from angle a0 to a1 (degrees, 0 = right, clockwise). */
+function arc(r: number, a0: number, a1: number): string {
+  const p = (a: number) => [r * Math.cos((a * Math.PI) / 180), r * Math.sin((a * Math.PI) / 180)].map((v) => v.toFixed(2)).join(" ");
+  return `M ${p(a0)} A ${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${p(a1)}`;
+}
 import { TimerClock, muteClockDeprecationUntilSwapped } from "@/components/scene/timerClock";
 
 interface ArchiveProps {
@@ -84,6 +91,8 @@ function Warmup() {
 
 export default function Archive({ rootRef, active, open, onWake }: ArchiveProps) {
   const inputRef = useRef<InputState>(createInput());
+  const gameRef = useRef<ArchiveState>(createArchiveState());
+  const hudRef = useRef<HudEls>(createHudEls());
   // Armed before the Canvas builds its store; released in onCreated
   const [restoreConsole] = useState(() => (typeof window !== "undefined" ? muteClockDeprecationUntilSwapped() : null));
   const stageRef = useRef<HTMLDivElement>(null);
@@ -225,7 +234,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
           }}
           className="archive-canvas"
         >
-          <ArchiveScene input={inputRef} reduced={reduced} lowPower={lowPower} />
+          <ArchiveScene input={inputRef} reduced={reduced} lowPower={lowPower} game={gameRef} hud={hudRef} />
           <Warmup />
         </Canvas>
         {/* Soft vignette: the void closes in at the edges */}
@@ -234,6 +243,32 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
           className="pointer-events-none absolute inset-0"
           style={{ background: "radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(4,2,20,0.55) 100%)" }}
         />
+      </div>
+
+      {/* HUD: compass arc toward the nearest unfreed seal; reticle whose
+          three segments fill with charge */}
+      <div aria-hidden="true" className="archive-hud pointer-events-none absolute inset-0 grid place-items-center">
+        <svg viewBox="-100 -100 200 200" className="absolute size-[min(62vmin,32rem)] overflow-visible">
+          <g ref={(el) => { hudRef.current.compass = el; }} style={{ transition: "opacity 400ms ease-out" }}>
+            <path d={arc(88, -13, 13)} stroke="#f4efff" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+            <path d="M 92 0 L 86.5 -3.4 L 86.5 3.4 Z" fill="#f4efff" />
+          </g>
+        </svg>
+        <svg viewBox="-20 -20 40 40" className="absolute size-14 overflow-visible">
+          <circle r="1.4" fill="#f4efff" opacity="0.9" />
+          {[0, 1, 2].map((i) => (
+            <path
+              key={i}
+              ref={(el) => { hudRef.current.charge[i] = el; }}
+              d={arc(12, -90 + i * 120 + 9, -90 + (i + 1) * 120 - 9)}
+              stroke="#fff3c4"
+              strokeWidth="2"
+              strokeLinecap="round"
+              fill="none"
+              style={{ opacity: 0.22, transition: "opacity 200ms ease-out" }}
+            />
+          ))}
+        </svg>
       </div>
 
       <button

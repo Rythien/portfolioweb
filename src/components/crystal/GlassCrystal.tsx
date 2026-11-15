@@ -15,9 +15,7 @@ import { decodeCrystal, TARGET_SIZE } from "./crystalGen";
 import {
   CRYSTAL_MATERIAL,
   applyCrystalShader,
-  getFrostNormalMap,
-  getRoughnessMap,
-  getCreviceMap,
+  crystalGlassProps,
   thicknessFor,
 } from "./crystalMaterial";
 import { HERO_LOGO_FILL, getHeroLogos, getUnitLogos } from "./logoGeometry";
@@ -349,7 +347,6 @@ function setCloudOpacity(g: THREE.Object3D, k: number) {
 const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake", active = true }, ref) {
     const { intact: intactGeo, shards } = useCrystalData(seed);
-    const tint = CRYSTAL_MATERIAL.tint[variant];
     const logoLook = LOGO_LOOK[variant];
     useCrystalSound();
 
@@ -357,33 +354,11 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     // shards; only thickness (by mesh size) and backdrop resolution differ
     const glass = useMemo(
       () => ({
-        transmission: 1,
-        ior: CRYSTAL_MATERIAL.ior,
-        chromaticAberration: CRYSTAL_MATERIAL.chromaticAberration,
-        anisotropicBlur: CRYSTAL_MATERIAL.anisotropicBlur,
-        roughness: CRYSTAL_MATERIAL.roughness,
-        roughnessMap: getRoughnessMap(),
-        clearcoat: CRYSTAL_MATERIAL.clearcoat,
-        clearcoatRoughness: CRYSTAL_MATERIAL.clearcoatRoughness,
-        distortion: CRYSTAL_MATERIAL.distortion,
-        distortionScale: CRYSTAL_MATERIAL.distortionScale,
-        temporalDistortion: CRYSTAL_MATERIAL.temporalDistortion,
-        samples: CRYSTAL_MATERIAL.samples,
-        attenuationDistance: CRYSTAL_MATERIAL.attenuationDistance,
-        envMapIntensity: CRYSTAL_MATERIAL.envMapIntensity,
-        color: tint.color,
-        attenuationColor: tint.attenuationColor,
-        normalMap: getFrostNormalMap(),
-        normalScale: new THREE.Vector2(CRYSTAL_MATERIAL.normalScale, CRYSTAL_MATERIAL.normalScale),
-        iridescence: CRYSTAL_MATERIAL.iridescence,
-        iridescenceIOR: CRYSTAL_MATERIAL.iridescenceIOR,
-        iridescenceThicknessMinimum: CRYSTAL_MATERIAL.iridescenceThicknessMinimum,
-        iridescenceThicknessMaximum: CRYSTAL_MATERIAL.iridescenceThicknessMaximum,
-        iridescenceMap: getCreviceMap(),
+        ...crystalGlassProps(variant),
         // Rim + streak shading chained onto drei's own shader patch
         ref: (m: unknown) => applyCrystalShader(m as THREE.Material | null),
       }),
-      [tint],
+      [variant],
     );
 
     const glowTex = useMemo(() => createGlowTexture(128), []);

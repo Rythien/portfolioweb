@@ -214,9 +214,52 @@ export function getCreviceMap(): THREE.DataTexture {
   return _crevice;
 }
 
+/* ── The shared glass props (intact crystal, shards, Archive seals) ── */
+
+/**
+ * Props for drei's MeshTransmissionMaterial built from CRYSTAL_MATERIAL.
+ * Everything that wears this ice uses it, so the finish cannot drift;
+ * callers add only thickness, buffer and resolution.
+ */
+export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint) {
+  const tint = CRYSTAL_MATERIAL.tint[variant];
+  return {
+    transmission: 1,
+    ior: CRYSTAL_MATERIAL.ior,
+    chromaticAberration: CRYSTAL_MATERIAL.chromaticAberration,
+    anisotropicBlur: CRYSTAL_MATERIAL.anisotropicBlur,
+    roughness: CRYSTAL_MATERIAL.roughness,
+    roughnessMap: getRoughnessMap(),
+    clearcoat: CRYSTAL_MATERIAL.clearcoat,
+    clearcoatRoughness: CRYSTAL_MATERIAL.clearcoatRoughness,
+    distortion: CRYSTAL_MATERIAL.distortion,
+    distortionScale: CRYSTAL_MATERIAL.distortionScale,
+    temporalDistortion: CRYSTAL_MATERIAL.temporalDistortion,
+    samples: CRYSTAL_MATERIAL.samples,
+    attenuationDistance: CRYSTAL_MATERIAL.attenuationDistance,
+    envMapIntensity: CRYSTAL_MATERIAL.envMapIntensity,
+    color: tint.color,
+    attenuationColor: tint.attenuationColor,
+    normalMap: getFrostNormalMap(),
+    normalScale: new THREE.Vector2(CRYSTAL_MATERIAL.normalScale, CRYSTAL_MATERIAL.normalScale),
+    iridescence: CRYSTAL_MATERIAL.iridescence,
+    iridescenceIOR: CRYSTAL_MATERIAL.iridescenceIOR,
+    iridescenceThicknessMinimum: CRYSTAL_MATERIAL.iridescenceThicknessMinimum,
+    iridescenceThicknessMaximum: CRYSTAL_MATERIAL.iridescenceThicknessMaximum,
+    iridescenceMap: getCreviceMap(),
+  };
+}
+
 /* ── Rim + streak shading on top of drei's transmission material ── */
 
-const shared = {
+interface RimUniforms {
+  rimColor: { value: THREE.Color };
+  rimPower: { value: number };
+  rimIntensity: { value: number };
+  streakDarken: { value: number };
+}
+
+const shared: RimUniforms = {
   rimColor: { value: new THREE.Color(CRYSTAL_MATERIAL.rim.color) },
   rimPower: { value: CRYSTAL_MATERIAL.rim.power },
   rimIntensity: { value: CRYSTAL_MATERIAL.rim.intensity },
@@ -225,12 +268,36 @@ const shared = {
 
 const PATCHED = Symbol("crystalShader");
 
+export interface RimOverride {
+  color?: string;
+  power?: number;
+  intensity?: number;
+}
+const _rimSets = new Map<string, RimUniforms>();
+function rimUniforms(o?: RimOverride): RimUniforms {
+  if (!o) return shared;
+  const key = JSON.stringify(o);
+  let u = _rimSets.get(key);
+  if (!u) {
+    u = {
+      rimColor: { value: new THREE.Color(o.color ?? CRYSTAL_MATERIAL.rim.color) },
+      rimPower: { value: o.power ?? CRYSTAL_MATERIAL.rim.power },
+      rimIntensity: { value: o.intensity ?? CRYSTAL_MATERIAL.rim.intensity },
+      streakDarken: shared.streakDarken,
+    };
+    _rimSets.set(key, u);
+  }
+  return u;
+}
+
 /**
  * Chain onto the material's own onBeforeCompile (drei's transmission
  * patch) and add a fresnel rim plus the darker film streaks. Uniforms are
- * shared objects, so every crystal material reads one config.
+ * shared objects, so every crystal material reads one config; `rim` gives
+ * a different rim only (the Archive's seals need a brighter one to
+ * separate from the fog at any distance).
  */
-export function applyCrystalShader(material: THREE.Material | null): void {
+export function applyCrystalShader(material: THREE.Material | null, rim?: RimOverride): void {
   if (!material) return;
   const m = material as THREE.Material & { [PATCHED]?: boolean };
   if (m[PATCHED]) return;
@@ -238,7 +305,7 @@ export function applyCrystalShader(material: THREE.Material | null): void {
   const base = material.onBeforeCompile.bind(material);
   material.onBeforeCompile = (shader, renderer) => {
     base(shader, renderer);
-    Object.assign(shader.uniforms, shared);
+    Object.assign(shader.uniforms, rimUniforms(rim));
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "void main() {",

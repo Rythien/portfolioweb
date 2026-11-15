@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { setPadOpen } from "@/hooks/crystalAudio";
 import {
@@ -10,7 +11,8 @@ import {
 } from "./flight";
 import { readFlightInput, type InputState } from "./input";
 import { SEALS, VIEW_DISTANCE, VOID } from "./layout";
-import Seal from "./Seal";
+import Seal, { type SealRegistry } from "./Seal";
+import type { ArchiveState, HudEls } from "./archiveState";
 import StudioEnvironment from "@/components/crystal/StudioEnvironment";
 import { projects } from "@/content/projects";
 
@@ -393,13 +395,86 @@ function Pilot({ input, reduced }: PilotProps) {
 
 /* ── Scene ────────────────────────────────────────────────────── */
 
+/* ── Seals' backdrop: one pass for all three ─────────────────────
+ * The seals wear the hero's transmission material, which refracts a
+ * backdrop of the scene without them; one shared pass serves all three
+ * (and their orbiting shards), like the hero's shards. */
+
+function SealBackdrop({ registry, fbo }: { registry: SealRegistry; fbo: THREE.WebGLRenderTarget }) {
+  useFrame((state) => {
+    const hidden: THREE.Object3D[] = [];
+    registry.backdropHidden.forEach((o) => {
+      if (o.visible) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    });
+    state.gl.setRenderTarget(fbo);
+    state.gl.clear();
+    state.gl.render(state.scene, state.camera);
+    state.gl.setRenderTarget(null);
+    hidden.forEach((o) => (o.visible = true));
+  });
+  return null;
+}
+
+/* ── HUD: compass toward the nearest unfreed seal, reticle charge ── */
+
+const _cv = new THREE.Vector3();
+const _nv = new THREE.Vector3();
+
+/** Writes the HUD for one frame (DOM nodes, outside React). */
+function writeHud(g: ArchiveState, h: HudEls, camera: THREE.Camera) {
+  let best = -1;
+  let bestD = Infinity;
+  SEALS.forEach((spot, i) => {
+    if (g.seals[i].freed) return;
+    const d = camera.position.distanceTo(_cv.set(spot.pos[0], spot.pos[1], spot.pos[2]));
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  if (h.compass) {
+    if (best < 0) {
+      h.compass.style.opacity = "0";
+    } else {
+      const [x, y, z] = SEALS[best].pos;
+      // Camera space: x right, y up, -z ahead; screen angle has y down
+      _cv.set(x, y, z).applyMatrix4(camera.matrixWorldInverse);
+      const deg = (Math.atan2(-_cv.y, _cv.x) * 180) / Math.PI;
+      _nv.set(x, y, z).project(camera);
+      const ahead = _cv.z < 0;
+      const off = Math.max(Math.abs(_nv.x), Math.abs(_nv.y));
+      h.compass.setAttribute("transform", `rotate(${deg.toFixed(1)})`);
+      // Gone when the seal is plainly in view (its direction is
+      // meaningless there), faint near the edge, insistent off screen
+      h.compass.style.opacity = !ahead || off > 0.85 ? "0.95" : off > 0.45 ? "0.3" : "0";
+      h.compass.dataset.target = String(best);
+    }
+  }
+  h.charge.forEach((el, i) => {
+    if (el) el.style.opacity = i < g.charge ? "1" : "0.22";
+  });
+}
+
+function HudDriver({ game, hud }: { game: React.RefObject<ArchiveState>; hud: React.RefObject<HudEls> }) {
+  useFrame(({ camera }) => writeHud(game.current, hud.current, camera));
+  return null;
+}
+
 export interface ArchiveSceneProps {
   input: React.RefObject<InputState>;
   reduced: boolean;
   lowPower: boolean;
+  game: React.RefObject<ArchiveState>;
+  hud: React.RefObject<HudEls>;
 }
 
-export default function ArchiveScene({ input, reduced, lowPower }: ArchiveSceneProps) {
+export default function ArchiveScene({ input, reduced, lowPower, game, hud }: ArchiveSceneProps) {
+  const { size } = useThree();
+  const backdrop = useFBO(Math.max(256, Math.round(size.width * 0.6)), Math.max(256, Math.round(size.height * 0.6)));
+  const registry = useMemo<SealRegistry>(() => ({ backdropHidden: new Set(), bodies: [] }), []);
   return (
     <>
       <color attach="background" args={[VOID.fog]} />
@@ -412,15 +487,24 @@ export default function ArchiveScene({ input, reduced, lowPower }: ArchiveSceneP
       <SealBeacons />
       {/* The same studio the hero crystal is lit by, so the ice matches */}
       <StudioEnvironment variant="dream" />
-      {SEALS.map((spot, i) => (
-        <Seal
-          key={spot.project}
-          spot={spot}
-          index={i}
-          cover={(projects[spot.project]?.cover.src ?? "").replace(".webp", "-800.webp")}
-          reduced={reduced}
-        />
-      ))}
+      <SealBackdrop registry={registry} fbo={backdrop} />
+      {SEALS.map((spot, i) => {
+        const pr = projects[spot.project];
+        return (
+          <Seal
+            key={spot.project}
+            spot={spot}
+            index={i}
+            cover={(pr?.cover.src ?? "").replace(".webp", "-800.webp")}
+            label={pr ? `${pr.title}  ·  ${pr.category}  ·  ${pr.year}`.toUpperCase() : ""}
+            reduced={reduced}
+            buffer={backdrop.texture}
+            registry={registry}
+            state={game.current}
+          />
+        );
+      })}
+      <HudDriver game={game} hud={hud} />
       <Pilot input={input} reduced={reduced} />
     </>
   );

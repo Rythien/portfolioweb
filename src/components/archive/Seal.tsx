@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { MeshTransmissionMaterial } from "@react-three/drei";
 import * as THREE from "three";
-import { applyCrystalShader, getFrostNormalMap, getRoughnessMap } from "@/components/crystal/crystalMaterial";
+import { applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import { SEAL, type SealSpot } from "./layout";
+import { sealProgress, type ArchiveState } from "./archiveState";
 
 /**
  * A seal: one project frozen inside a faceted block of ice, orbited by
@@ -83,6 +85,24 @@ function shardGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/** Soft violet glow for the light the seal holds. */
+let _glow: THREE.CanvasTexture | null = null;
+function innerGlowTexture(): THREE.CanvasTexture {
+  if (_glow) return _glow;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const x = c.getContext("2d")!;
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, "rgba(214,196,255,0.9)");
+  g.addColorStop(0.35, "rgba(167,139,250,0.45)");
+  g.addColorStop(1, "rgba(120,90,240,0)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, 128, 128);
+  _glow = new THREE.CanvasTexture(c);
+  _glow.colorSpace = THREE.SRGBColorSpace;
+  return _glow;
+}
+
 /** Project covers, created once with the right colour space (they stream in). */
 const _covers = new Map<string, THREE.Texture>();
 function coverTexture(url: string): THREE.Texture {
@@ -152,12 +172,61 @@ function makeOrbiters(seed: number): Orbiter[] {
   return out;
 }
 
+/* ── Name ring: the project's name around the seal ────────────── */
+
+function nameRingTexture(text: string): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 4096;
+  c.height = 160;
+  const x = c.getContext("2d")!;
+  const family = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || "monospace";
+  x.font = `500 84px ${family}`;
+  (x as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "14px";
+  x.fillStyle = "rgba(244,240,255,0.92)";
+  x.textBaseline = "middle";
+  // Repeat the label until the band is full, so some of it always faces you
+  let px = 40;
+  while (px < c.width) {
+    x.fillText(text, px, c.height / 2);
+    px += x.measureText(text).width + 40;
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/* ── Seal ─────────────────────────────────────────────────────── */
+
+export interface SealRegistry {
+  /** Hidden for the seals' backdrop pass (the glass and what sits on it). */
+  backdropHidden: Set<THREE.Object3D>;
+  /** Seal bodies (rotating groups), by seal index, for hit tests. */
+  bodies: (THREE.Object3D | null)[];
+}
+
 interface SealProps {
   spot: SealSpot;
   index: number;
-  /** DREAM cover of the project held inside. */
+  /** Cover of the project held inside. */
   cover: string;
+  /** The ring label, e.g. "PIXEL PLUS · WEB APPLICATION · 2024". */
+  label: string;
   reduced: boolean;
+  /** Shared backdrop the seals' glass refracts (one pass for all three). */
+  buffer: THREE.Texture;
+  registry: SealRegistry;
+  state: ArchiveState;
+}
+
+/** Registry writes live outside the component (it is shared, mutable scene plumbing). */
+function registerSeal(r: SealRegistry, index: number, body: THREE.Object3D | null, hide: THREE.Object3D[]) {
+  hide.forEach((o) => r.backdropHidden.add(o));
+  r.bodies[index] = body;
+}
+function unregisterSeal(r: SealRegistry, index: number, hide: THREE.Object3D[]) {
+  hide.forEach((o) => r.backdropHidden.delete(o));
+  r.bodies[index] = null;
 }
 
 const _m = new THREE.Matrix4();
@@ -166,38 +235,80 @@ const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 
-export default function Seal({ spot, index, cover, reduced }: SealProps) {
+/** A brighter rim than the hero's: it has to separate a seal from violet fog at any distance. */
+const SEAL_RIM = { intensity: 1.1, power: 2.6 };
+const SHARD_RIM = { intensity: 1.0, power: 2.4 };
+
+export default function Seal({ spot, index, cover, label, reduced, buffer, registry, state }: SealProps) {
   const body = useRef<THREE.Group>(null);
   const coverRef = useRef<THREE.Mesh>(null);
+  const facetMesh = useRef<THREE.Mesh>(null);
   const facetMat = useRef<THREE.ShaderMaterial>(null);
   const swarm = useRef<THREE.InstancedMesh>(null);
+  const glass = useRef<THREE.Mesh>(null);
+  const edges = useRef<THREE.LineSegments>(null);
+  const ring = useRef<THREE.Mesh>(null);
+  const light = useRef<THREE.PointLight>(null);
+  const glow = useRef<THREE.Sprite>(null);
   const coverTex = useMemo(() => coverTexture(cover), [cover]);
+  const ringTex = useMemo(() => nameRingTexture(`${label}   ·   `), [label]);
+  const glowTex = useMemo(() => innerGlowTexture(), []);
   const geo = useMemo(() => sealGeometry(101 + index * 37), [index]);
-  const facet = useMemo(() => facetGeometry(geo, SEAL.litFacet[index % SEAL.litFacet.length]), [geo, index]);
+  // Every facet's overlay, built once: the lit one moves after each hit
+  const facets = useMemo(() => Array.from({ length: 12 }, (_, f) => facetGeometry(geo, f)), [geo]);
   const orbiters = useMemo(() => makeOrbiters(900 + index * 53), [index]);
+  const glassProps = useMemo(() => crystalGlassProps("dream"), []);
+  const sealSize = SEAL.radius * 2 * 1.22;
   const facetUniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uColor: { value: new THREE.Color("#fff3c4") },
-      uCenter: { value: facet.center.clone() },
+      uCenter: { value: new THREE.Vector3() },
       uSize: { value: SEAL.radius * 0.7 },
     }),
-    [facet],
+    [],
   );
-  const iceMaps = useMemo(() => ({ normal: getFrostNormalMap(), rough: getRoughnessMap() }), []);
 
+  // Glass, its edges, the lit facet and the name ring stay out of the
+  // backdrop the glass refracts; the cover, glow and orbiters are in it
+  useEffect(() => {
+    const hide = [glass.current, edges.current, facetMesh.current, ring.current].filter(Boolean) as THREE.Object3D[];
+    registerSeal(registry, index, body.current, hide);
+    return () => unregisterSeal(registry, index, hide);
+  }, [registry, index]);
 
-  useFrame((state, delta) => {
-    const t = state.clock.elapsedTime;
+  useFrame((frame, delta) => {
+    const t = frame.clock.elapsedTime;
     const k = reduced ? 0.35 : 1;
+    const s = state.seals[index];
+    const progress = sealProgress(s);
     if (body.current) {
       body.current.rotation.y += delta * 0.08 * k * (index % 2 ? -1 : 1);
       body.current.position.y = reduced ? 0 : Math.sin(t * 0.4 + index) * 0.25;
     }
-    if (facetMat.current) facetMat.current.uniforms.uTime.value = reduced ? 0 : t;
+    // The lit facet follows the state
+    const f = facets[s.litFacet % facets.length];
+    if (facetMesh.current) {
+      if (facetMesh.current.geometry !== f.geo) facetMesh.current.geometry = f.geo;
+      facetMesh.current.visible = !s.freed;
+    }
+    if (facetMat.current) {
+      facetMat.current.uniforms.uTime.value = reduced ? 0 : t;
+      facetMat.current.uniforms.uCenter.value.copy(f.center);
+    }
+    // Lit from within: brighter the closer the project is to being freed
+    if (light.current) light.current.intensity = 5 + progress * 18;
+    if (glow.current) {
+      (glow.current.material as THREE.SpriteMaterial).opacity = 0.35 + progress * 0.5;
+      glow.current.position.y = body.current?.position.y ?? 0;
+    }
     if (coverRef.current) {
-      coverRef.current.quaternion.copy(state.camera.quaternion);
+      coverRef.current.quaternion.copy(frame.camera.quaternion);
       coverRef.current.position.y = body.current?.position.y ?? 0;
+    }
+    if (ring.current) {
+      ring.current.rotation.y -= delta * 0.12 * k;
+      ring.current.position.y = (body.current?.position.y ?? 0) - SEAL.radius * 0.75;
     }
     const sw = swarm.current;
     if (sw) {
@@ -222,36 +333,29 @@ export default function Seal({ spot, index, cover, reduced }: SealProps) {
         <planeGeometry args={[SEAL.radius * 1.2, SEAL.radius * 1.2 * 0.75]} />
         <meshBasicMaterial map={coverTex} color="#f1edff" side={THREE.DoubleSide} toneMapped={false} fog={false} />
       </mesh>
+      {/* Held light: a violet glow behind the cover, seen through the ice */}
+      <sprite ref={glow} scale={[SEAL.radius * 2.6, SEAL.radius * 2.6, 1]} renderOrder={-1}>
+        <spriteMaterial map={glowTex} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} opacity={0.35} />
+      </sprite>
       <group ref={body}>
-        {/* A faint inner glow so the frozen project reads as held light */}
-        <pointLight color="#c9b8ff" intensity={6} distance={SEAL.radius * 3} decay={1.5} />
-        {/* The ice */}
-        <mesh geometry={geo}>
-          <meshPhysicalMaterial
-            transmission={1}
-            thickness={SEAL.radius * 0.9}
-            ior={1.31}
-            roughness={1}
-            roughnessMap={iceMaps.rough}
-            normalMap={iceMaps.normal}
-            normalScale={new THREE.Vector2(0.09, 0.09)}
-            color="#d9cffd"
-            attenuationColor="#a99be6"
-            attenuationDistance={SEAL.radius * 3}
-            clearcoat={0.6}
-            clearcoatRoughness={0.1}
-            envMapIntensity={1.2}
-            specularIntensity={1}
-            ref={(m: THREE.Material | null) => applyCrystalShader(m)}
+        <pointLight ref={light} color="#a78bfa" intensity={5} distance={SEAL.radius * 4} decay={1.4} />
+        {/* The ice: the shared crystal material, DREAM tint */}
+        <mesh ref={glass} geometry={geo}>
+          <MeshTransmissionMaterial
+            {...glassProps}
+            buffer={buffer}
+            thickness={thicknessFor(sealSize)}
+            resolution={32}
+            ref={(m: unknown) => applyCrystalShader(m as THREE.Material | null, SEAL_RIM)}
           />
         </mesh>
         {/* Crisp cut edges */}
-        <lineSegments>
+        <lineSegments ref={edges}>
           <edgesGeometry args={[geo, 20]} />
-          <lineBasicMaterial color="#e9e2ff" transparent opacity={0.35} />
+          <lineBasicMaterial color="#f1ecff" transparent opacity={0.45} />
         </lineSegments>
         {/* The lit facet: the target */}
-        <mesh geometry={facet.geo} renderOrder={2}>
+        <mesh ref={facetMesh} geometry={facets[state.seals[index].litFacet % 12].geo} renderOrder={2}>
           <shaderMaterial
             ref={facetMat}
             uniforms={facetUniforms}
@@ -264,24 +368,21 @@ export default function Seal({ spot, index, cover, reduced }: SealProps) {
           />
         </mesh>
       </group>
+      {/* The project's name, circling the seal's waist */}
+      <mesh ref={ring} rotation-x={0.08}>
+        <cylinderGeometry args={[SEAL.radius * 1.35, SEAL.radius * 1.35, SEAL.radius * 0.22, 128, 1, true]} />
+        <meshBasicMaterial map={ringTex} transparent depthWrite={false} side={THREE.FrontSide} toneMapped={false} />
+      </mesh>
       {/* Shards in orbit: three tilted rings, the middle one counter-rotating */}
       {_shardGeo && (
         <instancedMesh ref={swarm} args={[_shardGeo, undefined, orbiters.length]} frustumCulled={false}>
-          <meshPhysicalMaterial
-            transmission={1}
-            thickness={0.3}
-            ior={1.31}
-            roughness={1}
-            roughnessMap={iceMaps.rough}
-            color="#f5f2ff"
-            attenuationColor="#d4ccf6"
-            attenuationDistance={6}
-            clearcoat={0.6}
-            clearcoatRoughness={0.1}
-            envMapIntensity={2.2}
-            specularIntensity={1}
-            ref={(m: THREE.Material | null) => applyCrystalShader(m)}
+          <MeshTransmissionMaterial
+            {...glassProps}
+            buffer={buffer}
+            thickness={thicknessFor(1.2, true)}
+            resolution={32}
             flatShading
+            ref={(m: unknown) => applyCrystalShader(m as THREE.Material | null, SHARD_RIM)}
           />
         </instancedMesh>
       )}
