@@ -434,33 +434,38 @@ export const GLASS_LOOK = {
 } as const;
 
 /*
- * Logo contrast. WAKE: dark slate with a reflective bevel, so the faces
- * read darker than the page and the edges catch the lightformers.
- * DREAM: pale lavender glowing inside the violet glass. The ghost is a
- * flat copy drawn over the glass so the logo stays readable through
- * refraction.
+ * Logo contrast. WAKE: matte mid-grey metal, clearly lighter than the
+ * black marquee type behind it. No metalness: a metallic logo mirrored
+ * the large dark lightformer panels and went near-black. DREAM: pale
+ * lavender glowing inside the violet glass. The ghost is a flat copy
+ * drawn over the glass for readability through refraction; the rim is
+ * an inverted hull that keeps a defined edge against the light page.
  */
 const LOGO_LOOK = {
   wake: {
-    color: "#4a5263",
-    emissive: "#000000",
-    emissiveIntensity: 0,
-    roughness: 0.35,
-    metalness: 0.25,
-    envMapIntensity: 1.2,
-    ghost: "#3a4150",
+    color: "#b4bcc8",
+    emissive: "#5d6472",
+    emissiveIntensity: 2.0,
+    roughness: 0.45,
+    metalness: 0.0,
+    envMapIntensity: 0.9,
+    ghost: "#9aa3b1",
+    rim: "#6f7889",
   },
   dream: {
-    color: "#e4dcff",
-    emissive: "#8f7bff",
-    emissiveIntensity: 0.45,
+    color: "#efe9ff",
+    emissive: "#9b89ff",
+    emissiveIntensity: 0.5,
     roughness: 0.35,
     metalness: 0.25,
     envMapIntensity: 1.2,
     ghost: "#d9ccff",
+    rim: "#c8b8ff",
   },
 } as const;
-const GHOST_OPACITY = 0.22;
+const GHOST_OPACITY = 0.14;
+const RIM_SCALE = 1.02;
+const RIM_OPACITY = 0.35;
 const GHOST_RENDER_ORDER = 10;
 /*
  * Shard logos are drawn over their shard, not refracted through it: seen
@@ -468,6 +473,11 @@ const GHOST_RENDER_ORDER = 10;
  * into dark blotches. They stay out of the shard backdrop pass.
  */
 const SHARD_LOGO_RENDER_ORDER = 9;
+// Shard rims draw just before their logo (both skip the depth test), so
+// the logo covers all but the thin outline
+const SHARD_RIM_RENDER_ORDER = 8;
+// Hero rim draws after the hero logo so the logo's depth hides its centre
+const HERO_RIM_RENDER_ORDER = 1;
 /** Intact glass: calmer surface so the interior reads, still frosty. */
 const INTACT_NORMAL_SCALE = 0.14;
 const INTACT_CHROMATIC_ABERRATION = 0.08;
@@ -646,8 +656,10 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const mergedRef = useRef<THREE.Mesh>(null);
     const heroLogoRef = useRef<THREE.Mesh>(null);
     const heroGhostRef = useRef<THREE.Mesh>(null);
+    const heroRimRef = useRef<THREE.Mesh>(null);
     const shardLogoRefs = useRef<(THREE.Mesh | null)[]>([]);
     const shardGhostRefs = useRef<(THREE.Mesh | null)[]>([]);
+    const shardRimRefs = useRef<(THREE.Mesh | null)[]>([]);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
     const inclusionRef = useRef<THREE.InstancedMesh>(null);
     const glowRef = useRef<THREE.Sprite>(null);
@@ -671,6 +683,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (mergedRef.current) mergedRef.current.visible = false;
         if (heroLogoRef.current) heroLogoRef.current.visible = false;
         if (heroGhostRef.current) heroGhostRef.current.visible = false;
+        if (heroRimRef.current) heroRimRef.current.visible = false;
         if (inclusionRef.current) inclusionRef.current.visible = false;
         if (glowRef.current) glowRef.current.visible = false;
         for (let i = 0; i < shards.length; i++) {
@@ -679,6 +692,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         }
         for (const l of shardLogoRefs.current) if (l) l.visible = false;
         for (const g of shardGhostRefs.current) if (g) g.visible = false;
+        for (const r of shardRimRefs.current) if (r) r.visible = false;
         return;
       }
       const breakVal = useFractureStore.getState().breakVal;
@@ -781,6 +795,16 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           ghost.visible = heroMesh.visible && heroOpacity > 0.001;
           (ghost.material as THREE.MeshBasicMaterial).opacity = GHOST_OPACITY * heroOpacity;
         }
+
+        const rim = heroRimRef.current;
+        if (rim) {
+          if (rim.geometry !== heroMesh.geometry) rim.geometry = heroMesh.geometry;
+          rim.position.copy(heroMesh.position);
+          rim.quaternion.copy(heroMesh.quaternion);
+          rim.scale.copy(heroMesh.scale).multiplyScalar(RIM_SCALE);
+          rim.visible = heroMesh.visible && heroOpacity > 0.001;
+          (rim.material as THREE.MeshBasicMaterial).opacity = RIM_OPACITY * heroOpacity;
+        }
       }
 
       if (mergedRef.current) {
@@ -805,7 +829,12 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
       // Ghost layers (and the over-glass shard logos) sit on top of the
       // glass; they must never be part of the backdrop the glass refracts
-      const ghosts = [heroGhostRef.current, ...shardGhostRefs.current, ...shardLogoRefs.current];
+      const ghosts = [
+        heroGhostRef.current,
+        ...shardGhostRefs.current,
+        ...shardLogoRefs.current,
+        ...shardRimRefs.current,
+      ];
       const ghostWasVisible = ghosts.map((g) => !!g?.visible);
       const hideGhosts = () => ghosts.forEach((g) => { if (g) g.visible = false; });
       const restoreGhosts = () =>
@@ -914,10 +943,12 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       for (const slot of shardLogoSlots) {
         const logo = shardLogoRefs.current[slot.rank];
         const ghost = shardGhostRefs.current[slot.rank];
+        const rim = shardRimRefs.current[slot.rank];
         const shardMesh = shardMeshRefs.current[slot.shard];
         const on = logoAlpha > 0.001 && !!shardMesh;
         if (logo) logo.visible = on;
         if (ghost) ghost.visible = on;
+        if (rim) rim.visible = on;
         if (!on || !logo || !shardMesh) continue;
 
         // Icons after the current hero logo, so a shard never repeats it
@@ -942,6 +973,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           ghost.quaternion.copy(logo.quaternion);
           ghost.scale.copy(logo.scale);
           (ghost.material as THREE.MeshBasicMaterial).opacity = GHOST_OPACITY * logoAlpha;
+        }
+
+        if (rim) {
+          if (rim.geometry !== logo.geometry) rim.geometry = logo.geometry;
+          rim.position.copy(logo.position);
+          rim.quaternion.copy(logo.quaternion);
+          rim.scale.copy(logo.scale).multiplyScalar(RIM_SCALE);
+          (rim.material as THREE.MeshBasicMaterial).opacity = RIM_OPACITY * logoAlpha;
         }
       }
     });
@@ -985,6 +1024,23 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               envMapIntensity={logoLook.envMapIntensity}
               transparent
               opacity={1}
+            />
+          </mesh>
+        )}
+
+        {/* Rim: inverted hull just outside the hero logo, a defined edge */}
+        {heroLogos[0] && (
+          <mesh
+            ref={heroRimRef}
+            geometry={heroLogos[0].geometry}
+            renderOrder={HERO_RIM_RENDER_ORDER}
+          >
+            <meshBasicMaterial
+              color={logoLook.rim}
+              side={THREE.BackSide}
+              transparent
+              opacity={RIM_OPACITY}
+              depthWrite={false}
             />
           </mesh>
         )}
@@ -1070,6 +1126,22 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         {unitLogos[0] &&
           shardLogoSlots.map((slot) => (
             <group key={`slot-${slot.rank}`}>
+              <mesh
+                ref={(el) => { shardRimRefs.current[slot.rank] = el; }}
+                geometry={unitLogos[0].geometry}
+                renderOrder={SHARD_RIM_RENDER_ORDER}
+                frustumCulled={false}
+                visible={false}
+              >
+                <meshBasicMaterial
+                  color={logoLook.rim}
+                  side={THREE.BackSide}
+                  transparent
+                  opacity={0}
+                  depthTest={false}
+                  depthWrite={false}
+                />
+              </mesh>
               <mesh
                 ref={(el) => { shardLogoRefs.current[slot.rank] = el; }}
                 geometry={unitLogos[0].geometry}
