@@ -2,11 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/store/useGameStore";
+import { createGame, step, takeEvents, STEP, type GameState, type Input } from "./engine.ts";
+import { createView, fitDisplay, logicalSize, renderFrame, type View } from "./render.ts";
+import { playEvents } from "./audio.ts";
 
 interface DescentProps {
   /** Called with the run's score (metres) on every exit path. */
   onExit: (score?: number) => void;
 }
+
+/** Longest frame fed to the accumulator; a hitch never fast-forwards. */
+const MAX_FRAME = 0.25;
 
 export default function Descent({ onExit }: DescentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -16,6 +22,13 @@ export default function Descent({ onExit }: DescentProps) {
   useEffect(() => {
     exitRef.current = onExit;
   }, [onExit]);
+
+  const fullBleed = typeof window !== "undefined" && window.innerWidth < 768;
+  const [size] = useState(() =>
+    typeof window === "undefined"
+      ? { w: 320, h: 568 }
+      : logicalSize(window.innerWidth, window.innerHeight, window.innerWidth < 768),
+  );
 
   // Page lifecycle: scene/Lenis follow the store; here the scroll lock
   // and the cursor swap, restored on unmount whatever closed the game
@@ -58,19 +71,45 @@ export default function Descent({ onExit }: DescentProps) {
     };
   }, []);
 
-  // Placeholder frame until the engine lands
+  // Game loop: fixed-step simulation, interpolated render
   useEffect(() => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext("2d")!;
-    c.width = 320;
-    c.height = 568;
-    const g = ctx.createLinearGradient(0, 0, 0, 568);
-    g.addColorStop(0, "#07062B");
-    g.addColorStop(1, "#1a1050");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 320, 568);
-  }, []);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const view: View = createView(canvas, size.w, size.h, reducedMotion);
+    const game: GameState = createGame({ seed: (Date.now() >>> 0) ^ 0x9e3779b9, viewH: size.h, reducedMotion });
+    const input: Input = { steer: 0, targetX: null, dash: false };
+
+    let raf = 0;
+    let last = performance.now();
+    let acc = 0;
+
+    const onResize = () => fitDisplay(view);
+    onResize();
+    window.addEventListener("resize", onResize);
+
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min((now - last) / 1000, MAX_FRAME);
+      last = now;
+      if (!pausedRef.current) {
+        acc += dt;
+        while (acc >= STEP) {
+          step(game, input, STEP);
+          input.dash = false;
+          acc -= STEP;
+        }
+      }
+      playEvents(takeEvents(game));
+      renderFrame(view, game, pausedRef.current ? 1 : acc / STEP);
+    };
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [size]);
 
   return (
     <div
@@ -83,8 +122,8 @@ export default function Descent({ onExit }: DescentProps) {
         ref={canvasRef}
         tabIndex={0}
         aria-label="DESCENT game canvas"
-        className="h-full max-h-[100dvh] [image-rendering:pixelated]"
-        style={{ aspectRatio: "320 / 568" }}
+        className={fullBleed ? "h-full w-full" : "h-full max-h-[100dvh]"}
+        style={fullBleed ? undefined : { aspectRatio: `${size.w} / ${size.h}` }}
       />
       {paused && <p className="sr-only" aria-live="polite">Paused</p>}
       <button
