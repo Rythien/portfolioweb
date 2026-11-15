@@ -12,7 +12,8 @@ import {
 import { readFlightInput, type InputState } from "./input";
 import { SEALS, VIEW_DISTANCE, VOID } from "./layout";
 import Seal, { type SealRegistry } from "./Seal";
-import type { ArchiveState, HudEls } from "./archiveState";
+import Play from "./Play";
+import { CHARGE_FULL, type ArchiveState, type HudEls } from "./archiveState";
 import StudioEnvironment from "@/components/crystal/StudioEnvironment";
 import { projects } from "@/content/projects";
 
@@ -326,9 +327,21 @@ function SealBeacons() {
 interface PilotProps {
   input: React.RefObject<InputState>;
   reduced: boolean;
+  game: React.RefObject<ArchiveState>;
+  registry: SealRegistry;
 }
 
-function Pilot({ input, reduced }: PilotProps) {
+/** Test hook (archiveaim=<i>): face seal i's lit facet head-on from approach distance. */
+const AIM = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("archiveaim") : null;
+
+function decayShake(g: ArchiveState, dt: number): number {
+  const s = g.shake;
+  g.shake = Math.max(0, g.shake - dt);
+  return s;
+}
+
+function Pilot({ input, reduced, game, registry }: PilotProps) {
+  const aimed = useRef(AIM === null);
   const flight = useRef<FlightState>(createFlight());
   // Test hook (archiveat=<i>): start in front of seal i, facing it
   useEffect(() => {
@@ -366,12 +379,36 @@ function Pilot({ input, reduced }: PilotProps) {
     const f = flight.current;
     const inp = input.current;
     const dt = Math.min(delta, MAX_DT);
+    // Test hook: once the seal has published its target, park in front of its lit facet
+    if (!aimed.current) {
+      const tg = registry.targets[Number(AIM)];
+      if (tg) {
+        aimed.current = true;
+        const c = Math.cos(tg.rotY), sn = Math.sin(tg.rotY);
+        // Facet direction in world space (body turns about Y)
+        const wx = tg.facet[0] * c + tg.facet[2] * sn, wy = tg.facet[1], wz = -tg.facet[0] * sn + tg.facet[2] * c;
+        const l = Math.hypot(wx, wy, wz) || 1;
+        f.px = tg.center[0] + (wx / l) * VIEW_DISTANCE;
+        f.py = tg.center[1] + (wy / l) * VIEW_DISTANCE;
+        f.pz = tg.center[2] + (wz / l) * VIEW_DISTANCE;
+        f.vx = f.vy = f.vz = 0;
+        f.yaw = Math.atan2(-(tg.center[0] - f.px), -(tg.center[2] - f.pz));
+        f.pitch = Math.atan2(tg.center[1] - f.py, Math.hypot(tg.center[0] - f.px, tg.center[2] - f.pz));
+      }
+    }
     readFlightInput(inp, fi.current);
     stepFlight(f, fi.current, dt, tuning);
 
     const cam = state.camera as THREE.PerspectiveCamera;
     const b = bob(f, reduced);
     cam.position.set(f.px + b.x, f.py + b.y, f.pz);
+    // A short shake on a facet hit (never under reduced motion)
+    const sh = decayShake(game.current, dt);
+    if (sh > 0 && !reduced) {
+      const a = sh * 0.35;
+      cam.position.x += (Math.random() - 0.5) * a;
+      cam.position.y += (Math.random() - 0.5) * a;
+    }
 
     // Free look: the view leans a few degrees toward a resting pointer
     const lk = 1 - Math.exp(-4 * dt);
@@ -456,6 +493,7 @@ function writeHud(g: ArchiveState, h: HudEls, camera: THREE.Camera) {
   h.charge.forEach((el, i) => {
     if (el) el.style.opacity = i < g.charge ? "1" : "0.22";
   });
+  if (h.ready) h.ready.style.opacity = g.charge >= CHARGE_FULL ? "1" : "0";
 }
 
 function HudDriver({ game, hud }: { game: React.RefObject<ArchiveState>; hud: React.RefObject<HudEls> }) {
@@ -474,7 +512,7 @@ export interface ArchiveSceneProps {
 export default function ArchiveScene({ input, reduced, lowPower, game, hud }: ArchiveSceneProps) {
   const { size } = useThree();
   const backdrop = useFBO(Math.max(256, Math.round(size.width * 0.6)), Math.max(256, Math.round(size.height * 0.6)));
-  const registry = useMemo<SealRegistry>(() => ({ backdropHidden: new Set(), bodies: [] }), []);
+  const registry = useMemo<SealRegistry>(() => ({ backdropHidden: new Set(), bodies: [], targets: [] }), []);
   return (
     <>
       <color attach="background" args={[VOID.fog]} />
@@ -505,7 +543,8 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
         );
       })}
       <HudDriver game={game} hud={hud} />
-      <Pilot input={input} reduced={reduced} />
+      <Play input={input} game={game} hud={hud} registry={registry} reduced={reduced} />
+      <Pilot input={input} reduced={reduced} game={game} registry={registry} />
     </>
   );
 }

@@ -4,6 +4,9 @@
  * rules live in game.ts.
  */
 import { SEAL, SEALS } from "./layout";
+import { CHARGE_FULL, HITS_TO_FREE, type V3 } from "./game";
+
+export { CHARGE_FULL, HITS_TO_FREE };
 
 export interface SealState {
   /** Facet hits so far (HITS_TO_FREE frees the project). */
@@ -11,21 +14,23 @@ export interface SealState {
   freed: boolean;
   /** Which facet is lit (the target); moves after every hit. */
   litFacet: number;
+  /** Impact directions in body space, one per facet hit (crack origins). */
+  cracks: V3[];
 }
-
-export const HITS_TO_FREE = 3;
-export const CHARGE_FULL = 3;
 
 export interface ArchiveState {
   seals: SealState[];
   /** Motes collected toward the next pulse, 0..CHARGE_FULL. */
   charge: number;
+  /** Seconds of camera shake left (facet hits; never under reduced motion). */
+  shake: number;
 }
 
 export function createArchiveState(): ArchiveState {
   return {
-    seals: SEALS.map((_, i) => ({ hits: 0, freed: false, litFacet: SEAL.litFacet[i % SEAL.litFacet.length] })),
+    seals: SEALS.map((_, i) => ({ hits: 0, freed: false, litFacet: SEAL.litFacet[i % SEAL.litFacet.length], cracks: [] })),
     charge: 0,
+    shake: 0,
   };
 }
 
@@ -40,8 +45,12 @@ export interface HudEls {
   compass: SVGGElement | null;
   /** Reticle charge segments, one per mote of charge. */
   charge: (SVGPathElement | null)[];
+  /** Outer ring that lights when the pulse is ready. */
+  ready: SVGCircleElement | null;
+  /** Reticle group (nudged when you fire without charge). */
+  reticle: SVGSVGElement | null;
 }
 
 export function createHudEls(): HudEls {
-  return { compass: null, charge: [null, null, null] };
+  return { compass: null, charge: [null, null, null], ready: null, reticle: null };
 }

@@ -7,6 +7,46 @@ import * as THREE from "three";
 import { applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import { SEAL, type SealSpot } from "./layout";
 import { sealProgress, type ArchiveState } from "./archiveState";
+import type { SealTarget, V3 } from "./game";
+
+/** Test hook (archivefreeze=1): seals hold still, for repeatable hit shots. */
+const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("archivefreeze") === "1";
+
+/** Body half-axes for hit tests: a little inside the nudged dodecahedron. */
+export const SEAL_RADII: V3 = [SEAL.radius * 0.92, SEAL.radius * 0.92 * 1.22, SEAL.radius * 0.92];
+
+/**
+ * Crack lines from each facet hit: a few branching walks over the surface
+ * from the impact, in body space (so they turn with the seal).
+ */
+function crackGeometry(dirs: V3[], seed: number): THREE.BufferGeometry {
+  const rnd = lcg(seed);
+  const pts: number[] = [];
+  const onSurface = (d: THREE.Vector3) =>
+    new THREE.Vector3(d.x * SEAL_RADII[0], d.y * SEAL_RADII[1], d.z * SEAL_RADII[2]).multiplyScalar(1.06);
+  for (const dir of dirs) {
+    const o = new THREE.Vector3(...dir).normalize();
+    const branches = 6 + Math.floor(rnd() * 3);
+    for (let b = 0; b < branches; b++) {
+      const d = o.clone();
+      // A tangent heading for this branch
+      let head = new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).cross(d).normalize();
+      const steps = 6 + Math.floor(rnd() * 6);
+      let prev = onSurface(d);
+      for (let k = 0; k < steps; k++) {
+        head.applyAxisAngle(d, (rnd() - 0.5) * 0.9).normalize();
+        d.addScaledVector(head, 0.07 + rnd() * 0.06).normalize();
+        head = head.sub(d.clone().multiplyScalar(head.dot(d))).normalize();
+        const cur = onSurface(d);
+        pts.push(prev.x, prev.y, prev.z, cur.x, cur.y, cur.z);
+        prev = cur;
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  return g;
+}
 
 /**
  * A seal: one project frozen inside a faceted block of ice, orbited by
@@ -128,7 +168,10 @@ const FACET_FRAG = /* glsl */ `
     // Brightest at the facet centre, a lit rim where it meets the cut
     float r = clamp(distance(vLocal, uCenter) / uSize, 0.0, 1.0);
     float breathe = 0.75 + 0.25 * sin(uTime * 2.2);
-    float a = (1.0 - smoothstep(0.0, 1.0, r)) * 0.85 + 0.15;
+    // A warm wash, brightest at the centre, with a lit lip where the facet
+    // meets its neighbours, so its outline reads as the target
+    float a = (1.0 - smoothstep(0.0, 1.0, r)) * 0.45 + 0.12;
+    a += smoothstep(0.72, 1.0, r) * 0.55;
     gl_FragColor = vec4(uColor * a * breathe, 1.0);
   }
 `;
@@ -201,8 +244,10 @@ function nameRingTexture(text: string): THREE.CanvasTexture {
 export interface SealRegistry {
   /** Hidden for the seals' backdrop pass (the glass and what sits on it). */
   backdropHidden: Set<THREE.Object3D>;
-  /** Seal bodies (rotating groups), by seal index, for hit tests. */
+  /** Seal bodies (rotating groups), by seal index. */
   bodies: (THREE.Object3D | null)[];
+  /** What a pulse can hit at each seal, refreshed every frame. */
+  targets: SealTarget[];
 }
 
 interface SealProps {
@@ -228,6 +273,9 @@ function unregisterSeal(r: SealRegistry, index: number, hide: THREE.Object3D[]) 
   hide.forEach((o) => r.backdropHidden.delete(o));
   r.bodies[index] = null;
 }
+function writeTarget(r: SealRegistry, index: number, t: SealTarget) {
+  r.targets[index] = t;
+}
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -250,6 +298,17 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
   const ring = useRef<THREE.Mesh>(null);
   const light = useRef<THREE.PointLight>(null);
   const glow = useRef<THREE.Sprite>(null);
+  const cracks = useRef<THREE.LineSegments>(null);
+  const crackCount = useRef(0);
+  /** Reused every frame for the hit target (no per-frame allocation). */
+  const target = useRef<SealTarget>({
+    center: [0, 0, 0],
+    rotY: 0,
+    radii: SEAL_RADII,
+    facet: [0, 0, 1],
+    shards: Array.from({ length: SEAL.orbiters }, () => ({ p: [0, 0, 0] as V3, r: 0.5 })),
+    freed: false,
+  });
   const coverTex = useMemo(() => coverTexture(cover), [cover]);
   const ringTex = useMemo(() => nameRingTexture(`${label}   ·   `), [label]);
   const glowTex = useMemo(() => innerGlowTexture(), []);
@@ -262,7 +321,7 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
   const facetUniforms = useMemo(
     () => ({
       uTime: { value: 0 },
-      uColor: { value: new THREE.Color("#fff3c4") },
+      uColor: { value: new THREE.Color("#ffd98a") },
       uCenter: { value: new THREE.Vector3() },
       uSize: { value: SEAL.radius * 0.7 },
     }),
@@ -272,19 +331,19 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
   // Glass, its edges, the lit facet and the name ring stay out of the
   // backdrop the glass refracts; the cover, glow and orbiters are in it
   useEffect(() => {
-    const hide = [glass.current, edges.current, facetMesh.current, ring.current].filter(Boolean) as THREE.Object3D[];
+    const hide = [glass.current, edges.current, facetMesh.current, ring.current, cracks.current].filter(Boolean) as THREE.Object3D[];
     registerSeal(registry, index, body.current, hide);
     return () => unregisterSeal(registry, index, hide);
   }, [registry, index]);
 
   useFrame((frame, delta) => {
     const t = frame.clock.elapsedTime;
-    const k = reduced ? 0.35 : 1;
+    const k = FREEZE ? 0 : reduced ? 0.35 : 1;
     const s = state.seals[index];
     const progress = sealProgress(s);
     if (body.current) {
       body.current.rotation.y += delta * 0.08 * k * (index % 2 ? -1 : 1);
-      body.current.position.y = reduced ? 0 : Math.sin(t * 0.4 + index) * 0.25;
+      body.current.position.y = reduced || FREEZE ? 0 : Math.sin(t * 0.4 + index) * 0.25;
     }
     // The lit facet follows the state
     const f = facets[s.litFacet % facets.length];
@@ -323,6 +382,33 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
       });
       sw.instanceMatrix.needsUpdate = true;
     }
+    // Cracks: rebuilt when a facet hit adds one
+    if (cracks.current && s.cracks.length !== crackCount.current) {
+      crackCount.current = s.cracks.length;
+      cracks.current.geometry.dispose();
+      cracks.current.geometry = crackGeometry(s.cracks, 31 + index * 7);
+    }
+    // Hit target for the pulse, in world space
+    const tg = target.current;
+    const by = body.current?.position.y ?? 0;
+    tg.center[0] = spot.pos[0];
+    tg.center[1] = spot.pos[1] + by;
+    tg.center[2] = spot.pos[2];
+    tg.rotY = body.current?.rotation.y ?? 0;
+    tg.facet[0] = f.center.x;
+    tg.facet[1] = f.center.y;
+    tg.facet[2] = f.center.z;
+    tg.freed = s.freed;
+    orbiters.forEach((o, i) => {
+      const a = o.phase + t * o.speed * k;
+      _p.set(Math.cos(a) * o.radius, Math.sin(t * 0.5 + o.bob) * 0.3 * k, Math.sin(a) * o.radius).applyQuaternion(o.tilt);
+      const sh = tg.shards[i];
+      sh.p[0] = spot.pos[0] + _p.x;
+      sh.p[1] = spot.pos[1] + _p.y;
+      sh.p[2] = spot.pos[2] + _p.z;
+      sh.r = o.scale * 1.15;
+    });
+    writeTarget(registry, index, tg);
   });
 
   return (
@@ -367,6 +453,11 @@ export default function Seal({ spot, index, cover, label, reduced, buffer, regis
             toneMapped={false}
           />
         </mesh>
+        {/* Cracks from facet hits */}
+        <lineSegments ref={cracks} renderOrder={3}>
+          <bufferGeometry />
+          <lineBasicMaterial color="#fff6dc" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        </lineSegments>
       </group>
       {/* The project's name, circling the seal's waist */}
       <mesh ref={ring} rotation-x={0.08}>

@@ -18,11 +18,19 @@ export interface InputState {
   py: number;
   /** Set on the first real move; the hint fades after it. */
   moved: boolean;
+  /** A release was asked for (Space / F, or a short tap); the scene clears it. */
+  fire: boolean;
 }
 
 export function createInput(): InputState {
-  return { keys: new Set(), held: false, px: 0, py: 0, moved: false };
+  return { keys: new Set(), held: false, px: 0, py: 0, moved: false, fire: false };
 }
+
+/** Keys that release the pulse. */
+export const FIRE_KEYS = new Set(["Space", "KeyF"]);
+/** A press shorter than this, that barely moved, is a tap: it releases. */
+export const TAP_MS = 220;
+export const TAP_PX = 10;
 
 export const FLIGHT_KEYS = new Set([
   "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE",

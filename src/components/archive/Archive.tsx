@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Canvas, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import ArchiveScene from "./ArchiveScene";
-import { FLIGHT_KEYS, createInput, setPointer, type InputState } from "./input";
+import { FIRE_KEYS, FLIGHT_KEYS, TAP_MS, TAP_PX, createInput, setPointer, type InputState } from "./input";
 import { createArchiveState, createHudEls, type ArchiveState, type HudEls } from "./archiveState";
 
 /** SVG arc path on a circle of radius r from angle a0 to a1 (degrees, 0 = right, clockwise). */
@@ -147,6 +147,11 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         return;
       }
       if (e.target instanceof HTMLButtonElement) return;
+      if (FIRE_KEYS.has(e.code)) {
+        e.preventDefault();
+        if (!e.repeat) input.fire = true;
+        return;
+      }
       if (FLIGHT_KEYS.has(e.code)) {
         e.preventDefault();
         input.keys.add(e.code);
@@ -187,8 +192,11 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
     return () => window.clearInterval(id);
   }, [hint, open]);
 
+  /** Where and when the current press began, to tell a tap from a hold. */
+  const press = useRef({ t: 0, x: 0, y: 0 });
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    press.current = { t: performance.now(), x: e.clientX, y: e.clientY };
     e.currentTarget.setPointerCapture(e.pointerId);
     const input = inputRef.current;
     setPointer(input, e.currentTarget, e.clientX, e.clientY);
@@ -198,8 +206,14 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     setPointer(inputRef.current, e.currentTarget, e.clientX, e.clientY);
   };
-  const onPointerUp = () => {
-    inputRef.current.held = false;
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const input = inputRef.current;
+    if (input.held && e.type === "pointerup") {
+      const pr = press.current;
+      // A quick tap that barely moved releases the pulse; a hold drifts
+      if (performance.now() - pr.t < TAP_MS && Math.hypot(e.clientX - pr.x, e.clientY - pr.y) < TAP_PX) input.fire = true;
+    }
+    input.held = false;
   };
 
   return createPortal(
@@ -215,7 +229,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         tabIndex={0}
         role="application"
         aria-roledescription="game"
-        aria-label="The Archive. Free float through a violet void. Hold the pointer to drift toward it, or use W A S D to move, arrow keys to look, Q and E for down and up. Escape returns to the awake page."
+        aria-label="The Archive. Free float through a violet void. Hold the pointer to drift toward it, or use W A S D to move, arrow keys to look, Q and E for down and up. Fly through light motes to charge; with three, tap or press Space or F to release a pulse at a seal's lit facet. Escape returns to the awake page."
         className="archive-stage absolute inset-0 outline-none"
         style={{ touchAction: "none" }}
         onPointerDown={onPointerDown}
@@ -254,8 +268,21 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
             <path d="M 92 0 L 86.5 -3.4 L 86.5 3.4 Z" fill="#f4efff" />
           </g>
         </svg>
-        <svg viewBox="-20 -20 40 40" className="absolute size-14 overflow-visible">
+        <svg
+          ref={(el) => { hudRef.current.reticle = el; }}
+          viewBox="-20 -20 40 40"
+          className="absolute size-14 overflow-visible"
+        >
           <circle r="1.4" fill="#f4efff" opacity="0.9" />
+          {/* Lights when the pulse is ready */}
+          <circle
+            ref={(el) => { hudRef.current.ready = el; }}
+            r="16"
+            fill="none"
+            stroke="#ffe2a0"
+            strokeWidth="0.8"
+            style={{ opacity: 0, transition: "opacity 250ms ease-out", filter: "drop-shadow(0 0 3px #ffd98a)" }}
+          />
           {[0, 1, 2].map((i) => (
             <path
               key={i}
@@ -309,6 +336,8 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
               <dd>Look</dd>
               <dt className="text-white">Q E</dt>
               <dd>Sink / rise</dd>
+              <dt className="text-white">Tap / Space</dt>
+              <dd>Release the pulse (3 motes)</dd>
               <dt className="text-white">Esc</dt>
               <dd>Wake</dd>
             </dl>
