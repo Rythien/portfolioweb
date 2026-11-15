@@ -75,6 +75,11 @@ let _flashStart = -1;
 let _reassembleStart = -1;
 let _hoverBreakVal = 0;
 let _introBreak = 0;
+/** Test hook: pin the crystal's rotation to this time (s). */
+let _timeOverride: number | null = null;
+export function setCrystalTimeOverride(t: number | null) {
+  _timeOverride = t;
+}
 
 /** Preloader drives this 1 → 0 so the shards gather into the intact crystal. */
 export function setIntroBreak(v: number) {
@@ -195,8 +200,9 @@ export function tickCrystalPose(elapsed: number, delta: number, halfW: number, p
   pose.scale = _d.scale + scaleBoost;
   pose.breakVal = _d.breakVal;
   pose.fade = _d.fade;
-  pose.rotY = elapsed * 0.15 * rf;
-  pose.rotX = Math.sin(elapsed * 0.1) * 0.2 * rf;
+  const rotT = _timeOverride ?? elapsed;
+  pose.rotY = rotT * 0.15 * rf;
+  pose.rotX = Math.sin(rotT * 0.1) * 0.2 * rf;
 
   useFractureStore.setState({ breakVal: _d.breakVal });
 
