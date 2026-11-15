@@ -10,6 +10,8 @@ import { Environment, Lightformer } from "@react-three/drei";
  * - key:    one large, bright, soft panel upper-left
  * - strip:  one narrow hard strip to the right, the crisp specular edge
  * - bounce: one low warm panel below, the glow underneath
+ * - cool:   a faint pale-blue card just under the crystal, so the lower
+ *           half of the ice (which refracts the warm page) still reads cool
  * - fill:   mid-grey surrounds, never black (black panels mirrored into
  *           every facet and muddied the reflections)
  */
@@ -19,6 +21,8 @@ const RIG = {
     key: "#ffffff",
     strip: "#ffffff",
     bounce: "#ffb27a",
+    cool: "#d6e6ff",
+    coolIntensity: 1.6,
     fill: "#a9adb5",
   },
   dream: {
@@ -26,6 +30,8 @@ const RIG = {
     key: "#efeaff",
     strip: "#ffffff",
     bounce: "#ffb08a",
+    cool: "#cfd4ff",
+    coolIntensity: 0.15,
     fill: "#8a82b8",
   },
 } as const;
@@ -41,6 +47,8 @@ export default function StudioEnvironment({ variant }: { variant: "wake" | "drea
       <Lightformer form="rect" intensity={9} position={[6, 0.6, 1.2]} scale={[0.35, 7, 1]} color={c.strip} />
       {/* Warm bounce, low and below */}
       <Lightformer form="rect" intensity={1.6} position={[0, -5, 1.5]} scale={[7, 2.5, 1]} color={c.bounce} />
+      {/* Faint cool card under the crystal, closer and in front of the warm one */}
+      <Lightformer form="rect" intensity={c.coolIntensity} position={[0, -4, 0.4]} scale={[6, 5, 1]} color={c.cool} />
       {/* Soft grey fills behind and to the left so nothing reflects black */}
       <Lightformer form="rect" intensity={0.6} position={[0, 1, -6]} scale={[10, 6, 1]} color={c.fill} />
       <Lightformer form="rect" intensity={0.45} position={[-6, -1, -1]} scale={[3, 6, 1]} color={c.fill} />

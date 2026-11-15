@@ -260,6 +260,9 @@ const SHARD_LOGO_MAX_TURN = THREE.MathUtils.degToRad(35);
 /** Vertices sampled per shard to measure its projected silhouette. */
 const SHARD_SAMPLE = 192;
 const INCLUSION_COUNT = CRYSTAL_MATERIAL.slivers;
+/** Ground glow sprite under the crystal: base opacity and its slow pulse. */
+const GLOW_OPACITY = 0.2;
+const GLOW_PULSE = 0.053;
 
 /* ── Component ───────────────────────────────────────────────── */
 
@@ -515,7 +518,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         glowRef.current.visible = !mergedHidden || assembled;
         const sMat = glowRef.current.material as THREE.SpriteMaterial;
         const glowT = DEBUG?.freeze ?? elapsed;
-        if (sMat) sMat.opacity = (0.3 + Math.sin(glowT * 0.8) * 0.08) * (assembled ? 1 : 1 - crossfade) * fade;
+        // A third down from 0.3 +- 0.08 since it turned cool
+        if (sMat) sMat.opacity = (GLOW_OPACITY + Math.sin(glowT * 0.8) * GLOW_PULSE) * (assembled ? 1 : 1 - crossfade) * fade;
       }
 
       // ── Hero logo: cycles through every icon, always facing the camera
@@ -800,7 +804,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       <group ref={ref}>
         {/* Radial glow sprite underneath */}
         <sprite ref={glowRef} position={[0, -1.1, 0]} scale={[4, 2, 1]}>
-          <spriteMaterial map={glowTex} transparent opacity={0.3} depthWrite={false} />
+          <spriteMaterial map={glowTex} transparent opacity={GLOW_OPACITY} depthWrite={false} />
         </sprite>
 
         {/* Inclusion slivers inside crystal volume */}

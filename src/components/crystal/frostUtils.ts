@@ -40,11 +40,13 @@ export function createGlowTexture(size = 128): THREE.CanvasTexture {
   c.height = size;
   const ctx = c.getContext("2d")!;
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  // Warm, soft ground glow under the crystal
-  g.addColorStop(0, "rgba(255,214,168,0.38)");
-  g.addColorStop(0.25, "rgba(255,196,150,0.19)");
-  g.addColorStop(0.6, "rgba(250,180,140,0.05)");
-  g.addColorStop(1, "rgba(240,170,130,0)");
+  // Pale blue-white ground glow under the crystal. It was warm white, and
+  // the lower half of the ice (which refracts it) went grey against the
+  // cool upper half
+  g.addColorStop(0, "rgba(226,238,255,0.38)");
+  g.addColorStop(0.25, "rgba(214,230,252,0.19)");
+  g.addColorStop(0.6, "rgba(204,222,248,0.05)");
+  g.addColorStop(1, "rgba(196,216,246,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
   return new THREE.CanvasTexture(c);
