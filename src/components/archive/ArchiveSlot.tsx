@@ -6,46 +6,103 @@ import { useThemeStore } from "@/store/useThemeStore";
 import { useArchiveStore } from "@/store/useArchiveStore";
 import { crystalEvents } from "@/hooks/crystalState";
 
-// The Archive (and three.js for it) is fetched only once the page reaches
-// DREAM, so WAKE visits, and Lighthouse, pay nothing for it
+// The Archive (and three.js for it) is fetched on the visitor's first
+// interaction with the WAKE page, never during the initial load, so
+// Lighthouse (which never interacts) pays nothing for it
 const Archive = dynamic(() => import("./Archive"), { ssr: false });
 
-/** How long the Archive takes to fade off while the flood retracts. */
-const LEAVE_MS = 450;
-
-type Phase = "off" | "in" | "leaving";
+/** The Archive's clip leads the ink edge by a hair, so no page shows at the rim. */
+const CLIP_LEAD = 1.02;
 
 /**
- * DREAM is THE ARCHIVE. Once the flood has fully reached DREAM the Archive
- * takes the whole viewport and the awake page is suspended underneath
- * (scroll locked, inert, its R3F scene paused through useArchiveStore).
- * WAKE fades the Archive off, restores the page at the scroll position it
- * left, and runs the flood back.
+ * DREAM is THE ARCHIVE.
+ *
+ * Warm: on the first interaction (idle callback) the Archive mounts
+ * hidden, compiles its shaders and allocates its buffers, then sleeps.
+ * Enter: as the flood heads for DREAM the Archive starts rendering and is
+ * revealed through a circle that tracks the flood itself, so the flood
+ * IS the Archive arriving and the page underneath is never seen dimmed.
+ * Once the flood settles the page is suspended (useArchiveStore.open:
+ * scroll locked, inert, its R3F scene paused).
+ * WAKE: the page resumes at its scroll position, the flood runs back from
+ * the WAKE control and the Archive's circle shrinks into it.
  */
 export default function ArchiveSlot() {
-  const mode = useThemeStore((s) => s.mode);
   const open = useArchiveStore((s) => s.open);
-  const [phase, setPhase] = useState<Phase>("off");
-  const leaveTimer = useRef<number>(0);
+  const [warm, setWarm] = useState(false);
+  /** Archive rendering (any part of it on screen). */
+  const [active, setActive] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Enter: DREAM reached and the flood has settled
+  // Warm on first interaction, or at once if the page loads in DREAM
   useEffect(() => {
-    if (mode !== "dream" || phase !== "off") return;
+    const params = new URLSearchParams(window.location.search);
     // Test hook (Playwright finish shots of the DREAM page): never in the UI
-    if (new URLSearchParams(window.location.search).get("noarchive") === "1") return;
-    let raf = 0;
-    const tick = () => {
-      if (!crystalEvents.floodActive && useThemeStore.getState().mode === "dream") {
-        useArchiveStore.getState().setSavedScroll(window.scrollY);
-        useArchiveStore.getState().setOpen(true);
-        setPhase("in");
-        return;
-      }
-      raf = requestAnimationFrame(tick);
+    if (params.get("noarchive") === "1") return;
+    if (useThemeStore.getState().mode === "dream") {
+      queueMicrotask(() => setWarm(true));
+      return;
+    }
+    const events = ["pointermove", "pointerdown", "wheel", "keydown", "touchstart", "scroll"] as const;
+    let idle = 0;
+    const go = () => {
+      events.forEach((e) => window.removeEventListener(e, go));
+      const ric = window.requestIdleCallback;
+      idle = ric ? ric(() => setWarm(true), { timeout: 1500 }) : window.setTimeout(() => setWarm(true), 200);
     };
-    tick();
+    events.forEach((e) => window.addEventListener(e, go, { passive: true }));
+    // Nobody interacts before a mode switch, but a switch must still work
+    const unsub = useThemeStore.subscribe((s) => {
+      if (s.transitioning || s.mode === "dream") setWarm(true);
+    });
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, go));
+      window.cancelIdleCallback?.(idle);
+      window.clearTimeout(idle);
+      unsub();
+    };
+  }, []);
+
+  // Every frame: follow the flood. The clip is written straight to the
+  // root's style (no React render); state changes only on transitions.
+  useEffect(() => {
+    if (!warm) return;
+    let raf = 0;
+    let wasActive = false;
+    let wasOpen = useArchiveStore.getState().open;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const mode = useThemeStore.getState().mode;
+      const flooding = crystalEvents.floodActive;
+      const level = flooding ? crystalEvents.dreamLevel : mode === "dream" ? 1 : 0;
+      const isActive = level > 0.0005;
+      const isOpen = !flooding && mode === "dream";
+
+      const el = rootRef.current;
+      if (el) {
+        if (flooding && isActive) {
+          const r = level * crystalEvents.floodMaxRadiusPx * CLIP_LEAD;
+          el.style.clipPath = `circle(${r.toFixed(1)}px at ${crystalEvents.floodCenterX.toFixed(1)}px ${crystalEvents.floodCenterY.toFixed(1)}px)`;
+        } else {
+          el.style.clipPath = "";
+        }
+      }
+      if (isActive !== wasActive) {
+        wasActive = isActive;
+        setActive(isActive);
+      }
+      if (isOpen !== wasOpen) {
+        wasOpen = isOpen;
+        if (isOpen) {
+          useArchiveStore.getState().setSavedScroll(window.scrollY);
+          (window as unknown as { __archiveOpenedAt?: number }).__archiveOpenedAt = performance.now();
+        }
+        useArchiveStore.getState().setOpen(isOpen);
+      }
+    };
+    raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [mode, phase]);
+  }, [warm]);
 
   // Page suspension follows the store flag, whatever path clears it
   useEffect(() => {
@@ -71,22 +128,16 @@ export default function ArchiveSlot() {
     };
   }, [open]);
 
-  useEffect(() => () => window.clearTimeout(leaveTimer.current), []);
-
   const wake = useCallback((origin: { x: number; y: number }) => {
-    setPhase("leaving");
-    // Page and scene resume first so the flood can run under the fade
+    // Page and scene resume first so the flood can run back over them
     useArchiveStore.getState().setOpen(false);
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       useThemeStore.getState().setMode("wake");
-      setPhase("off");
       return;
     }
     useThemeStore.getState().startTransition(origin);
-    leaveTimer.current = window.setTimeout(() => setPhase("off"), LEAVE_MS);
   }, []);
 
-  if (phase === "off") return null;
-  return <Archive leaving={phase === "leaving"} onWake={wake} />;
+  if (!warm) return null;
+  return <Archive rootRef={rootRef} active={active} open={open} onWake={wake} />;
 }

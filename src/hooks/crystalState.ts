@@ -99,6 +99,11 @@ export const crystalEvents = {
   /** True while the flood is animating; floodTarget is where it is heading. */
   floodActive: false,
   floodTarget: "wake" as "wake" | "dream",
+  /** Flood circle in CSS px (centre and radius at level 1), written by the
+   * Compositor when a flood starts; the Archive clips its reveal to it. */
+  floodCenterX: 0,
+  floodCenterY: 0,
+  floodMaxRadiusPx: 0,
 };
 
 if (typeof window !== "undefined") {

@@ -37,10 +37,45 @@ await page.waitForTimeout(7000);
 await page.mouse.wheel(0, 700);
 await page.waitForTimeout(1500);
 const scrollBefore = await page.evaluate(() => window.scrollY);
+const warmMs = await page.evaluate(() => window.__archiveWarmMs);
+check(typeof warmMs === "number", `Archive warmed during WAKE idle (compile + first frame ${warmMs?.toFixed(0)} ms)`);
 
+// Handover timing, measured in the page from the click itself
+await page.evaluate(() => {
+  const m = (window.__handover = { t0: 0, firstArchiveFrame: null, floodDone: null, fullVisible: null, maxGap: 0, done: false });
+  window.addEventListener("click", () => {
+    m.t0 = performance.now();
+    const frames0 = window.__archiveFrames ?? 0;
+    let last = m.t0;
+    const f = () => {
+      const now = performance.now();
+      if (now - last > m.maxGap) { m.maxGap = now - last; m.maxGapAt = last - m.t0; }
+      if (now - last > 50) (m.gaps ??= []).push([Math.round(last - m.t0), Math.round(now - last)]);
+      last = now;
+      if (m.firstArchiveFrame === null && (window.__archiveFrames ?? 0) > frames0) m.firstArchiveFrame = now - m.t0;
+      const root = document.querySelector(".archive-root");
+      const full = root && getComputedStyle(root).visibility === "visible" && !root.style.clipPath;
+      if (m.floodDone === null && window.__archiveOpenedAt > m.t0) m.floodDone = window.__archiveOpenedAt - m.t0;
+      if (m.fullVisible === null && full && m.floodDone !== null) m.fullVisible = now - m.t0;
+      if (m.fullVisible !== null || now - m.t0 > 10000) { m.done = true; return; }
+      requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+  }, { capture: true, once: true });
+});
 await page.getByRole("button", { name: "Switch to dream mode" }).click();
-await page.waitForSelector(".archive-root", { timeout: 15000 });
-await page.waitForTimeout(3000);
+// NOSHOT=1: skip the mid-flood screenshot (it stalls the page and would
+// show up as a long frame in the timing)
+if (!process.env.NOSHOT) {
+  await page.waitForTimeout(RM ? 0 : 300);
+  await page.screenshot({ path: resolve(shots, `archive-handover-mid${tag}.png`) });
+}
+await page.waitForFunction(() => window.__handover.done, null, { timeout: 15000 });
+const h = await page.evaluate(() => window.__handover);
+console.log(`INFO  handover: first Archive frame ${h.firstArchiveFrame?.toFixed(0)} ms after click, flood done ${h.floodDone?.toFixed(0)} ms, Archive full screen ${h.fullVisible?.toFixed(0)} ms, longest frame ${h.maxGap.toFixed(0)} ms starting ${h.maxGapAt?.toFixed(0)} ms; frames > 50 ms [start, length]: ${JSON.stringify(h.gaps ?? [])}`);
+check(h.fullVisible !== null && h.fullVisible - h.floodDone <= 400, `Archive full screen within 400 ms of the flood completing (${(h.fullVisible - h.floodDone).toFixed(0)} ms)`);
+check(h.firstArchiveFrame !== null && (RM || h.firstArchiveFrame < h.floodDone), "Archive was already rendering behind the flood");
+await page.waitForTimeout(2500);
 await page.screenshot({ path: resolve(shots, `archive-float-0${tag}.png`) });
 
 const suspended = await page.evaluate(() => ({
@@ -107,13 +142,13 @@ await page.screenshot({ path: resolve(shots, `archive-float-keys${tag}.png`) });
 await page.getByRole("button", { name: /^Wake/ }).click();
 await page.waitForTimeout(2600);
 const back = await page.evaluate(() => ({
-  archive: !!document.querySelector(".archive-root"),
+  archive: getComputedStyle(document.querySelector(".archive-root")).visibility === "visible",
   mode: document.documentElement.dataset.mode,
   y: window.scrollY,
   overflow: document.documentElement.style.overflow,
-  inert: document.querySelectorAll("[inert]").length,
+  inert: [...document.querySelectorAll("[inert]")].filter((e) => !e.classList.contains("archive-root")).length,
 }));
-check(!back.archive, "Archive closed");
+check(!back.archive, "Archive hidden (stays mounted, warm)");
 check(back.mode === "wake", `mode is wake (${back.mode})`);
 check(Math.abs(back.y - scrollBefore) < 4, `scroll restored (${scrollBefore} -> ${back.y})`);
 check(back.overflow === "" && back.inert === 0, "page unlocked, nothing inert");

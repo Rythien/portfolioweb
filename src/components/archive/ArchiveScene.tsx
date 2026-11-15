@@ -356,6 +356,9 @@ function Pilot({ input, reduced }: PilotProps) {
   }, []);
 
   useFrame((state, delta) => {
+    // Test hook: frames rendered (Playwright times the handover with it)
+    const tw = window as unknown as { __archiveFrames?: number };
+    tw.__archiveFrames = (tw.__archiveFrames ?? 0) + 1;
     const f = flight.current;
     const inp = input.current;
     const dt = Math.min(delta, MAX_DT);

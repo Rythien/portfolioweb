@@ -356,8 +356,33 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
   useEffect(() => {
     const warm = () => {
       try {
-        gl.compile(wakeScene, fboCamera);
-        gl.compile(dreamScene, fboCamera);
+        // three compiles only visible objects, and the inactive mode's
+        // crystal, its shards, clouds and logos are all hidden: without
+        // this their programs compiled on the first frame they showed, a
+        // ~0.8 s stall right as the flood crossed into the other mode
+        const hidden: THREE.Object3D[] = [];
+        for (const sc of [wakeScene, dreamScene]) {
+          sc.traverse((o) => {
+            if (!o.visible) {
+              hidden.push(o);
+              o.visible = true;
+            }
+          });
+        }
+        try {
+          // Compile with a render target bound: every scene (and every
+          // crystal backdrop pass) draws into one, and three keys programs
+          // on output colour space / tone mapping, which differ from the
+          // screen. Compiled against the screen, the warm-up built variants
+          // nothing ever used.
+          gl.setRenderTarget(wakeTarget);
+          gl.compile(wakeScene, fboCamera);
+          gl.setRenderTarget(dreamTarget);
+          gl.compile(dreamScene, fboCamera);
+          gl.setRenderTarget(null);
+        } finally {
+          for (const o of hidden) o.visible = false;
+        }
 
         const u = brushMaterial.uniforms;
         u.uFloodActive.value = 1.0;
@@ -389,7 +414,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [gl, wakeScene, dreamScene, brushTargetA, brushTargetB]);
+  }, [gl, wakeScene, dreamScene, brushTargetA, brushTargetB, wakeTarget, dreamTarget]);
 
   // Brush state
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
@@ -529,6 +554,10 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     );
     crystalEvents.floodActive = true;
     crystalEvents.floodTarget = f.target === 1 ? "dream" : "wake";
+    crystalEvents.floodCenterX = f.centerX * window.innerWidth;
+    crystalEvents.floodCenterY = (1 - f.centerY) * window.innerHeight;
+    // maxRadius is in uv units where the viewport height is 1
+    crystalEvents.floodMaxRadiusPx = f.maxRadius * window.innerHeight;
 
     // Acknowledge the signal so the next click can fire
     endTransition();
