@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useFBO } from "@react-three/drei";
 import * as THREE from "three";
@@ -14,6 +14,8 @@ import { SEALS, VIEW_DISTANCE, VOID } from "./layout";
 import Seal, { type SealRegistry } from "./Seal";
 import Play from "./Play";
 import { CHARGE_FULL, type ArchiveState, type HudEls } from "./archiveState";
+import { ENDING } from "./game";
+import Reassembly from "./Reassembly";
 import StudioEnvironment from "@/components/crystal/StudioEnvironment";
 import { projects } from "@/content/projects";
 
@@ -56,6 +58,7 @@ const SKY_VERT = /* glsl */ `
 `;
 const SKY_FRAG = /* glsl */ `
           uniform float uTime;
+          uniform float uLift;
           varying vec3 vDir;
           ${NOISE}
           void main() {
@@ -74,16 +77,28 @@ const SKY_FRAG = /* glsl */ `
             vec3 g = floor(d * 160.0);
             float star = step(0.9975, h3(g)) * smoothstep(0.6, 0.0, length(fract(d * 160.0) - 0.5));
             col += vec3(0.85, 0.80, 1.0) * star * 0.55;
+            // The ending: the void lifts to pale violet
+            col = mix(col, mix(vec3(0.86, 0.81, 0.97), vec3(0.78, 0.71, 0.94), smoothstep(0.6, -0.6, h)), uLift);
             gl_FragColor = vec4(col, 1.0);
           }
 `;
 
-function VoidSky() {
+/** 0 (the violet void) .. 1 (lifted to pale violet) as the ending plays. */
+function liftOf(g: ArchiveState): number {
+  if (!g.ending) return 0;
+  const x = Math.min(1, Math.max(0, (g.t - g.ending.t0 - 1.5) / ENDING.lift));
+  return x * x * (3 - 2 * x);
+}
+
+function VoidSky({ game }: { game: React.RefObject<ArchiveState> }) {
   const ref = useRef<THREE.Mesh>(null);
   const mat = useRef<THREE.ShaderMaterial>(null);
-  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uLift: { value: 0 } }), []);
   useFrame((state) => {
-    if (mat.current) mat.current.uniforms.uTime.value = state.clock.elapsedTime;
+    if (mat.current) {
+      mat.current.uniforms.uTime.value = state.clock.elapsedTime;
+      mat.current.uniforms.uLift.value = liftOf(game.current);
+    }
     ref.current?.position.copy(state.camera.position);
   });
   return (
@@ -260,6 +275,7 @@ const BANK_VERT = /* glsl */ `
 `;
 const BANK_FRAG = /* glsl */ `
   uniform float uTime;
+  uniform float uFade;
   varying vec2 vUv;
   varying float vSeed;
   varying float vFade;
@@ -270,17 +286,19 @@ const BANK_FRAG = /* glsl */ `
     float n = fbm3(vec3(c * 2.6, vSeed * 9.0 + uTime * 0.025));
     float a = smoothstep(1.0, 0.15, r) * smoothstep(0.32, 0.78, n);
     vec3 col = mix(vec3(0.36, 0.20, 0.62), vec3(0.62, 0.42, 0.85), vSeed);
-    gl_FragColor = vec4(col * a * vFade * 0.16, 1.0);
+    gl_FragColor = vec4(col * a * vFade * uFade * 0.16, 1.0);
   }
 `;
 
-function FogBanks({ count }: { count: number }) {
+function FogBanks({ count, game }: { count: number; game: React.RefObject<ArchiveState> }) {
   const mat = useRef<THREE.ShaderMaterial>(null);
   const data = useMemo(() => makeBanks(count), [count]);
-  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uCam: { value: new THREE.Vector3() } }), []);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uFade: { value: 1 } }), []);
   useFrame((state) => {
     const u = mat.current?.uniforms;
     if (!u) return;
+    // Additive glow turns to white glare over the lifted fog: it goes
+    u.uFade.value = 1 - liftOf(game.current);
     u.uTime.value = state.clock.elapsedTime;
     u.uCam.value.copy(state.camera.position);
   });
@@ -309,17 +327,42 @@ function FogBanks({ count }: { count: number }) {
 
 /* ── Seal beacons: far glows behind each seal, the void's compass ── */
 
-function SealBeacons() {
+function SealBeacons({ game }: { game: React.RefObject<ArchiveState> }) {
   const tex = useMemo(() => glowTexture(), []);
+  const mats = useRef<(THREE.SpriteMaterial | null)[]>([]);
+  useFrame(() => {
+    // Gone as the fog lifts (additive white over pale violet is glare)
+    const k = 0.55 * (1 - liftOf(game.current));
+    mats.current.forEach((m) => m && (m.opacity = k));
+  });
   return (
     <>
-      {SEALS.map((s) => (
+      {SEALS.map((s, i) => (
         <sprite key={s.project} position={s.pos} scale={[22, 22, 1]} renderOrder={-4}>
-          <spriteMaterial map={tex} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} opacity={0.55} />
+          <spriteMaterial ref={(m) => { mats.current[i] = m; }} map={tex} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} opacity={0.55} />
         </sprite>
       ))}
     </>
   );
+}
+
+/* ── The fog lifts (ending) ───────────────────────────────────── */
+
+const FOG_BASE = new THREE.Color(VOID.fog);
+const FOG_PALE = new THREE.Color("#d6cbf3");
+
+function FogLift({ game }: { game: React.RefObject<ArchiveState> }) {
+  useFrame((state) => {
+    const lift = liftOf(game.current);
+    const bg = state.scene.background;
+    if (bg instanceof THREE.Color) bg.copy(FOG_BASE).lerp(FOG_PALE, lift);
+    const fog = state.scene.fog as THREE.FogExp2 | null;
+    if (fog) {
+      fog.color.copy(FOG_BASE).lerp(FOG_PALE, lift);
+      fog.density = VOID.fogDensity * (1 - 0.65 * lift);
+    }
+  });
+  return null;
 }
 
 /* ── Pilot: input → flight → camera ───────────────────────────── */
@@ -404,6 +447,15 @@ function Pilot({ input, reduced, game, registry }: PilotProps) {
       }
     }
     readFlightInput(inp, fi.current);
+    // The ending holds you still in front of the crystal
+    if (game.current.ending) {
+      const fz = fi.current;
+      fz.thrust = fz.strafe = fz.lift = fz.yaw = fz.pitch = 0;
+      const damp = Math.exp(-3 * dt);
+      f.vx *= damp;
+      f.vy *= damp;
+      f.vz *= damp;
+    }
     stepFlight(f, fi.current, dt, tuning);
 
     const cam = state.camera as THREE.PerspectiveCamera;
@@ -443,6 +495,10 @@ function Pilot({ input, reduced, game, registry }: PilotProps) {
  * The seals wear the hero's transmission material, which refracts a
  * backdrop of the scene without them; one shared pass serves all three
  * (and their orbiting shards), like the hero's shards. */
+
+function hideFromBackdrop(r: SealRegistry, o: THREE.Object3D | null) {
+  if (o) r.backdropHidden.add(o);
+}
 
 function SealBackdrop({ registry, fbo }: { registry: SealRegistry; fbo: THREE.WebGLRenderTarget }) {
   useFrame((state) => {
@@ -497,6 +553,22 @@ function writeHud(g: ArchiveState, h: HudEls, camera: THREE.Camera) {
       h.compass.dataset.target = String(best);
     }
   }
+  // The ending: the line, then the exit to Contact (once)
+  const end = g.ending;
+  const et = end ? g.t - end.t0 : -1;
+  if (h.reticle) h.reticle.style.opacity = end ? "0" : "1";
+  if (h.vignette) h.vignette.style.opacity = String(1 - liftOf(g));
+  if (h.compass && end) h.compass.style.opacity = "0";
+  if (h.endLine) {
+    const lineOn = et >= ENDING.line;
+    h.endLine.dataset.on = lineOn ? "1" : "0";
+    // Inserted when it appears, so the live region announces it
+    if (lineOn && !h.endLine.textContent) h.endLine.textContent = h.endLine.dataset.text ?? "";
+  }
+  if (end && et >= ENDING.exit && !h.exited) {
+    h.exited = true;
+    window.dispatchEvent(new Event("archive-ending-exit"));
+  }
   h.charge.forEach((el, i) => {
     if (el) el.style.opacity = i < g.charge ? "1" : "0.22";
   });
@@ -520,16 +592,18 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
   const { size } = useThree();
   const backdrop = useFBO(Math.max(256, Math.round(size.width * 0.6)), Math.max(256, Math.round(size.height * 0.6)));
   const registry = useMemo<SealRegistry>(() => ({ backdropHidden: new Set(), bodies: [], targets: [] }), []);
+  const hideCrystal = useCallback((o: THREE.Object3D | null) => hideFromBackdrop(registry, o), [registry]);
   return (
     <>
       <color attach="background" args={[VOID.fog]} />
       <fogExp2 attach="fog" args={[VOID.fog, VOID.fogDensity]} />
       <hemisphereLight args={["#b9a2ff", "#140a30", 0.9]} />
       <directionalLight position={[8, 14, 6]} intensity={0.6} color="#e8dcff" />
-      <VoidSky />
-      <FogBanks count={lowPower ? 10 : 18} />
+      <VoidSky game={game} />
+      <FogLift game={game} />
+      <FogBanks count={lowPower ? 10 : 18} game={game} />
       <Dust count={lowPower ? 900 : 1800} reduced={reduced} />
-      <SealBeacons />
+      <SealBeacons game={game} />
       {/* The same studio the hero crystal is lit by, so the ice matches */}
       <StudioEnvironment variant="dream" />
       <SealBackdrop registry={registry} fbo={backdrop} />
@@ -550,6 +624,9 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
           />
         );
       })}
+      <Suspense fallback={null}>
+        <Reassembly game={game} buffer={backdrop.texture} hide={hideCrystal} glowTex={glowTexture()} reduced={reduced} />
+      </Suspense>
       <HudDriver game={game} hud={hud} />
       <Play input={input} game={game} hud={hud} registry={registry} reduced={reduced} />
       <Pilot input={input} reduced={reduced} game={game} registry={registry} />

@@ -132,6 +132,13 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
     wakeFn.current(r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: innerWidth - 40, y: 40 });
   };
 
+  // The ending's last beat: wake, at Contact, from the centre
+  useEffect(() => {
+    const exit = () => wakeFn.current({ x: innerWidth / 2, y: innerHeight / 2 }, { to: "contact" });
+    window.addEventListener("archive-ending-exit", exit);
+    return () => window.removeEventListener("archive-ending-exit", exit);
+  }, []);
+
   // The stage takes focus once open, so the keyboard flies straight away
   useEffect(() => {
     if (open) stageRef.current?.focus({ preventScroll: true });
@@ -260,6 +267,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         </Canvas>
         {/* Soft vignette: the void closes in at the edges */}
         <div
+          ref={(el) => { hudRef.current.vignette = el; }}
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
           style={{ background: "radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(4,2,20,0.55) 100%)" }}
@@ -314,6 +322,15 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
       >
         Wake
       </button>
+
+      {/* The ending's one line, over the pale fog */}
+      <p
+        ref={(el) => { hudRef.current.endLine = el; }}
+        data-on="0"
+        data-text="The archive is yours."
+        aria-live="polite"
+        className="archive-end pointer-events-none absolute inset-x-0 top-[72%] text-center font-[family-name:var(--font-display)] text-[clamp(2rem,4.2vw,3.75rem)] italic leading-tight text-[#1d0f45] opacity-0 transition-opacity duration-[1600ms] ease-out data-[on=1]:opacity-100"
+      />
 
       {hint && (
         <p

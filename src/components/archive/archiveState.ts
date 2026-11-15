@@ -81,11 +81,17 @@ export interface HudEls {
   readyLabel: HTMLElement | null;
   /** The bottom-left charge group (nudged on a dry fire). */
   motes: HTMLElement | null;
+  /** "The archive is yours." (data-on="1" shows it). */
+  endLine: HTMLElement | null;
+  /** The ending has already asked to wake. */
+  exited: boolean;
+  /** Edge vignette (fades as the fog lifts). */
+  vignette: HTMLElement | null;
 }
 
 export function createHudEls(): HudEls {
   return {
     compass: null, charge: [null, null, null], ready: null, reticle: null,
-    count: null, diamonds: [null, null, null], readyLabel: null, motes: null,
+    count: null, diamonds: [null, null, null], readyLabel: null, motes: null, endLine: null, exited: false, vignette: null,
   };
 }

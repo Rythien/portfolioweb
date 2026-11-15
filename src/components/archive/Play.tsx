@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import {
-  CHARGE_FULL, MOTES, createMotes, nextFacet, releasePulse, resolveFacetHit, stepMotes, stepPulse,
+  CHARGE_FULL, ENDING, MOTES, createMotes, endingDue, nextFacet, releasePulse, resolveFacetHit, stepMotes, stepPulse,
   type Hit, type Mote, type Pulse, type V3,
 } from "./game";
 import { sealSlug, type ArchiveState, type HudEls } from "./archiveState";
@@ -76,6 +76,19 @@ function applyHit(g: ArchiveState, hit: Hit, reduced: boolean): "crack" | "freed
 
 function tickClock(g: ArchiveState, t: number) {
   g.t = t;
+}
+
+const _ef = new THREE.Vector3();
+/** All three freed: once the last panel is floated into (or the wait runs out), the crystal reassembles in front of you. */
+function maybeStartEnding(g: ArchiveState, cam: THREE.Camera) {
+  if (g.ending || g.completedBefore || !g.seals.every((s) => s.freed)) return;
+  const last = g.seals.reduce((a, s) => (s.freedAt > a.freedAt ? s : a));
+  if (!endingDue(true, last.freedAt, last.touched, g.t)) return;
+  cam.getWorldDirection(_ef);
+  g.ending = {
+    t0: g.t,
+    point: [cam.position.x + _ef.x * ENDING.distance, cam.position.y + _ef.y * ENDING.distance, cam.position.z + _ef.z * ENDING.distance],
+  };
 }
 
 function nudgeReticle(h: HudEls) {
@@ -178,12 +191,14 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
     const cam = state.camera;
     const player: V3 = [cam.position.x, cam.position.y, cam.position.z];
 
+    maybeStartEnding(g, cam);
+
     // Motes: drift, pull, collect
     const got = stepMotes(ms, t, dt, player, g.charge, reduced);
     if (got) addCharge(g, got);
 
     // Release
-    if (consumeFire(inp)) {
+    if (consumeFire(inp) && !g.ending) {
       if (g.charge >= CHARGE_FULL && !pulse.current) {
         cam.getWorldDirection(_f);
         _u.set(0, 1, 0).applyQuaternion(cam.quaternion);
