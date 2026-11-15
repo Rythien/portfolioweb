@@ -148,7 +148,7 @@ export default function Descent({ onExit }: DescentProps) {
 
   return (
     <div
-      className="descent-overlay fixed inset-0 z-[300] flex items-center justify-center bg-[#030214]"
+      className="descent-overlay fixed inset-0 z-[300] flex items-center justify-center bg-[#030214] bg-[radial-gradient(ellipse_at_center,#120c3d_0%,#06041c_45%,#030214_80%)]"
       role="dialog"
       aria-modal="true"
       aria-label="DESCENT"

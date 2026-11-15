@@ -37,6 +37,105 @@ export interface View {
   banner: { name: string; t: number };
   /** Cosmetic randomness (shake, chip spread); never touches the sim. */
   rand: () => number;
+  /** Pre-rendered layers (built once per view). */
+  fog: HTMLCanvasElement[];
+  vignette: HTMLCanvasElement;
+  fringe: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; mask: HTMLCanvasElement };
+  scanlines: HTMLCanvasElement | null;
+}
+
+/* ── Pre-rendered layers ───────────────────────────────────── */
+
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+/** Dithered fog tile: soft blobs quantised to pixels with a Bayer matrix. */
+function fogTile(w: number, h: number, seed: number, blobs: number, maxA: number, color: string): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const x = c.getContext("2d")!;
+  let a = seed >>> 0;
+  const r = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const field = new Float32Array(w * h);
+  for (let b = 0; b < blobs; b++) {
+    const cx = r() * w;
+    const cy = r() * h;
+    const rx = 30 + r() * 70;
+    const ry = 10 + r() * 26;
+    for (let j = 0; j < h; j++) {
+      // Wrap vertically so the tile repeats seamlessly
+      for (const oy of [-h, 0, h]) {
+        const dy = (j - cy - oy) / ry;
+        if (Math.abs(dy) > 1) continue;
+        for (let i = 0; i < w; i++) {
+          const dx = (i - cx) / rx;
+          const d = dx * dx + dy * dy;
+          if (d < 1) field[j * w + i] += (1 - d) * (1 - d);
+        }
+      }
+    }
+  }
+  const img = x.createImageData(w, h);
+  const [cr, cg, cb] = hexToRgb(color);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const v = Math.min(1, field[j * w + i] * 0.55) * 16;
+      if (v > BAYER4[(j % 4) * 4 + (i % 4)] + 0.5) {
+        const o = (j * w + i) * 4;
+        img.data[o] = cr;
+        img.data[o + 1] = cg;
+        img.data[o + 2] = cb;
+        img.data[o + 3] = Math.round(maxA * 255);
+      }
+    }
+  }
+  x.putImageData(img, 0, 0);
+  return c;
+}
+
+function vignetteLayer(w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const x = c.getContext("2d")!;
+  const g = x.createRadialGradient(w / 2, h * 0.42, Math.min(w, h) * 0.35, w / 2, h * 0.5, Math.max(w, h) * 0.75);
+  g.addColorStop(0, "rgba(3,2,20,0)");
+  g.addColorStop(1, "rgba(3,2,20,0.55)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, w, h);
+  return c;
+}
+
+/** Alpha mask: opaque at the left and right edges, clear by 14% in. */
+function edgeMask(w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const x = c.getContext("2d")!;
+  const g = x.createLinearGradient(0, 0, w, 0);
+  g.addColorStop(0, "rgba(0,0,0,1)");
+  g.addColorStop(0.14, "rgba(0,0,0,0)");
+  g.addColorStop(0.86, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,1)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, w, h);
+  return c;
+}
+
+/** Faint scanlines at device resolution (one line every 3 px). */
+function scanlineLayer(w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const x = c.getContext("2d")!;
+  x.fillStyle = "rgba(0,0,0,0.13)";
+  for (let y = 0; y < h; y += 3) x.fillRect(0, y, w, 1);
+  return c;
 }
 
 /** Desktop: 320x568 portrait. Phones: full-bleed, height from aspect. */
@@ -58,11 +157,24 @@ export function createView(display: HTMLCanvasElement, w: number, h: number, red
     seed ^= seed << 5;
     return ((seed >>> 0) % 100000) / 100000;
   };
+  const fringeCanvas = document.createElement("canvas");
+  fringeCanvas.width = w;
+  fringeCanvas.height = h;
   return {
     display, dctx, buf, ctx, w, h, reducedMotion,
     trail: [], particles: [], rand,
     bandShown: 0,
     banner: { name: "", t: -1 },
+    fog: [
+      // Atmosphere must never compete with obstacles: sparse and faint,
+      // nearest layer sparsest
+      fogTile(w, 256, 11, 4, 0.1, PALETTE.glow),
+      fogTile(w, 256, 23, 3, 0.1, PALETTE.gemShade),
+      fogTile(w, 256, 37, 2, 0.07, PALETTE.highlight),
+    ],
+    vignette: vignetteLayer(w, h),
+    fringe: { canvas: fringeCanvas, ctx: fringeCanvas.getContext("2d")!, mask: edgeMask(w, h) },
+    scanlines: null,
   };
 }
 
@@ -75,6 +187,7 @@ export function fitDisplay(v: View): void {
   if (v.display.width !== bw || v.display.height !== bh) {
     v.display.width = bw;
     v.display.height = bh;
+    v.scanlines = v.reducedMotion ? null : scanlineLayer(bw, bh);
   }
 }
 
@@ -103,10 +216,42 @@ let _gem: HTMLCanvasElement | null = null;
 function gemSprite(): HTMLCanvasElement {
   if (_gem) return _gem;
   _gem = sprite(
-    ["...###...", "..#hhh#..", ".#hhhhh#.", "#hhooohh#", "#hoooooh#", ".#hoooh#.", "..#hoh#..", "...#h#...", "....#...."],
-    { "#": PALETTE.gem, h: PALETTE.gemShade, o: PALETTE.gemCore },
+    [
+      "....###....",
+      "...#hhh#...",
+      "..#hhhhh#..",
+      ".#hhooohh#.",
+      "#hhooooohh#",
+      "#hoooWoooh#",
+      ".#hoooooh#.",
+      "..#hoooh#..",
+      "...#hoh#...",
+      "....#h#....",
+      ".....#.....",
+    ],
+    { "#": PALETTE.gem, h: PALETTE.gemShade, o: PALETTE.gemCore, W: PALETTE.highlight },
   );
   return _gem;
+}
+
+/** Dithered halo behind the gem so it reads against any band. */
+let _halo: HTMLCanvasElement | null = null;
+function haloSprite(): HTMLCanvasElement {
+  if (_halo) return _halo;
+  const n = 23;
+  const c = document.createElement("canvas");
+  c.width = n;
+  c.height = n;
+  const x = c.getContext("2d")!;
+  x.fillStyle = PALETTE.glow;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const d = Math.hypot(i - (n - 1) / 2, j - (n - 1) / 2) / ((n - 1) / 2);
+      if (d < 1 && (1 - d) * 16 * 0.7 > BAYER4[(j % 4) * 4 + (i % 4)]) x.fillRect(i, j, 1, 1);
+    }
+  }
+  _halo = c;
+  return c;
 }
 
 /** Small whole crystal: the extra life. */
@@ -413,6 +558,7 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number): v
   }
 
   drawBackground(v, s, dt);
+  drawFog(v, camY);
 
   ctx.save();
   ctx.translate(shakeX, 0);
@@ -426,10 +572,17 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number): v
   drawTrail(v, s, gx, gy + camY, camY);
   // Damage flicker at 3 Hz: within the WCAG 2.3.1 three-flash limit
   const hidden = s.hitInvuln > 0 && Math.floor(s.hitInvuln * 6) % 2 === 1;
-  if (!hidden && !s.over) drawGem(ctx, s, gx, gy);
+  if (!hidden && !s.over) {
+    const halo = haloSprite();
+    ctx.globalAlpha = 0.35;
+    ctx.drawImage(halo, Math.round(gx - halo.width / 2), Math.round(gy - halo.height / 2));
+    ctx.globalAlpha = 1;
+    drawGem(ctx, s, gx, gy);
+  }
   drawCooldownRing(ctx, s, gx, gy);
   ctx.restore();
 
+  ctx.drawImage(v.vignette, 0, 0);
   drawBanner(v, dt);
 
   if (s.flash > 0) {
@@ -501,8 +654,41 @@ function drawCooldownRing(ctx: CanvasRenderingContext2D, s: GameState, gx: numbe
   }
 }
 
+/** Three parallax fog layers at 0.3 / 0.6 / 1.0 of the camera. */
+const FOG_RATES = [0.3, 0.6, 1.0];
+function drawFog(v: View, camY: number): void {
+  const { ctx, h } = v;
+  v.fog.forEach((tile, i) => {
+    // Reduced motion: no parallax, the fog holds still
+    const off = v.reducedMotion ? 0 : (((camY * FOG_RATES[i]) % tile.height) + tile.height) % tile.height;
+    for (let y = -off; y < h; y += tile.height) ctx.drawImage(tile, 0, Math.round(y));
+  });
+}
+
+/** Slight red/cyan fringe at the left and right edges. */
+function drawFringe(v: View): void {
+  const { ctx, w, h, buf } = v;
+  const f = v.fringe;
+  for (const [tint, dx] of [["#ff3d7f", -1], ["#3dd8ff", 1]] as const) {
+    f.ctx.globalCompositeOperation = "copy";
+    f.ctx.drawImage(buf, 0, 0);
+    f.ctx.globalCompositeOperation = "multiply";
+    f.ctx.fillStyle = tint;
+    f.ctx.fillRect(0, 0, w, h);
+    f.ctx.globalCompositeOperation = "destination-in";
+    f.ctx.drawImage(f.mask, 0, 0);
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.35;
+    ctx.drawImage(f.canvas, dx, 0);
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+}
+
 function blit(v: View): void {
+  if (!v.reducedMotion) drawFringe(v);
   const { dctx, display, buf } = v;
   dctx.imageSmoothingEnabled = false;
   dctx.drawImage(buf, 0, 0, display.width, display.height);
+  if (v.scanlines) dctx.drawImage(v.scanlines, 0, 0);
 }
