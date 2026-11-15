@@ -46,13 +46,13 @@ export const CRYSTAL_MATERIAL = {
   /** Fresnel rim along the silhouette. */
   rim: { color: "#ffffff", power: 4, intensity: 0.7 },
   /** Internal cloud: ice is never optically empty. */
-  cloud: { scale: 0.82, opacity: 0.06 },
+  cloud: { scale: 0.82, opacity: 0.045 },
   /** Thin elongated inclusion slivers (intact count; shards share them). */
   slivers: 3,
   /** Backdrop FBO size: the only other thing a shard may change. */
   resolution: { intact: 1024, shard: 768 },
   tint: {
-    wake: { color: "#e8f1f5", attenuationColor: "#c9e2f0" },
+    wake: { color: "#e8f1f5", attenuationColor: "#d8edf8" },
     dream: { color: "#c4b5fd", attenuationColor: "#b4a0e8" },
   },
 } as const;
