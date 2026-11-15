@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/store/useGameStore";
 import { createGame, step, takeEvents, STEP, type GameState, type Input } from "./engine.ts";
-import { createView, fitDisplay, logicalSize, renderFrame, type View } from "./render.ts";
+import { applyEvents, createView, fitDisplay, logicalSize, renderFrame, type View } from "./render.ts";
 import { playEvents } from "./audio.ts";
 
 interface DescentProps {
@@ -121,8 +121,10 @@ export default function Descent({ onExit }: DescentProps) {
           acc -= STEP;
         }
       }
-      playEvents(takeEvents(game));
-      renderFrame(view, game, pausedRef.current ? 1 : acc / STEP);
+      const events = takeEvents(game);
+      playEvents(events);
+      applyEvents(view, events);
+      renderFrame(view, game, pausedRef.current ? 1 : acc / STEP, pausedRef.current ? 0 : dt);
     };
     raf = requestAnimationFrame(frame);
 
