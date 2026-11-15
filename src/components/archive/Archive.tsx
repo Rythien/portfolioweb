@@ -29,10 +29,55 @@ const HINT_KEY = "archive-hint-seen";
 function Warmup() {
   const { gl, scene, camera, invalidate } = useThree();
   useEffect(() => {
+    let live = true;
     const t0 = performance.now();
-    gl.compile(scene, camera);
-    invalidate();
-    (window as unknown as { __archiveWarmMs?: number }).__archiveWarmMs = performance.now() - t0;
+    let longest = 0;
+    // One drawable at a time, everything else hidden, in idle slots: the
+    // programs get built without one long block on the WAKE page
+    const items: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      const d = o as THREE.Mesh;
+      if (d.isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) items.push(o);
+    });
+    const vis = items.map((o) => o.visible);
+    const seen = new Set<string>();
+    let i = 0;
+    let handle = 0;
+    const idle = (cb: () => void) =>
+      window.requestIdleCallback ? window.requestIdleCallback(cb, { timeout: 500 }) : window.setTimeout(cb, 16);
+    const step = () => {
+      if (!live) return;
+      const t = performance.now();
+      while (i < items.length && performance.now() - t < 8) {
+        const o = items[i];
+        const mats = ([] as THREE.Material[]).concat((o as THREE.Mesh).material ?? []);
+        const key = mats.map((m) => m.uuid).join(",");
+        if (vis[i] && !seen.has(key)) {
+          seen.add(key);
+          items.forEach((x) => (x.visible = false));
+          o.visible = true;
+          gl.compile(scene, camera);
+          items.forEach((x, k) => (x.visible = vis[k]));
+        }
+        i++;
+      }
+      longest = Math.max(longest, performance.now() - t);
+      if (i < items.length) {
+        handle = idle(step);
+        return;
+      }
+      invalidate();
+      const w = window as unknown as { __archiveWarmMs?: number; __archiveWarmBlockMs?: number };
+      w.__archiveWarmMs = performance.now() - t0;
+      w.__archiveWarmBlockMs = longest;
+    };
+    handle = idle(step);
+    return () => {
+      live = false;
+      window.cancelIdleCallback?.(handle);
+      window.clearTimeout(handle);
+      items.forEach((x, k) => (x.visible = vis[k]));
+    };
   }, [gl, scene, camera, invalidate]);
   return null;
 }

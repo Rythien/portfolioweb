@@ -9,7 +9,10 @@ import {
   type FlightInput, type FlightState,
 } from "./flight";
 import { readFlightInput, type InputState } from "./input";
-import { SEALS, VOID } from "./layout";
+import { SEALS, VIEW_DISTANCE, VOID } from "./layout";
+import Seal from "./Seal";
+import StudioEnvironment from "@/components/crystal/StudioEnvironment";
+import { projects } from "@/content/projects";
 
 /** Longest frame fed to the flight; a hitch never fast-forwards. */
 const MAX_DT = 1 / 20;
@@ -301,31 +304,16 @@ function FogBanks({ count }: { count: number }) {
   );
 }
 
-/* ── Seal beacons: far glows that give the void a compass ────────
- * Placeholder silhouettes until the seals themselves land. */
+/* ── Seal beacons: far glows behind each seal, the void's compass ── */
 
 function SealBeacons() {
   const tex = useMemo(() => glowTexture(), []);
-  const cores = useRef<(THREE.Mesh | null)[]>([]);
-  useFrame((state, dt) => {
-    cores.current.forEach((m, i) => {
-      if (!m) return;
-      m.rotation.y += dt * (0.12 + i * 0.03);
-      m.rotation.x = Math.sin(state.clock.elapsedTime * 0.2 + i) * 0.3;
-    });
-  });
   return (
     <>
-      {SEALS.map((s, i) => (
-        <group key={s.project} position={s.pos}>
-          <sprite scale={[16, 16, 1]}>
-            <spriteMaterial map={tex} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} opacity={0.75} />
-          </sprite>
-          <mesh ref={(m) => { cores.current[i] = m; }}>
-            <octahedronGeometry args={[2.4, 0]} />
-            <meshStandardMaterial color="#120a2c" roughness={0.35} metalness={0.2} flatShading emissive="#2a1660" emissiveIntensity={0.35} />
-          </mesh>
-        </group>
+      {SEALS.map((s) => (
+        <sprite key={s.project} position={s.pos} scale={[22, 22, 1]} renderOrder={-4}>
+          <spriteMaterial map={tex} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} opacity={0.55} />
+        </sprite>
       ))}
     </>
   );
@@ -340,6 +328,20 @@ interface PilotProps {
 
 function Pilot({ input, reduced }: PilotProps) {
   const flight = useRef<FlightState>(createFlight());
+  // Test hook (archiveat=<i>): start in front of seal i, facing it
+  useEffect(() => {
+    const at = new URLSearchParams(window.location.search).get("archiveat");
+    const spot = at !== null ? SEALS[Number(at)] : undefined;
+    if (!spot) return;
+    const f = flight.current;
+    const [sx, sy, sz] = spot.pos;
+    const len = Math.hypot(sx, sz) || 1;
+    f.px = sx - (sx / len) * VIEW_DISTANCE;
+    f.py = sy + 1.5;
+    f.pz = sz - (sz / len) * VIEW_DISTANCE;
+    f.yaw = Math.atan2(-(sx - f.px), -(sz - f.pz));
+    f.pitch = Math.atan2(sy - f.py, Math.hypot(sx - f.px, sz - f.pz));
+  }, []);
   const fi = useRef<FlightInput>({ thrust: 0, strafe: 0, lift: 0, yaw: 0, pitch: 0 });
   const look = useRef({ x: 0, y: 0 });
   const tuning = reduced ? FLIGHT_REDUCED : FLIGHT;
@@ -408,6 +410,17 @@ export default function ArchiveScene({ input, reduced, lowPower }: ArchiveSceneP
       <FogBanks count={lowPower ? 10 : 18} />
       <Dust count={lowPower ? 900 : 1800} reduced={reduced} />
       <SealBeacons />
+      {/* The same studio the hero crystal is lit by, so the ice matches */}
+      <StudioEnvironment variant="dream" />
+      {SEALS.map((spot, i) => (
+        <Seal
+          key={spot.project}
+          spot={spot}
+          index={i}
+          cover={(projects[spot.project]?.cover.src ?? "").replace(".webp", "-800.webp")}
+          reduced={reduced}
+        />
+      ))}
       <Pilot input={input} reduced={reduced} />
     </>
   );

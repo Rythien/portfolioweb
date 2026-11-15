@@ -24,3 +24,16 @@ export const SEALS: SealSpot[] = [
   { project: 1, pos: [-31, -5, 4] },
   { project: 2, pos: [29, 7, 9] },
 ];
+
+/** Seal tuning (Seal.tsx). */
+export const SEAL = {
+  /** Body radius before the vertical stretch (x1.22). */
+  radius: 3.2,
+  /** Shards in orbit per seal, over three tilted rings. */
+  orbiters: 15,
+  /** Which facet is lit (the pulse target), per seal. */
+  litFacet: [0, 5, 9],
+};
+
+/** Test hook (archiveat=<i>): a spot this far in front of seal i, facing it. */
+export const VIEW_DISTANCE = 15;

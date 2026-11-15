@@ -35,10 +35,17 @@ await page.goto(`${BASE}/?nopreload=1&mode=wake`, { waitUntil: "domcontentloaded
 await page.evaluate(() => localStorage.setItem("searon-mode", "wake"));
 await page.waitForTimeout(7000);
 await page.mouse.wheel(0, 700);
-await page.waitForTimeout(1500);
-const scrollBefore = await page.evaluate(() => window.scrollY);
-const warmMs = await page.evaluate(() => window.__archiveWarmMs);
-check(typeof warmMs === "number", `Archive warmed during WAKE idle (compile + first frame ${warmMs?.toFixed(0)} ms)`);
+// Wait for Lenis to finish easing before recording where we are
+let scrollBefore = -1;
+for (let k = 0; k < 40; k++) {
+  await page.waitForTimeout(150);
+  const y = await page.evaluate(() => window.scrollY);
+  if (Math.abs(y - scrollBefore) < 0.5) break;
+  scrollBefore = y;
+}
+await page.waitForFunction(() => typeof window.__archiveWarmMs === "number", null, { timeout: 15000 }).catch(() => {});
+const warm = await page.evaluate(() => ({ total: window.__archiveWarmMs, block: window.__archiveWarmBlockMs }));
+check(typeof warm.total === "number", `Archive warmed during WAKE idle (ready after ${warm.total?.toFixed(0)} ms, longest warm-up task ${warm.block?.toFixed(0)} ms)`);
 
 // Handover timing, measured in the page from the click itself
 await page.evaluate(() => {
