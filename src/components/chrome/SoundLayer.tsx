@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useSoundStore } from "@/store/useSoundStore";
 import { useThemeStore } from "@/store/useThemeStore";
 import { crystalEvents } from "@/hooks/crystalState";
-import { initAudioContext, getPadOpen } from "@/hooks/crystalAudio";
+import { initAudioContext, getPadHarmonics, getPadOpen } from "@/hooks/crystalAudio";
 
 const NAV_SELECTOR =
   'header a, header button, [role="group"][aria-label="Site mode"] button, footer a, footer button';
@@ -28,7 +28,16 @@ interface Pad {
   gain: GainNode;
   filter: BiquadFilterNode;
   nodes: AudioScheduledSourceNode[];
+  /** One voice per Archive project freed, silent until gained. */
+  harmonics: GainNode[];
 }
+
+/** Harmonics the pad gains as Archive projects are freed: A3, E4, A4. */
+const HARMONICS: [number, number][] = [
+  [220, 0.22],
+  [329.6, 0.16],
+  [440, 0.11],
+];
 
 /** Low two-voice pad behind the dream: A2 + E3, slow filter drift. */
 function createPad(ctx: AudioContext): Pad {
@@ -64,8 +73,20 @@ function createPad(ctx: AudioContext): Pad {
   }
   lfo.start();
 
+  const harmonics = HARMONICS.map(([freq]) => {
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    const vg = ctx.createGain();
+    vg.gain.value = 0;
+    osc.connect(vg).connect(filter);
+    osc.start();
+    nodes.push(osc);
+    return vg;
+  });
+
   filter.connect(gain).connect(ctx.destination);
-  return { gain, filter, nodes };
+  return { gain, filter, nodes, harmonics };
 }
 
 export default function SoundLayer() {
@@ -118,7 +139,11 @@ export default function SoundLayer() {
       if (pad) {
         pad.gain.gain.setTargetAtTime(target, ctx.currentTime, 0.3);
         // The Archive opens the filter with flight speed (0 elsewhere)
-        pad.filter.frequency.setTargetAtTime(380 + getPadOpen() * 1600, ctx.currentTime, 0.5);
+        // One harmonic per freed Archive project, swelling in slowly; the
+        // filter's floor lifts with them or the upper ones would be buried
+        const nh = getPadHarmonics();
+        pad.filter.frequency.setTargetAtTime(380 + nh * 140 + getPadOpen() * 1600, ctx.currentTime, 0.5);
+        pad.harmonics.forEach((g, i) => g.gain.setTargetAtTime(i < nh ? HARMONICS[i][1] : 0, ctx.currentTime, 1.5));
       }
     };
 

@@ -124,3 +124,12 @@ export function setPadOpen(v: number) {
 export function getPadOpen(): number {
   return _padOpen;
 }
+
+/** 0..3: harmonics the dream pad has gained (one per Archive project freed). */
+let _padHarmonics = 0;
+export function setPadHarmonics(n: number) {
+  _padHarmonics = Math.max(0, Math.min(3, Math.round(n)));
+}
+export function getPadHarmonics(): number {
+  return _padHarmonics;
+}

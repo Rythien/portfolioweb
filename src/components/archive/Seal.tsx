@@ -10,6 +10,7 @@ import { sealProgress, sealSlug, type ArchiveState, type SealState } from "./arc
 import { ENDING, FREE, type SealTarget, type V3 } from "./game";
 import type { Project } from "@/content/projects";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
+import { playMote } from "./archiveAudio";
 
 /** Test hook (archivefreeze=1): seals hold still, for repeatable hit shots. */
 const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("archivefreeze") === "1";
@@ -309,6 +310,7 @@ function panelTextTexture(p: Project): THREE.CanvasTexture {
 function markTouched(s: SealState, slug: string) {
   s.touched = true;
   useArchiveProgress.getState().recover(slug);
+  playMote(3);
   window.dispatchEvent(new CustomEvent("archive-recovered", { detail: slug }));
 }
 

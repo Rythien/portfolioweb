@@ -9,6 +9,11 @@ import {
 } from "./game";
 import { sealSlug, type ArchiveState, type HudEls } from "./archiveState";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
+import { useArchiveStore } from "@/store/useArchiveStore";
+import { useSoundStore } from "@/store/useSoundStore";
+import {
+  playFacetCrack, playFreeBloom, playMote, playReassembled, playThud, setChargedHum, setFreedHarmonics,
+} from "./archiveAudio";
 import type { InputState } from "./input";
 import type { SealRegistry } from "./Seal";
 import { SEAL, SEALS } from "./layout";
@@ -76,6 +81,36 @@ function applyHit(g: ArchiveState, hit: Hit, reduced: boolean): "crack" | "freed
 
 function tickClock(g: ArchiveState, t: number) {
   g.t = t;
+}
+
+/** Sounds that follow state, sent only when it changes (not every frame). */
+const _audio = { hum: "", harmonics: -1, formed: false };
+function followAudio(g: ArchiveState) {
+  const enabled = useSoundStore.getState().enabled;
+  // Held while the pulse is ready, inside the open Archive, before the ending
+  const hum = enabled && g.charge >= CHARGE_FULL && useArchiveStore.getState().open && !g.ending;
+  const key = `${hum}`;
+  if (key !== _audio.hum) {
+    _audio.hum = key;
+    setChargedHum(hum);
+  }
+  const n = g.seals.filter((s) => s.freed).length;
+  if (n !== _audio.harmonics) {
+    _audio.harmonics = n;
+    setFreedHarmonics(n);
+  }
+  // The crystal is whole: the full triad, once
+  const formed = !!g.ending && g.t - g.ending.t0 >= ENDING.converge;
+  if (formed && !_audio.formed) playReassembled();
+  _audio.formed = formed;
+}
+
+function hitSound(kind: Hit["kind"], result: "crack" | "freed" | "none", seal: number) {
+  if (result === "freed") {
+    playFacetCrack();
+    playFreeBloom(seal);
+  } else if (result === "crack") playFacetCrack();
+  else if (kind !== "fizzle") playThud(); // body or shard: the pulse is wasted
 }
 
 const _ef = new THREE.Vector3();
@@ -195,7 +230,10 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
 
     // Motes: drift, pull, collect
     const got = stepMotes(ms, t, dt, player, g.charge, reduced);
-    if (got) addCharge(g, got);
+    if (got) {
+      addCharge(g, got);
+      playMote(g.charge);
+    }
 
     // Release
     if (consumeFire(inp) && !g.ending) {
@@ -224,7 +262,7 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
       trail.current.unshift([...p.pos] as V3);
       if (trail.current.length > TRAIL) trail.current.length = TRAIL;
       if (hit) {
-        applyHit(g, hit, reduced);
+        hitSound(hit.kind, applyHit(g, hit, reduced), hit.seal);
         const slot = impactState.current.findIndex((s) => !s.alive);
         const k = slot < 0 ? 0 : slot;
         impactState.current[k] = { t0: t, kind: hit.kind, alive: true };
@@ -261,6 +299,8 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
       m.opacity = (1 - a) * (s.kind === "facet" ? 1 : 0.5);
       m.color.set(s.kind === "facet" ? "#ffe2a0" : "#a99bd6");
     });
+
+    followAudio(g);
 
     // Motes to the GPU
     const geo = moteGeo.current;
