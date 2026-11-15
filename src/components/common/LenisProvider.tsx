@@ -5,6 +5,7 @@ import Lenis from "lenis";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useScrollStore, setSectionProgress } from "@/store/useScrollStore";
+import { useGameStore } from "@/store/useGameStore";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -101,6 +102,17 @@ export default function LenisProvider({
       console.warn("Lenis initialization error:", err);
     }
   }, []);
+
+  // DESCENT open: Lenis stops (no wheel smoothing under the game), and
+  // starts again on any exit path
+  useEffect(() => {
+    if (!lenisInstance) return;
+    const apply = (open: boolean) => (open ? lenisInstance.stop() : lenisInstance.start());
+    apply(useGameStore.getState().open);
+    return useGameStore.subscribe((s, prev) => {
+      if (s.open !== prev.open) apply(s.open);
+    });
+  }, [lenisInstance]);
 
   // Per-section progress via ScrollTrigger
   useEffect(() => {
