@@ -47,6 +47,12 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const [lowPower] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
+  /** The full control list, behind the "?" in the corner. */
+  const [help, setHelp] = useState(false);
+  const helpRef = useRef(false);
+  useEffect(() => {
+    helpRef.current = help;
+  }, [help]);
   const [hint, setHint] = useState(() => {
     try {
       return sessionStorage.getItem(HINT_KEY) !== "1";
@@ -77,6 +83,11 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
     const down = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        // Esc closes the control list first; only then does it wake
+        if (helpRef.current) {
+          setHelp(false);
+          return;
+        }
         const r = wakeRef.current?.getBoundingClientRect();
         wakeFn.current(r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: innerWidth - 40, y: 40 });
         return;
@@ -193,12 +204,47 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
       {hint && (
         <p
           aria-hidden="true"
-          className="archive-hint pointer-events-none absolute bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))] left-1/2 w-[min(92vw,52rem)] -translate-x-1/2 text-center font-mono text-label uppercase leading-relaxed tracking-[0.14em] text-white/70"
+          className="archive-hint pointer-events-none absolute bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))] left-1/2 -translate-x-1/2 whitespace-nowrap text-center font-mono text-label uppercase tracking-[0.2em] text-white/70"
         >
-          <span className="max-md:hidden">Hold to drift toward the pointer · W A S D move · arrows look · Q E sink / rise</span>
-          <span className="md:hidden">Touch and hold to drift toward your finger</span>
+          Drift toward the light
         </p>
       )}
+
+      {/* The full control list lives behind "?" (the stage's label carries
+          it for screen readers too) */}
+      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] flex flex-col items-end gap-3">
+        {help && (
+          <div
+            id="archive-controls"
+            role="region"
+            aria-label="Controls"
+            className="w-[min(80vw,20rem)] rounded-2xl border border-white/20 bg-[#0d0830]/85 p-4 font-mono text-label uppercase leading-relaxed tracking-[0.12em] text-white/80 backdrop-blur-md"
+          >
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+              <dt className="text-white">Hold</dt>
+              <dd>Drift toward the pointer / finger</dd>
+              <dt className="text-white">W A S D</dt>
+              <dd>Move</dd>
+              <dt className="text-white">Arrows</dt>
+              <dd>Look</dd>
+              <dt className="text-white">Q E</dt>
+              <dd>Sink / rise</dd>
+              <dt className="text-white">Esc</dt>
+              <dd>Wake</dd>
+            </dl>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setHelp((h) => !h)}
+          aria-expanded={help}
+          aria-controls="archive-controls"
+          aria-label={help ? "Hide controls" : "Show controls"}
+          className="pressable grid size-11 place-items-center rounded-full border border-white/25 bg-white/5 font-mono text-label text-white/85 backdrop-blur-md transition-colors hover:border-white/60 hover:text-white focus-visible:outline-offset-4"
+        >
+          ?
+        </button>
+      </div>
     </div>,
     document.body,
   );

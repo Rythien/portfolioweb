@@ -88,7 +88,16 @@ const suspended = await page.evaluate(() => ({
 check(suspended.overflow === "hidden", "page scroll locked");
 check(suspended.headerInert && suspended.mainInert, "header and main are inert");
 check(suspended.pillCovered, "Archive covers the viewport (pill not reachable)");
-check(suspended.chrome.length === 1 && suspended.chrome[0] === "Wake", `only chrome is WAKE (${suspended.chrome.join(",")})`);
+check(suspended.chrome.join(",") === "Wake,?", `only chrome is WAKE and the ? (${suspended.chrome.join(",")})`);
+check(await page.locator(".archive-hint").innerText() === "DRIFT TOWARD THE LIGHT", "hint is one line: DRIFT TOWARD THE LIGHT");
+await page.getByRole("button", { name: "Show controls" }).click();
+await page.waitForTimeout(300);
+await page.screenshot({ path: resolve(shots, `archive-controls${tag}.png`) });
+check(await page.getByRole("region", { name: "Controls" }).isVisible(), "? opens the control list");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(300);
+check(!(await page.getByRole("region", { name: "Controls" }).isVisible()) && (await page.evaluate(() => document.documentElement.dataset.mode)) === "dream", "Esc closes the list first, without waking");
+await page.locator(".archive-stage").focus();
 
 // Frame rate while idle
 const fps = await page.evaluate(
