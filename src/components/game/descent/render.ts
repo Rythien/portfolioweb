@@ -838,14 +838,17 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number, op
   const gx = lerp(s.prev.x, s.gem.x, alpha);
   const gy = lerp(s.prev.y, s.gem.y, alpha) - camY;
   drawTrail(v, s, gx, gy + camY, camY);
-  // Damage flicker at 3 Hz: within the WCAG 2.3.1 three-flash limit
-  const hidden = s.hitInvuln > 0 && Math.floor(s.hitInvuln * 6) % 2 === 1;
+  // Damage flicker at 3 Hz (inside the WCAG 2.3.1 three-flash limit);
+  // reduced motion gets a steady dimmed gem instead of any flicker
+  const hurt = s.hitInvuln > 0;
+  const hidden = hurt && !v.reducedMotion && Math.floor(s.hitInvuln * 6) % 2 === 1;
   if (!hidden && !s.over) {
     const halo = haloSprite();
     ctx.globalAlpha = 0.35;
     ctx.drawImage(halo, Math.round(gx - halo.width / 2), Math.round(gy - halo.height / 2));
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = hurt && v.reducedMotion ? 0.45 : 1;
     drawGem(ctx, s, gx, gy);
+    ctx.globalAlpha = 1;
   }
   drawCooldownRing(ctx, s, gx, gy);
   ctx.restore();
@@ -855,7 +858,7 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number, op
   drawHud(v, s, dt);
 
   if (s.flash > 0) {
-    ctx.globalAlpha = 0.28 * (s.flash / TUNING.flashTime);
+    ctx.globalAlpha = (v.reducedMotion ? 0.14 : 0.28) * (s.flash / TUNING.flashTime);
     ctx.fillStyle = PALETTE.danger;
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;

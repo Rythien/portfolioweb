@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { useGameStore } from "@/store/useGameStore";
 import { createGame, step, takeEvents, STEP, type GameState, type Input } from "./engine.ts";
 import { applyEvents, createView, fitDisplay, logicalSize, renderFrame, type View } from "./render.ts";
@@ -49,6 +50,8 @@ interface Death {
 
 export default function Descent({ onExit }: DescentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const [death, setDeath] = useState<Death | null>(null);
@@ -84,6 +87,19 @@ export default function Descent({ onExit }: DescentProps) {
       html.classList.remove("descent-open");
       useGameStore.getState().setOpen(false);
     };
+  }, []);
+
+  // The page behind is inert while the game is open (no Tab, no screen
+  // reader browsing into it); the canvas takes focus
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const others = [...document.body.children].filter(
+      (el): el is HTMLElement => el instanceof HTMLElement && el !== overlay && !el.hasAttribute("inert"),
+    );
+    others.forEach((el) => el.setAttribute("inert", ""));
+    canvasRef.current?.focus();
+    return () => others.forEach((el) => el.removeAttribute("inert"));
   }, []);
 
   // Pause on blur / hidden tab; Esc exits
@@ -298,8 +314,21 @@ export default function Descent({ onExit }: DescentProps) {
     };
   }, [size, fullBleed]);
 
-  return (
+  // Focus trap: Tab cycles between the canvas and the exit button
+  const trapTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const order = [canvasRef.current, closeRef.current].filter((el): el is HTMLCanvasElement | HTMLButtonElement => !!el);
+    if (order.length === 0) return;
+    e.preventDefault();
+    const i = order.indexOf(document.activeElement as HTMLCanvasElement | HTMLButtonElement);
+    const next = e.shiftKey ? (i <= 0 ? order.length - 1 : i - 1) : (i + 1) % order.length;
+    order[next].focus();
+  };
+
+  return createPortal(
     <div
+      ref={overlayRef}
+      onKeyDown={trapTab}
       className="descent-overlay fixed inset-0 z-[300] flex items-center justify-center bg-[#030214] bg-[radial-gradient(ellipse_at_center,#120c3d_0%,#06041c_45%,#030214_80%)]"
       role="dialog"
       aria-modal="true"
@@ -308,7 +337,7 @@ export default function Descent({ onExit }: DescentProps) {
       <canvas
         ref={canvasRef}
         tabIndex={0}
-        aria-label="DESCENT game canvas"
+        aria-label="DESCENT. Steer with the arrow keys or A and D, dash with space or the down arrow, P pauses, Escape returns to the page."
         className={`touch-none select-none outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#8f7bff] ${fullBleed ? "h-full w-full" : "h-full max-h-[100dvh]"}`}
         style={fullBleed ? undefined : { aspectRatio: `${size.w} / ${size.h}` }}
       />
@@ -319,6 +348,7 @@ export default function Descent({ onExit }: DescentProps) {
           : ""}
       </p>
       <button
+        ref={closeRef}
         type="button"
         onClick={() => exitRef.current(scoreRef.current > 0 ? scoreRef.current : undefined)}
         aria-label="Exit the game"
@@ -326,6 +356,7 @@ export default function Descent({ onExit }: DescentProps) {
       >
         X
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
