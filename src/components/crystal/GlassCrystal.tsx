@@ -16,7 +16,8 @@ import {
   CRYSTAL_MATERIAL,
   applyCrystalShader,
   getFrostNormalMap,
-  getStreakMap,
+  getRoughnessMap,
+  getCreviceMap,
   thicknessFor,
 } from "./crystalMaterial";
 import { getHeroLogos, getUnitLogos } from "./logoGeometry";
@@ -230,7 +231,7 @@ const SHARD_LOGO_FILL = 0.7;
 /** Minimum logo width in group units (world units at pose scale 1). */
 const SHARD_LOGO_MIN = 0.35;
 const SHARD_LOGO_SWAY = THREE.MathUtils.degToRad(20);
-const INCLUSION_COUNT = 10;
+const INCLUSION_COUNT = CRYSTAL_MATERIAL.slivers;
 
 /* ── Component ───────────────────────────────────────────────── */
 
@@ -255,7 +256,7 @@ function buildInclusions(seed: number, count: number, maxR: number): InclusionDa
   const _scale = new THREE.Vector3();
 
   for (let i = 0; i < count; i++) {
-    const r = rng() * maxR * 0.6;
+    const r = rng() * maxR * 0.35;
     const th = Math.acos(2 * rng() - 1);
     const ph = TWO_PI * rng();
     _pos.set(
@@ -263,8 +264,8 @@ function buildInclusions(seed: number, count: number, maxR: number): InclusionDa
       r * Math.sin(th) * Math.sin(ph),
       r * Math.cos(th),
     );
-    const length = 0.06 + rng() * 0.14;
-    const thickness = 0.006 + rng() * 0.008;
+    const length = 0.35 + rng() * 0.35;
+    const thickness = 0.007 + rng() * 0.007;
     _scale.set(thickness, length, thickness);
     _euler.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
     _quat.setFromEuler(_euler);
@@ -279,6 +280,16 @@ function buildInclusions(seed: number, count: number, maxR: number): InclusionDa
 /* ── Component ───────────────────────────────────────────────── */
 
 const _inclusionGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 4, 1);
+const CLOUD = CRYSTAL_MATERIAL.cloud;
+const SLIVER_OPACITY = 0.5;
+
+/** Set every material under an internal-cloud group to its base opacity x k. */
+function setCloudOpacity(g: THREE.Object3D, k: number) {
+  g.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    if (m && typeof o.userData.baseOpacity === "number") m.opacity = o.userData.baseOpacity * k;
+  });
+}
 
 const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake", active = true }, ref) {
@@ -296,6 +307,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         chromaticAberration: CRYSTAL_MATERIAL.chromaticAberration,
         anisotropicBlur: CRYSTAL_MATERIAL.anisotropicBlur,
         roughness: CRYSTAL_MATERIAL.roughness,
+        roughnessMap: getRoughnessMap(),
+        clearcoat: CRYSTAL_MATERIAL.clearcoat,
+        clearcoatRoughness: CRYSTAL_MATERIAL.clearcoatRoughness,
         distortion: CRYSTAL_MATERIAL.distortion,
         distortionScale: CRYSTAL_MATERIAL.distortionScale,
         temporalDistortion: CRYSTAL_MATERIAL.temporalDistortion,
@@ -310,7 +324,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         iridescenceIOR: CRYSTAL_MATERIAL.iridescenceIOR,
         iridescenceThicknessMinimum: CRYSTAL_MATERIAL.iridescenceThicknessMinimum,
         iridescenceThicknessMaximum: CRYSTAL_MATERIAL.iridescenceThicknessMaximum,
-        iridescenceMap: getStreakMap(),
+        iridescenceMap: getCreviceMap(),
         // Rim + streak shading chained onto drei's own shader patch
         ref: (m: unknown) => applyCrystalShader(m as THREE.Material | null),
       }),
@@ -352,6 +366,23 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           swayPhase: rank * 1.7,
         }));
     }, [shards]);
+    // Internal cloud for the shards: each of the largest shards also
+    // carries one sliver, so shattered ice is no emptier than intact ice
+    const shardSlivers = useMemo(() => {
+      const rng = seededRandom(seed + 4242);
+      const ranked = [...shardLogoSlots].map((s) => s.shard);
+      return shards.map((s, i) => {
+        if (!ranked.slice(0, CRYSTAL_MATERIAL.slivers).includes(i)) return null;
+        s.geometry.computeBoundingBox();
+        const d = s.geometry.boundingBox!.getSize(new THREE.Vector3());
+        const short = [d.x, d.y, d.z].sort((p, q) => p - q)[1];
+        return {
+          rotation: [rng() * Math.PI, rng() * Math.PI, rng() * Math.PI] as [number, number, number],
+          length: Math.min(0.55, short * 0.7),
+          thickness: 0.007 + rng() * 0.006,
+        };
+      });
+    }, [shards, shardLogoSlots, seed]);
     const reducedMotion = useMemo(
       () =>
         typeof window !== "undefined" &&
@@ -369,6 +400,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const shardRimRefs = useRef<(THREE.Mesh | null)[]>([]);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
     const inclusionRef = useRef<THREE.InstancedMesh>(null);
+    const intactCloudRef = useRef<THREE.Mesh>(null);
+    const shardCloudRefs = useRef<(THREE.Group | null)[]>([]);
     const glowRef = useRef<THREE.Sprite>(null);
     const showShardsRef = useRef(false);
     const _invQ = useRef(new THREE.Quaternion());
@@ -392,6 +425,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (heroGhostRef.current) heroGhostRef.current.visible = false;
         if (heroRimRef.current) heroRimRef.current.visible = false;
         if (inclusionRef.current) inclusionRef.current.visible = false;
+        if (intactCloudRef.current) intactCloudRef.current.visible = false;
+        for (const g of shardCloudRefs.current) if (g) g.visible = false;
         if (glowRef.current) glowRef.current.visible = false;
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];
@@ -418,7 +453,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       if (inclusionRef.current) {
         inclusionRef.current.visible = !mergedHidden || assembled;
         const iMat = inclusionRef.current.material as THREE.MeshStandardMaterial;
-        if (iMat) iMat.opacity = (assembled ? 1 : 1 - crossfade) * fade;
+        if (iMat) iMat.opacity = SLIVER_OPACITY * (assembled ? 1 : 1 - crossfade) * fade;
+      }
+
+      const ic = intactCloudRef.current;
+      if (ic) {
+        ic.visible = !mergedHidden || assembled;
+        setCloudOpacity(ic, (assembled ? 1 : 1 - crossfade) * fade);
       }
 
       if (glowRef.current) {
@@ -595,6 +636,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (!mesh) continue;
 
         mesh.visible = showShards;
+        const cloud = shardCloudRefs.current[i];
+        if (cloud) cloud.visible = showShards;
         if (!showShards) continue;
 
         const shardOpacity = assembled ? fade : smoothstep(0.05, 0.15, breakVal) * fade;
@@ -644,6 +687,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           mesh.position.copy(s.centroid);
           mesh.scale.setScalar(1);
           mesh.quaternion.identity();
+        }
+        // The cloud is a sibling (not a child) so it stays in the backdrop
+        // pass while the shard itself is hidden for it
+        if (cloud) {
+          cloud.position.copy(mesh.position);
+          cloud.quaternion.copy(mesh.quaternion);
+          cloud.scale.copy(mesh.scale);
+          setCloudOpacity(cloud, shardOpacity);
         }
       }
 
@@ -719,11 +770,17 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             emissive="#b8d8e8"
             emissiveIntensity={0.3}
             transparent
-            opacity={0.5}
+            opacity={SLIVER_OPACITY}
             roughness={0.3}
             depthWrite={false}
           />
         </instancedMesh>
+
+        {/* Internal cloud: a faint white volume at 0.82 scale. A sibling of
+            the glass, so the glass sees it in its backdrop pass */}
+        <mesh ref={intactCloudRef} geometry={intactGeo} scale={CLOUD.scale} userData={{ baseOpacity: CLOUD.opacity }}>
+          <meshStandardMaterial color="#ffffff" transparent opacity={CLOUD.opacity} roughness={1} depthWrite={false} />
+        </mesh>
 
         {/* Hero logo inside the intact crystal (cycles, faces the camera) */}
         {heroLogos[0] && (
@@ -802,6 +859,25 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               resolution={CRYSTAL_MATERIAL.resolution.shard}
             />
           </mesh>
+        ))}
+
+        {/* Shard internal clouds (and slivers on the largest shards) */}
+        {shards.map((shard, i) => (
+          <group key={`cloud-${i}`} ref={(el) => { shardCloudRefs.current[i] = el; }} visible={false}>
+            <mesh geometry={shard.geometry} scale={CLOUD.scale} userData={{ baseOpacity: CLOUD.opacity }}>
+              <meshStandardMaterial color="#ffffff" transparent opacity={0} roughness={1} depthWrite={false} />
+            </mesh>
+            {shardSlivers[i] && (
+              <mesh
+                geometry={_inclusionGeo}
+                rotation={shardSlivers[i]!.rotation}
+                scale={[shardSlivers[i]!.thickness, shardSlivers[i]!.length, shardSlivers[i]!.thickness]}
+                userData={{ baseOpacity: SLIVER_OPACITY }}
+              >
+                <meshStandardMaterial color="#dceef5" emissive="#b8d8e8" emissiveIntensity={0.3} transparent opacity={0} roughness={0.3} depthWrite={false} />
+              </mesh>
+            )}
+          </group>
         ))}
 
         {/* Shard logos: one per large shard, each a different icon, with a

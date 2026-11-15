@@ -31,6 +31,8 @@ export default function ArchiveSlot() {
   // Enter: DREAM reached and the flood has settled
   useEffect(() => {
     if (mode !== "dream" || phase !== "off") return;
+    // Test hook (Playwright finish shots of the DREAM page): never in the UI
+    if (new URLSearchParams(window.location.search).get("noarchive") === "1") return;
     let raf = 0;
     const tick = () => {
       if (!crystalEvents.floodActive && useThemeStore.getState().mode === "dream") {
