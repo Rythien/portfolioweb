@@ -117,7 +117,7 @@ export default function SoundLayer() {
       if (!pad && enabled && target > 0) pad = createPad(ctx);
       if (pad) {
         pad.gain.gain.setTargetAtTime(target, ctx.currentTime, 0.3);
-        // DESCENT opens the filter with depth (0 when not playing)
+        // The Archive opens the filter with flight speed (0 elsewhere)
         pad.filter.frequency.setTargetAtTime(380 + getPadOpen() * 1600, ctx.currentTime, 0.5);
       }
     };

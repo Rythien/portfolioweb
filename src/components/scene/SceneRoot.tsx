@@ -8,7 +8,7 @@ import Compositor from "./Compositor";
 import CrystalCursor from "@/components/crystal/CrystalCursor";
 import { SITE_DATA } from "@/content/site";
 import { TimerClock, muteClockDeprecationUntilSwapped } from "./timerClock";
-import { useGameStore } from "@/store/useGameStore";
+import { useArchiveStore } from "@/store/useArchiveStore";
 
 // Armed before the Canvas builds its store; released in onCreated
 let restoreConsole: (() => void) | null =
@@ -85,16 +85,16 @@ export default function SceneRoot() {
   );
 
   const canvasRef = useRef<RootState | null>(null);
-  // DESCENT open: the scene stops rendering and is hidden (the marquee is
+  // Archive open: the scene stops rendering and is hidden (the marquee is
   // drawn inside this canvas, so hiding the canvas hides the marquee)
-  const gameOpen = useGameStore((s) => s.open);
+  const archiveOpen = useArchiveStore((s) => s.open);
 
-  // Pause rendering when the tab is hidden or the game is open
+  // Pause rendering when the tab is hidden or the Archive is open
   useEffect(() => {
     const apply = () => {
       const state = canvasRef.current;
       if (!state) return;
-      if (document.hidden || useGameStore.getState().open) {
+      if (document.hidden || useArchiveStore.getState().open) {
         state.setFrameloop("never");
       } else {
         state.setFrameloop(reducedMotion ? "demand" : "always");
@@ -103,7 +103,7 @@ export default function SceneRoot() {
     };
     apply();
     document.addEventListener("visibilitychange", apply);
-    const unsub = useGameStore.subscribe((s, prev) => {
+    const unsub = useArchiveStore.subscribe((s, prev) => {
       if (s.open !== prev.open) apply();
     });
     return () => {
@@ -118,7 +118,7 @@ export default function SceneRoot() {
     <div
       aria-hidden="true"
       className="fixed inset-0 z-0 pointer-events-none"
-      style={gameOpen ? { visibility: "hidden" } : undefined}
+      style={archiveOpen ? { visibility: "hidden" } : undefined}
     >
       <CrystalCursor />
       <Canvas
@@ -134,7 +134,7 @@ export default function SceneRoot() {
         frameloop={reducedMotion ? "demand" : "always"}
         onCreated={(state) => {
           canvasRef.current = state;
-          if (useGameStore.getState().open) state.setFrameloop("never");
+          if (useArchiveStore.getState().open) state.setFrameloop("never");
           // Frame timing on THREE.Timer instead of the deprecated Clock
           state.set({ clock: new TimerClock() as unknown as THREE.Clock });
           restoreConsole?.();

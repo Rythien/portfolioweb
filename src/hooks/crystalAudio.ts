@@ -114,9 +114,9 @@ export function playReassemble() {
   src.stop(now + 0.15);
 }
 
-/* ── DESCENT: the dream pad's filter opens with depth ─────────── */
+/* ── ARCHIVE: the dream pad's filter opens with flight speed ── */
 
-/** 0..1: how far the dream pad's filter opens (the game sets it by depth). */
+/** 0..1: how far the dream pad's filter opens (the Archive sets it by speed). */
 let _padOpen = 0;
 export function setPadOpen(v: number) {
   _padOpen = Math.max(0, Math.min(1, v));

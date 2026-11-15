@@ -9,8 +9,8 @@
     "lint": "eslint",
     "bake:crystal": "node scripts/bake-crystal.mjs",
     "gen:covers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-covers.mjs",
-    "test:descent": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/game/descent/engine.test.ts",
     "gen:crystal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-crystal.mjs",
+    "test:archive": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/archive/flight.test.ts",
     "test:crystal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/crystal/crystalGen.test.ts"
   },
   "dependencies": {
