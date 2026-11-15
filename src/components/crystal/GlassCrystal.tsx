@@ -230,7 +230,7 @@ const LOGO_LOOK = {
     side: "#3d3170",
     roughness: 0.3,
     metalness: 0.1,
-    envMapIntensity: 2.2,
+    envMapIntensity: 3.0,
     rim: "#c8b8ff",
   },
 } as const;
