@@ -87,6 +87,10 @@ const _swayEuler = new THREE.Euler();
 const _swayQ = new THREE.Quaternion();
 const _parentInvQ = new THREE.Quaternion();
 const _identityQ = new THREE.Quaternion();
+const _shardWorldQ = new THREE.Quaternion();
+const _faceQ = new THREE.Quaternion();
+const _wp = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -185,9 +189,9 @@ export function useCrystalData(seed = DEFAULT_SEED) {
  * Logo look. A logo reads by its silhouette plus its edge shading, so the
  * faces stay lit by the environment (low emissive: at 2.0 the WAKE logo
  * blew out into a flat grey disc) and the extrusion walls get a darker
- * material so the edge shows. DREAM may glow, never above 0.6. Shard
- * logos keep a faint ghost copy over the glass; the hero logo has none
- * (it flattened the shading). The rim is an inverted hull that keeps a
+ * material so the edge shows. DREAM may glow, never above 0.6. No
+ * ghost copies anywhere: the glass makes a logo readable, not an overlay.
+ * The rim is an inverted hull that keeps a
  * defined outline against the light page.
  */
 const LOGO_LOOK = {
@@ -199,7 +203,6 @@ const LOGO_LOOK = {
     roughness: 0.45,
     metalness: 0.0,
     envMapIntensity: 0.9,
-    ghost: "#9aa3b1",
     rim: "#6f7889",
   },
   dream: {
@@ -210,15 +213,11 @@ const LOGO_LOOK = {
     roughness: 0.3,
     metalness: 0.1,
     envMapIntensity: 2.2,
-    ghost: "#d9ccff",
     rim: "#c8b8ff",
   },
 } as const;
-/** Shard logos only; the intact hero logo has no ghost. */
-const GHOST_OPACITY = 0.1;
 const RIM_SCALE = 1.02;
 const RIM_OPACITY = 0.35;
-const GHOST_RENDER_ORDER = 10;
 /*
  * Shard logos are drawn over their shard, not refracted through it: seen
  * only through a small tumbling faceted shard, the WAKE logos smeared
@@ -234,7 +233,11 @@ const HERO_RIM_RENDER_ORDER = 1;
 /** Broken state: logos on the 5 largest shards only (fewer, bigger). */
 const SHARD_LOGO_COUNT = 5;
 /** Logo size as a fraction of its shard's smallest projected dimension. */
-const SHARD_LOGO_FILL = 0.75;
+const SHARD_LOGO_FILL = 0.45;
+/** Below this on-screen shard size a logo is noise: the shard carries none. */
+const SHARD_LOGO_MIN_PX = 70;
+/** Camera-facing, but never turned more than this from the shard itself. */
+const SHARD_LOGO_MAX_TURN = THREE.MathUtils.degToRad(35);
 /** Vertices sampled per shard to measure its projected silhouette. */
 const SHARD_SAMPLE = 192;
 const INCLUSION_COUNT = CRYSTAL_MATERIAL.slivers;
@@ -442,7 +445,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const heroLogoRef = useRef<THREE.Mesh>(null);
     const heroRimRef = useRef<THREE.Mesh>(null);
     const shardLogoRefs = useRef<(THREE.Mesh | null)[]>([]);
-    const shardGhostRefs = useRef<(THREE.Mesh | null)[]>([]);
+    /** Which shard logos are live; they are drawn only in the shard backdrop pass. */
+    const shardLogoOn = useRef<boolean[]>([]);
     const shardRimRefs = useRef<(THREE.Mesh | null)[]>([]);
     const shardMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
     const inclusionRef = useRef<THREE.InstancedMesh>(null);
@@ -478,7 +482,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           if (m) m.visible = false;
         }
         for (const l of shardLogoRefs.current) if (l) l.visible = false;
-        for (const g of shardGhostRefs.current) if (g) g.visible = false;
         for (const r of shardRimRefs.current) if (r) r.visible = false;
         return;
       }
@@ -612,28 +615,28 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           ? portalScene.background
           : null;
 
-      // Ghost layers (and the over-glass shard logos) sit on top of the
-      // glass; they must never be part of the backdrop the glass refracts
-      const ghosts = [
-        ...shardGhostRefs.current,
-        ...shardLogoRefs.current,
-        ...shardRimRefs.current,
-      ];
-      const ghostWasVisible = ghosts.map((g) => !!g?.visible);
-      const hideGhosts = () => ghosts.forEach((g) => { if (g) g.visible = false; });
-      const restoreGhosts = () =>
-        ghosts.forEach((g, i) => { if (g) g.visible = ghostWasVisible[i]; });
+      // Shard logos exist only inside the shard backdrop: the shard samples
+      // that buffer through its own silhouette, so a logo can never show
+      // where its shard is not. They stay hidden for every other render.
+      const setShardLogos = (show: boolean) => {
+        for (const slot of shardLogoSlots) {
+          const v = show && !!shardLogoOn.current[slot.rank];
+          const l = shardLogoRefs.current[slot.rank];
+          const r = shardRimRefs.current[slot.rank];
+          if (l) l.visible = v;
+          if (r) r.visible = v;
+        }
+      };
+      setShardLogos(false);
 
       // Render refraction backdrop for merged mesh
       if (mergedRef.current?.visible) {
         mergedRef.current.visible = false;
-        hideGhosts();
         state.gl.setRenderTarget(mergedFbo);
         if (sceneBg) state.gl.setClearColor(sceneBg, 1);
         state.gl.clear();
         state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
-        restoreGhosts();
         mergedRef.current.visible = true;
       }
 
@@ -643,13 +646,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           const m = shardMeshRefs.current[i];
           if (m) m.visible = false;
         }
-        hideGhosts();
+        setShardLogos(true);
         state.gl.setRenderTarget(shardFbo);
         if (sceneBg) state.gl.setClearColor(sceneBg, 1);
         state.gl.clear();
         state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
-        restoreGhosts();
+        setShardLogos(false);
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];
           if (m) m.visible = true;
@@ -731,24 +734,31 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         }
       }
 
-      // ── Shard logos: follow their shard's position, not its tumble.
-      // Each always faces the camera, is sized to 75% of its shard's
-      // smallest projected side (smoothed), and fades in as the shard
-      // separates; fully gone (alpha 0 at breakVal .15) before
-      // the intact crystal starts to reappear, so nothing is left behind
-      const logoAlpha = showShards && !assembled ? smoothstep(0.15, 0.4, breakVal) * fade : 0;
+      // ── Shard logos: sit at their shard's centre, turned toward the
+      // camera but clamped to 35° from the shard's own orientation (so they
+      // look embedded), sized to 45% of the shard's smallest projected side
+      // (smoothed), skipped when that side is under 70 px on screen, and
+      // faded with the break: hidden under 0.2, full at 0.5
+      const logoAlpha = showShards && !assembled ? smoothstep(0.2, 0.5, breakVal) * fade : 0;
+      const fovRad = THREE.MathUtils.degToRad((portalCamera as THREE.PerspectiveCamera).fov ?? 50);
+      const pxPerUnitAt = (dist: number) => state.size.height / (2 * Math.tan(fovRad / 2) * Math.max(0.1, dist));
+      const groupScale = heroLogoRef.current?.parent?.scale.x ?? 1;
       const parent = heroLogoRef.current?.parent ?? null;
       if (parent) _parentInvQ.copy(parent.quaternion).invert();
       else _parentInvQ.identity();
       for (const slot of shardLogoSlots) {
         const logo = shardLogoRefs.current[slot.rank];
-        const ghost = shardGhostRefs.current[slot.rank];
         const rim = shardRimRefs.current[slot.rank];
         const shardMesh = shardMeshRefs.current[slot.shard];
-        const on = logoAlpha > 0.001 && !!shardMesh;
-        if (logo) logo.visible = on;
-        if (ghost) ghost.visible = on;
-        if (rim) rim.visible = on;
+        let on = logoAlpha > 0.001 && !!shardMesh;
+        let short = 0;
+        if (on && shardMesh) {
+          short = projectedShortSide(slot.samples, shardMesh, parent ? parent.quaternion : _identityQ);
+          shardMesh.getWorldPosition(_wp);
+          const px = short * groupScale * pxPerUnitAt(portalCamera.position.z - _wp.z);
+          if (px < SHARD_LOGO_MIN_PX) on = false;
+        }
+        shardLogoOn.current[slot.rank] = on;
         if (!on || !logo || !shardMesh) continue;
 
         // Icons after the current hero logo, so a shard never repeats it
@@ -756,29 +766,30 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (geo && logo.geometry !== geo) logo.geometry = geo;
 
         logo.position.copy(shardMesh.position);
-        logo.quaternion.copy(_parentInvQ);
-        const target = SHARD_LOGO_FILL * projectedShortSide(slot.samples, shardMesh, parent ? parent.quaternion : _identityQ);
+        // World orientation: from the shard's own toward facing the camera
+        // (identity), at most SHARD_LOGO_MAX_TURN away from the shard
+        _shardWorldQ.multiplyQuaternions(parent ? parent.quaternion : _identityQ, shardMesh.quaternion);
+        const turn = _shardWorldQ.angleTo(_identityQ);
+        _faceQ.copy(_shardWorldQ).slerp(_identityQ, turn > SHARD_LOGO_MAX_TURN ? SHARD_LOGO_MAX_TURN / turn : 1);
+        logo.quaternion.multiplyQuaternions(_parentInvQ, _faceQ);
+        const target = SHARD_LOGO_FILL * short;
         const sizes = shardLogoSize.current;
         sizes[slot.rank] = sizes[slot.rank] === undefined
           ? target
           : sizes[slot.rank] + (target - sizes[slot.rank]) * (1 - Math.exp(-3 * delta));
         logo.scale.setScalar(Math.max(1e-4, sizes[slot.rank]));
-        setOpacity(logo, logoAlpha);
-
-        if (ghost) {
-          if (ghost.geometry !== logo.geometry) ghost.geometry = logo.geometry;
-          ghost.position.copy(logo.position);
-          ghost.quaternion.copy(logo.quaternion);
-          ghost.scale.copy(logo.scale);
-          (ghost.material as THREE.MeshBasicMaterial).opacity = GHOST_OPACITY * logoAlpha;
-        }
+        // Turned well away from the camera (the clamp can leave it near
+        // edge-on), a logo is a dark sliver: fade it with its facing
+        const facing = _fwd.set(0, 0, 1).applyQuaternion(_faceQ).z;
+        const logoK = logoAlpha * smoothstep(0.45, 0.8, facing);
+        setOpacity(logo, logoK);
 
         if (rim) {
           if (rim.geometry !== logo.geometry) rim.geometry = logo.geometry;
           rim.position.copy(logo.position);
           rim.quaternion.copy(logo.quaternion);
           rim.scale.copy(logo.scale).multiplyScalar(RIM_SCALE);
-          (rim.material as THREE.MeshBasicMaterial).opacity = RIM_OPACITY * logoAlpha;
+          (rim.material as THREE.MeshBasicMaterial).opacity = RIM_OPACITY * logoK;
         }
       }
     });
@@ -882,7 +893,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             <MeshTransmissionMaterial
               {...glass}
               buffer={shardFbo.texture}
-              thickness={thicknessFor(shard.size)}
+              thickness={thicknessFor(shard.size, true)}
               resolution={CRYSTAL_MATERIAL.resolution.shard}
             />
           </mesh>
@@ -907,8 +918,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           </group>
         ))}
 
-        {/* Shard logos: one per large shard (5), each a different icon, with
-            a faint ghost copy over the glass */}
+        {/* Shard logos: one per large shard (5), each a different icon. Drawn
+            only into the shard backdrop, so they are seen through the ice */}
         {unitLogos[0] &&
           shardLogoSlots.map((slot) => (
             <group key={`slot-${slot.rank}`}>
@@ -924,7 +935,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
                   side={THREE.BackSide}
                   transparent
                   opacity={0}
-                  depthTest={false}
                   depthWrite={false}
                 />
               </mesh>
@@ -945,7 +955,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
                   envMapIntensity={logoLook.envMapIntensity}
                   transparent
                   opacity={0}
-                  depthTest={false}
                   depthWrite={false}
                 />
                 <meshStandardMaterial
@@ -958,22 +967,6 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
                   envMapIntensity={logoLook.envMapIntensity}
                   transparent
                   opacity={0}
-                  depthTest={false}
-                  depthWrite={false}
-                />
-              </mesh>
-              <mesh
-                ref={(el) => { shardGhostRefs.current[slot.rank] = el; }}
-                geometry={unitLogos[0].geometry}
-                renderOrder={GHOST_RENDER_ORDER}
-                frustumCulled={false}
-                visible={false}
-              >
-                <meshBasicMaterial
-                  color={logoLook.ghost}
-                  transparent
-                  opacity={0}
-                  depthTest={false}
                   depthWrite={false}
                 />
               </mesh>

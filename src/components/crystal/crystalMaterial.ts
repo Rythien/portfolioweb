@@ -16,6 +16,9 @@ export const CRYSTAL_MATERIAL = {
   ior: 1.35,
   /** Thickness per world unit of the mesh's largest side. */
   thicknessRatio: 0.45 / TARGET_SIZE,
+  /** Shards are optically thinner (thickness is the one value they may
+   * change): at full ratio their refraction smeared the logo inside. */
+  shardThicknessScale: 0.35,
   /** Ice disperses far less than a prism. */
   chromaticAberration: 0.045,
   anisotropicBlur: 0.1,
@@ -54,8 +57,8 @@ export const CRYSTAL_MATERIAL = {
   },
 } as const;
 
-export function thicknessFor(meshSize: number): number {
-  return CRYSTAL_MATERIAL.thicknessRatio * meshSize;
+export function thicknessFor(meshSize: number, shard = false): number {
+  return CRYSTAL_MATERIAL.thicknessRatio * meshSize * (shard ? CRYSTAL_MATERIAL.shardThicknessScale : 1);
 }
 
 /* ── Shared textures (built once, same objects everywhere) ─────── */
