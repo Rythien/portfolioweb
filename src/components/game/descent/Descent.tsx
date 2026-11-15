@@ -77,8 +77,18 @@ export default function Descent({ onExit }: DescentProps) {
     if (!canvas) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const view: View = createView(canvas, size.w, size.h, reducedMotion);
-    const game: GameState = createGame({ seed: (Date.now() >>> 0) ^ 0x9e3779b9, viewH: size.h, reducedMotion });
+    // Test hooks, only behind URL params (Playwright checks); never in the UI
+    const params = new URLSearchParams(window.location.search);
+    const debug = params.get("descentdebug") === "1";
+    const game: GameState = createGame({
+      seed: debug && params.get("descentseed") ? Number(params.get("descentseed")) : (Date.now() >>> 0) ^ 0x9e3779b9,
+      viewH: size.h,
+      reducedMotion,
+      invulnerable: debug && params.get("descentgod") === "1",
+      startDepth: debug ? Number(params.get("descentstart") || 0) : 0,
+    });
     const input: Input = { steer: 0, targetX: null, dash: false };
+    if (debug) (window as unknown as { __descent?: unknown }).__descent = { game, input };
 
     let raf = 0;
     let last = performance.now();

@@ -8,9 +8,16 @@
  */
 
 import {
+  bandAt,
+  bandName,
+  BAND_NAMES,
   buildRow,
   hitsShard,
   passInterval,
+  placeGap,
+  isReachable,
+  GAP_FORGIVE,
+  spawnParams,
   ICE_THICKNESS,
   type Drift,
   type Pickup,
@@ -19,7 +26,10 @@ import {
 } from "./entities.ts";
 
 export const STEP = 1 / 120;
-export const PX_PER_METRE = 10;
+// Hand-tuned from the brief's 10: at 10 px/m the gem fell 82 m/s, every
+// band lasted ~3 s and difficulty maxed out 18 s in. The pixel physics
+// are unchanged; only the metre is longer (20.5 m/s at terminal).
+export const PX_PER_METRE = 40;
 export const WORLD_W = 320;
 
 /**
@@ -83,6 +93,8 @@ export interface GameConfig {
   reducedMotion: boolean;
   /** Test hook: no damage. Never set by the shipped UI. */
   invulnerable?: boolean;
+  /** Test hook: begin this many metres down. */
+  startDepth?: number;
 }
 
 export type GameEvent =
@@ -98,7 +110,8 @@ export type GameEvent =
   | { type: "mote"; x: number; y: number }
   | { type: "life"; x: number; y: number; lives: number }
   | { type: "combo"; combo: number; mult: number }
-  | { type: "dead"; score: number; depth: number };
+  | { type: "dead"; score: number; depth: number }
+  | { type: "band"; band: number; name: string };
 
 export interface Gem {
   x: number;
@@ -152,20 +165,17 @@ export interface GameState {
   /** Depth (m) at which the next extra life may appear. */
   nextLifeAt: number;
   lastRowHadLife: boolean;
+  /** Pass interval and y of the last spawned row (for reachability). */
+  lastPass: [number, number] | null;
+  lastRowY: number | null;
+  band: number;
   events: GameEvent[];
   over: boolean;
 }
 
-/** Spawn parameters; section 4 derives these from depth. */
-export interface SpawnParams {
-  interval: number;
-  gapFrac: number;
-  thickShare: number;
-  driftSpeed: number;
-}
-
-export function spawnParams(_depth: number): SpawnParams {
-  return { interval: 1.4, gapFrac: 0.42, thickShare: 0.1, driftSpeed: 15 };
+/** What the reachability guarantee assumes about the player. */
+export function reachModel(s: GameState) {
+  return { accel: TUNING.steerAccel, maxV: TUNING.maxVx, fallSpeed: s.speeds.terminal };
 }
 
 /** Mulberry32: small, fast, deterministic. */
@@ -191,7 +201,8 @@ export function createGame(cfg: GameConfig): GameState {
     start: TUNING.startSpeed * k,
     dash: TUNING.dashSpeed * k,
   };
-  const gem: Gem = { x: WORLD_W / 2, y: 0, vx: 0, vy: speeds.start, r: 5 };
+  const startM = Math.max(0, cfg.startDepth ?? 0);
+  const gem: Gem = { x: WORLD_W / 2, y: startM * PX_PER_METRE, vx: 0, vy: speeds.start, r: 5 };
   const camY = gem.y - cfg.viewH * GEM_SCREEN_FRAC;
   return {
     cfg,
@@ -208,7 +219,7 @@ export function createGame(cfg: GameConfig): GameState {
     dashInvuln: 0,
     squash: { t: 0, side: 0 },
     speeds,
-    depth: 0,
+    depth: startM,
     score: 0,
     lives: TUNING.lives,
     combo: 0,
@@ -221,9 +232,12 @@ export function createGame(cfg: GameConfig): GameState {
     // First row a little under a screen below, so the opening is calm
     nextRowY: gem.y + cfg.viewH * 0.9,
     nextId: 1,
-    nextLifeAt: TUNING.lifeEvery,
+    nextLifeAt: startM + TUNING.lifeEvery,
     lastRowHadLife: false,
-    events: [{ type: "start" }],
+    lastPass: null,
+    lastRowY: null,
+    band: bandAt(startM),
+    events: [{ type: "start" }, { type: "band", band: bandAt(startM), name: bandName(bandAt(startM)) }],
     over: false,
   };
 }
@@ -235,9 +249,21 @@ function spawnRow(s: GameState): void {
   const rng = s.rng;
   const kind: RowKind = rng() < p.thickShare ? "shards" : "ice";
   const gapW = p.gapFrac * WORLD_W;
-  const gapX = gapW / 2 + rng() * (WORLD_W - gapW);
   const y = s.nextRowY;
-  s.rows.push(buildRow(rng, { id: s.nextId++, y, kind, gapX, gapW, worldW: WORLD_W }));
+  const spacing0 = s.lastRowY === null ? Infinity : y - s.lastRowY;
+  // Every row is reachable from the last one: placeGap clamps the gap,
+  // then the result is checked, not assumed
+  const model = reachModel(s);
+  let gapX = placeGap(gapW / 2 + rng() * (WORLD_W - gapW), gapW, s.lastPass, spacing0, model, WORLD_W, s.gem.r);
+  const m = s.gem.r * (1 - GAP_FORGIVE);
+  const pass: [number, number] = [gapX - gapW / 2 + m, gapX + gapW / 2 - m];
+  if (s.lastPass && !isReachable(s.lastPass, pass, spacing0, model)) {
+    gapX = Math.max(gapW / 2, Math.min(WORLD_W - gapW / 2, (s.lastPass[0] + s.lastPass[1]) / 2));
+  }
+  const row = buildRow(rng, { id: s.nextId++, y, kind, gapX, gapW, worldW: WORLD_W });
+  s.rows.push(row);
+  s.lastPass = passInterval(row, s.gem.r);
+  s.lastRowY = y;
 
   // Pickups ride in the gap, a little above the row
   let hadLife = false;
@@ -463,6 +489,12 @@ export function step(s: GameState, input: Input, dt: number = STEP): void {
   const newDepth = Math.max(s.depth, g.y / PX_PER_METRE);
   s.score += (newDepth - s.depth) * comboMultiplier(s.combo);
   s.depth = newDepth;
+  const band = bandAt(s.depth);
+  if (band > s.band) {
+    s.band = band;
+    // Named bands end at the difficulty cap; no repeats past it
+    if (band < BAND_NAMES.length) s.events.push({ type: "band", band, name: bandName(band) });
+  }
 }
 
 /** Drain queued events (audio, particles, aria-live). */

@@ -4,8 +4,9 @@
  * canvas with image smoothing off, so pixels stay hard at any size.
  */
 import { WORLD_W, TUNING, type GameEvent, type GameState } from "./engine.ts";
-import { ICE_THICKNESS, type Shard } from "./entities.ts";
-import { PALETTE, hexToRgb } from "./palette.ts";
+import { ICE_THICKNESS, DIFFICULTY_CAP_METRES, type Shard } from "./entities.ts";
+import { PALETTE, BAND_TINTS, hexToRgb, mixHex } from "./palette.ts";
+import { drawText, textWidth } from "./font.ts";
 
 interface Particle {
   x: number;
@@ -30,6 +31,10 @@ export interface View {
   /** Recent interpolated gem positions while dashing (world space). */
   trail: { x: number; y: number }[];
   particles: Particle[];
+  /** Band tint shown, easing toward the current band's (0..n float). */
+  bandShown: number;
+  /** Band name banner: elapsed seconds, or -1 when hidden. */
+  banner: { name: string; t: number };
   /** Cosmetic randomness (shake, chip spread); never touches the sim. */
   rand: () => number;
 }
@@ -53,7 +58,12 @@ export function createView(display: HTMLCanvasElement, w: number, h: number, red
     seed ^= seed << 5;
     return ((seed >>> 0) % 100000) / 100000;
   };
-  return { display, dctx, buf, ctx, w, h, reducedMotion, trail: [], particles: [], rand };
+  return {
+    display, dctx, buf, ctx, w, h, reducedMotion,
+    trail: [], particles: [], rand,
+    bandShown: 0,
+    banner: { name: "", t: -1 },
+  };
 }
 
 /** Size the display backing store to its CSS box at device pixels. */
@@ -206,6 +216,8 @@ export function applyEvents(v: View, events: GameEvent[]): void {
       burst(v, e.x, e.y, 6, 4, [PALETTE.glow, PALETTE.highlight], 0.5);
     } else if (e.type === "life") {
       burst(v, e.x, e.y, 10, 6, [PALETTE.highlight, PALETTE.glow, PALETTE.ice], 0.7);
+    } else if (e.type === "band") {
+      v.banner = { name: e.name, t: 0 };
     }
   }
 }
@@ -323,6 +335,70 @@ function drawPickups(v: View, s: GameState, camY: number): void {
   }
 }
 
+/* ── Background and band banner ──────────────────────────── */
+
+function bandTint(band: number): string {
+  const i = Math.max(0, Math.min(BAND_TINTS.length - 1, band));
+  const a = BAND_TINTS[Math.floor(i)];
+  const b = BAND_TINTS[Math.min(BAND_TINTS.length - 1, Math.floor(i) + 1)];
+  return mixHex(a, b, i - Math.floor(i));
+}
+
+/** Vertical gradient: shifts per band, darkens with depth. */
+function drawBackground(v: View, s: GameState, dt: number): void {
+  const { ctx, w, h } = v;
+  // Ease the band tint over about a second
+  v.bandShown += (s.band - v.bandShown) * (1 - Math.exp(-3 * dt));
+  const d = Math.min(1, s.depth / DIFFICULTY_CAP_METRES);
+  const top = mixHex(PALETTE.bgTop, PALETTE.bgDeep, d * 0.8);
+  const bottom = mixHex(bandTint(v.bandShown), PALETTE.bgDeep, d * 0.5);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, top);
+  g.addColorStop(1, bottom);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+}
+
+const BANNER_IN = 0.3;
+const BANNER_HOLD = 1.4;
+const BANNER_OUT = 0.2;
+
+/** Band name: enters decelerating, holds, leaves faster than it came. */
+function drawBanner(v: View, dt: number): void {
+  const b = v.banner;
+  if (b.t < 0) return;
+  b.t += dt;
+  const total = BANNER_IN + BANNER_HOLD + BANNER_OUT;
+  if (b.t >= total) {
+    b.t = -1;
+    return;
+  }
+  let a = 1;
+  let dy = 0;
+  if (b.t < BANNER_IN) {
+    const k = b.t / BANNER_IN;
+    const e = 1 - (1 - k) ** 3;
+    a = e;
+    dy = v.reducedMotion ? 0 : Math.round((1 - e) * -4);
+  } else if (b.t > BANNER_IN + BANNER_HOLD) {
+    const k = (b.t - BANNER_IN - BANNER_HOLD) / BANNER_OUT;
+    a = 1 - k * k;
+    dy = v.reducedMotion ? 0 : Math.round(k * k * -3);
+  }
+  const { ctx, w, h } = v;
+  const scale = 2;
+  const tw = textWidth(b.name, scale, 1);
+  const x = Math.round((w - tw) / 2);
+  const y = Math.round(h * 0.56) + dy;
+  ctx.globalAlpha = a;
+  // Hairlines either side, like a depth marker on a chart
+  ctx.fillStyle = PALETTE.glow;
+  ctx.fillRect(x - 14, y + 4, 9, 1);
+  ctx.fillRect(x + tw + 5, y + 4, 9, 1);
+  drawText(ctx, b.name, x, y, PALETTE.highlight, scale, 1);
+  ctx.globalAlpha = 1;
+}
+
 /* ── Frame ─────────────────────────────────────────────────── */
 
 export function renderFrame(v: View, s: GameState, alpha: number, dt: number): void {
@@ -336,11 +412,7 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number): v
     camY += Math.round((v.rand() - 0.5) * 2 * amp);
   }
 
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, PALETTE.bgTop);
-  g.addColorStop(1, PALETTE.bgBottom);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
+  drawBackground(v, s, dt);
 
   ctx.save();
   ctx.translate(shakeX, 0);
@@ -357,6 +429,8 @@ export function renderFrame(v: View, s: GameState, alpha: number, dt: number): v
   if (!hidden && !s.over) drawGem(ctx, s, gx, gy);
   drawCooldownRing(ctx, s, gx, gy);
   ctx.restore();
+
+  drawBanner(v, dt);
 
   if (s.flash > 0) {
     ctx.globalAlpha = 0.28 * (s.flash / TUNING.flashTime);

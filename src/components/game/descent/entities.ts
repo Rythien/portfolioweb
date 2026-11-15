@@ -138,3 +138,117 @@ export function hitsShard(sh: Shard, x: number, y: number, r: number): boolean {
   const dy = (y - sh.y) / (sh.h / 2 + r * SHARD_GROW);
   return dx * dx + dy * dy < 1;
 }
+
+/* ── Difficulty ───────────────────────────────────────────── */
+
+export const BAND_METRES = 250;
+/** Difficulty stops rising here so a good run stays playable. */
+export const DIFFICULTY_CAP_METRES = 1500;
+export const BAND_NAMES = [
+  "THE SHALLOWS",
+  "COLD LAYER",
+  "THE DEEP",
+  "NO LIGHT",
+  "PRESSURE",
+  "BEDROCK",
+  "THE FLOOR",
+] as const;
+
+export function bandAt(depthM: number): number {
+  return Math.max(0, Math.floor(depthM / BAND_METRES));
+}
+
+export function bandName(band: number): string {
+  return BAND_NAMES[Math.min(band, BAND_NAMES.length - 1)];
+}
+
+export interface SpawnParams {
+  /** Seconds between rows at the current fall speed. */
+  interval: number;
+  /** Gap width as a fraction of the play width. */
+  gapFrac: number;
+  /** Chance a row is thick shards instead of thin ice. */
+  thickShare: number;
+  driftSpeed: number;
+}
+
+/** Stepped per band, clamped at DIFFICULTY_CAP_METRES. */
+export function spawnParams(depthM: number): SpawnParams {
+  const maxBand = DIFFICULTY_CAP_METRES / BAND_METRES;
+  const t = Math.min(bandAt(depthM), maxBand) / maxBand;
+  const lerp = (a: number, b: number) => a + (b - a) * t;
+  return {
+    // Hand-tuned from 1.4 s: at terminal that put rows two screens apart
+    // and half the opening frames were empty. 1.15 s still never shows
+    // more than one row ahead in the first band.
+    interval: lerp(1.15, 0.55),
+    gapFrac: lerp(0.42, 0.18),
+    thickShare: lerp(0.1, 0.45),
+    driftSpeed: lerp(15, 70),
+  };
+}
+
+/* ── Reachability ─────────────────────────────────────────── */
+
+/** Seconds of the gap-to-gap time spent seeing and reacting. */
+export const REACTION_S = 0.15;
+
+/**
+ * Furthest sideways distance (px) in time t from a standstill, under
+ * the steering acceleration and speed cap.
+ */
+export function reachDistance(t: number, accel: number, maxV: number): number {
+  if (t <= 0) return 0;
+  const t1 = maxV / accel;
+  if (t <= t1) return 0.5 * accel * t * t;
+  return 0.5 * accel * t1 * t1 + maxV * (t - t1);
+}
+
+export interface ReachModel {
+  accel: number;
+  maxV: number;
+  /** Fastest the gem falls between rows without choosing to dash. */
+  fallSpeed: number;
+}
+
+/** Sideways reach between two rows `spacing` px apart. */
+export function reachBetween(spacing: number, m: ReachModel): number {
+  return reachDistance(spacing / m.fallSpeed - REACTION_S, m.accel, m.maxV);
+}
+
+/**
+ * True when a gem that passed anywhere through `prev` can make it into
+ * `next` (both pass intervals of gem centres) before reaching it.
+ */
+export function isReachable(prev: [number, number], next: [number, number], spacing: number, m: ReachModel): boolean {
+  const r = reachBetween(spacing, m);
+  // Worst case: passed prev at its far edge from next
+  const worst = Math.max(next[0] - prev[1], prev[0] - next[1], 0);
+  return worst <= r + 1e-6;
+}
+
+/**
+ * Clamp a proposed gap centre so the next row is reachable from the
+ * previous one. Pure: the engine and the tests share it.
+ */
+export function placeGap(
+  proposedX: number,
+  gapW: number,
+  prevPass: [number, number] | null,
+  spacing: number,
+  m: ReachModel,
+  worldW: number,
+  gemR: number,
+): number {
+  const half = gapW / 2;
+  let x = Math.max(half, Math.min(worldW - half, proposedX));
+  if (!prevPass) return x;
+  const r = reachBetween(spacing, m);
+  const m2 = gemR * (1 - GAP_FORGIVE);
+  // next pass interval = [x - half + m2, x + half - m2] must overlap
+  // [prev[0] - r, prev[1] + r], with a pixel to spare
+  const lo = prevPass[0] - r - (half - m2) + 1;
+  const hi = prevPass[1] + r + (half - m2) - 1;
+  x = Math.max(lo, Math.min(hi, x));
+  return Math.max(half, Math.min(worldW - half, x));
+}
