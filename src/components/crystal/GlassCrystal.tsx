@@ -212,10 +212,13 @@ export function useCrystalData(seed = DEFAULT_SEED) {
  */
 const LOGO_LOOK = {
   wake: {
-    color: "#6c7482",
-    emissive: "#5d6472",
-    emissiveIntensity: 0.15,
-    side: "#262a31",
+    // Mid-grey metal (around #8d96a4): with the marquee veiled behind the
+    // glass the logo no longer has to out-dark black type. Emissive stays
+    // low or the face lifts into the ice's own lightness.
+    color: "#87909e",
+    emissive: "#7a8391",
+    emissiveIntensity: 0.04,
+    side: "#3a404a",
     roughness: 0.45,
     metalness: 0.0,
     envMapIntensity: 0.9,

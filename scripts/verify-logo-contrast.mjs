@@ -5,11 +5,12 @@
 // Logo footprint = where the two frames differ, morphologically closed so
 // pixels inside the logo that happen to match the glass still count
 // against it. Passes when, in WAKE and DREAM:
-//   - mean per-pixel |L*(logo) - L*(glass behind)| >= 25 over the footprint
+//   - mean per-pixel |L*(logo) - L*(glass behind)| >= 30 over the footprint
 //     (per pixel, because the glass behind holds both black marquee type
 //     and pale ice, and a signed mean would cancel)
 //   - the logo is not flat: L* spread (p90 - p10) across its face >= 12
-// Usage: node scripts/verify-logo-contrast.mjs [freezeSeconds=2]
+// Usage: node scripts/verify-logo-contrast.mjs [freezeSeconds,...=0,2,4,6,8]
+// Every pose (freeze time) must pass in both modes.
 import { firefox } from "playwright";
 import sharp from "sharp";
 import { resolve, dirname } from "path";
@@ -17,9 +18,9 @@ import { fileURLToPath } from "url";
 
 const shots = resolve(dirname(fileURLToPath(import.meta.url)), "..", "shots");
 const BASE = process.env.BASE ?? "http://localhost:3000";
-const freeze = process.argv[2] ?? "2";
+const freezes = (process.argv[2] ?? "0,2,4,6,8").split(",");
 const CLIP = { x: 470, y: 110, width: 780, height: 680 };
-const MIN_DL = 25;
+const MIN_DL = 30;
 const MIN_SPREAD = 12;
 
 const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -58,14 +59,14 @@ const browser = await firefox.launch({
 });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 let fails = 0;
-for (const mode of ["wake", "dream"]) {
+for (const freeze of freezes) for (const mode of ["wake", "dream"]) {
   const files = {};
   for (const logo of ["on", "off"]) {
     const page = await ctx.newPage();
     const q = `nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}${logo === "off" ? "&crystallogo=0" : ""}`;
     await page.goto(`${BASE}/?${q}`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(9000);
-    files[logo] = resolve(shots, `logo-contrast-${mode}-${logo}.png`);
+    files[logo] = resolve(shots, `logo-contrast-${mode}-${freeze}-${logo}.png`);
     await page.screenshot({ path: files[logo], clip: CLIP });
     await page.close();
   }
@@ -88,7 +89,7 @@ for (const mode of ["wake", "dream"]) {
   const ok = n > 2000 && meanD >= MIN_DL && spread >= MIN_SPREAD;
   if (!ok) fails++;
   console.log(
-    `${ok ? "PASS" : "FAIL"}  ${mode.toUpperCase()}: ${n} logo px, mean |L* logo - glass| = ${meanD.toFixed(1)} (need >= ${MIN_DL}), ` +
+    `${ok ? "PASS" : "FAIL"}  ${mode.toUpperCase()} @${freeze}s: ${n} logo px, mean |L* logo - glass| = ${meanD.toFixed(1)} (need >= ${MIN_DL}), ` +
       `L* across face p10 ${pct(logoL, 0.1)?.toFixed(1)} / p50 ${pct(logoL, 0.5)?.toFixed(1)} / p90 ${pct(logoL, 0.9)?.toFixed(1)}, spread ${spread.toFixed(1)} (need >= ${MIN_SPREAD})`,
   );
 }

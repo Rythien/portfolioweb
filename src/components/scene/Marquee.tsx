@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { getSectionProgress, useScrollStore } from "@/store/useScrollStore";
+import { patchVeilMaterial, updateVeil } from "./marqueeVeil";
 
 const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("crystalfreeze");
 
@@ -32,7 +33,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
   const offsetRef = useRef(0);
   const tileWidthRef = useRef(0);
   const dampState = useRef({ vel: 0 });
-  const { size } = useThree();
+  const { size, camera } = useThree();
 
   const visHeight = 2 * CAM_TO_TEXT * Math.tan(FBO_HALF_FOV_RAD);
   const visWidth = visHeight * (size.width / size.height);
@@ -78,6 +79,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
   }, [visWidth]);
 
   useFrame((_, delta) => {
+    updateVeil(camera, reducedMotion);
     if (!groupRef.current) return;
 
     const heroP = getSectionProgress("top");
@@ -142,14 +144,9 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
           color={color}
           anchorX="center"
           anchorY="middle"
-          onSync={(troika: any) => {
-            if (troika.material) {
-              troika.material.transparent = false;
-              troika.material.alphaTest = 0.5;
-            }
-          }}
         >
           {SITE_DATA.hero.headlineLine1}
+          <meshBasicMaterial ref={patchVeilMaterial} transparent />
         </Text>
       </group>
     );
@@ -170,6 +167,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
           onSync={i === 0 ? measureTile : undefined}
         >
           {HEADLINE_TILE}
+          <meshBasicMaterial ref={patchVeilMaterial} transparent />
         </Text>
       ))}
     </group>

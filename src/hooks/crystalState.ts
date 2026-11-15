@@ -50,7 +50,7 @@ const PARK_SCALE = 0.6;
 /** Below this the parked crystal is too small to bother: it fades out. */
 const PARK_SCALE_MIN = 0.4;
 /** Visible silhouette radius at scale 1 (the rock's R is 1.4 at its spikes). */
-const CRYSTAL_VISIBLE_R = 1.25;
+export const CRYSTAL_VISIBLE_R = 1.25;
 /** Clearance from the copy column, and from the viewport edge. */
 const PARK_GAP_PX = 24;
 const PARK_EDGE_PX = 16;
