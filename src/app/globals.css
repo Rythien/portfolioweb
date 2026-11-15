@@ -550,3 +550,18 @@ html.archive-open body.has-custom-cursor .archive-root button {
 html.archive-open body.has-custom-cursor .archive-root canvas {
   cursor: crosshair !important;
 }
+
+/* THE ARCHIVE: the HUD steps aside for the ending, and the chrome turns
+   dark ink on the lifted, pale violet fog */
+.archive-root .archive-hud-item {
+  transition: opacity 600ms ease-out;
+}
+.archive-root[data-ending="1"] .archive-hud-item {
+  opacity: 0 !important;
+}
+.archive-root[data-ending="1"] .archive-chrome {
+  color: #1d0f45;
+  border-color: rgb(29 15 69 / 0.35);
+  background-color: rgb(255 255 255 / 0.25);
+  transition: color 1.2s ease-out, border-color 1.2s ease-out, background-color 1.2s ease-out;
+}

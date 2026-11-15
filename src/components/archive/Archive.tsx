@@ -27,7 +27,6 @@ interface ArchiveProps {
   onWake: (origin: { x: number; y: number }, opts?: { to?: "contact" }) => void;
 }
 
-const HINT_KEY = "archive-hint-seen";
 
 /**
  * Runs once when the Archive mounts warm and hidden: compiles every
@@ -114,13 +113,8 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
   useEffect(() => {
     helpRef.current = help;
   }, [help]);
-  const [hint, setHint] = useState(() => {
-    try {
-      return sessionStorage.getItem(HINT_KEY) !== "1";
-    } catch {
-      return true;
-    }
-  });
+  // The one-line hint: first visit only (saved with the Archive progress)
+  const [hint, setHint] = useState(() => !useArchiveProgress.getState().hintSeen);
   const wakeFn = useRef(onWake);
   useEffect(() => {
     wakeFn.current = onWake;
@@ -198,9 +192,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
       if (!t) t = performance.now();
       if (performance.now() - t > 3500) {
         setHint(false);
-        try {
-          sessionStorage.setItem(HINT_KEY, "1");
-        } catch {}
+        useArchiveProgress.getState().seeHint();
       }
     }, 250);
     return () => window.clearInterval(id);
@@ -298,19 +290,45 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
             strokeWidth="0.8"
             style={{ opacity: 0, transition: "opacity 250ms ease-out", filter: "drop-shadow(0 0 3px #ffd98a)" }}
           />
+        </svg>
+      </div>
+
+      {/* Progress, top centre */}
+      <p
+        aria-live="polite"
+        className="archive-count archive-hud-item pointer-events-none absolute left-1/2 top-[max(1.4rem,calc(env(safe-area-inset-top)+0.9rem))] -translate-x-1/2 whitespace-nowrap font-mono text-label uppercase tracking-[0.2em] text-white/80"
+      >
+        Projects recovered <span ref={(el) => { hudRef.current.count = el; }} className="tabular-nums text-white">{initialGame.seals.filter((s) => s.freed).length}</span> / 3
+      </p>
+
+      {/* Charge, bottom left: one diamond per mote, then PULSE READY */}
+      <div
+        ref={(el) => { hudRef.current.motes = el; }}
+        aria-hidden="true"
+        className="archive-hud-item pointer-events-none absolute bottom-[max(1.6rem,calc(env(safe-area-inset-bottom)+1.1rem))] left-[max(1.25rem,env(safe-area-inset-left))] flex items-center gap-3 font-mono text-label uppercase tracking-[0.2em]"
+      >
+        <svg viewBox="0 0 46 14" className="h-3.5 w-[2.9rem] overflow-visible">
           {[0, 1, 2].map((i) => (
             <path
               key={i}
-              ref={(el) => { hudRef.current.charge[i] = el; }}
-              d={arc(12, -90 + i * 120 + 9, -90 + (i + 1) * 120 - 9)}
+              ref={(el) => { hudRef.current.diamonds[i] = el; }}
+              d={`M ${7 + i * 16} 1 L ${13 + i * 16} 7 L ${7 + i * 16} 13 L ${1 + i * 16} 7 Z`}
               stroke="#fff3c4"
-              strokeWidth="2"
-              strokeLinecap="round"
-              fill="none"
-              style={{ opacity: 0.22, transition: "opacity 200ms ease-out" }}
+              strokeWidth="1.2"
+              strokeLinejoin="round"
+              fill="#fff3c4"
+              fillOpacity="0"
+              style={{ transition: "fill-opacity 200ms ease-out" }}
             />
           ))}
         </svg>
+        <span
+          ref={(el) => { hudRef.current.readyLabel = el; }}
+          className="text-[#ffe2a0]"
+          style={{ opacity: 0, transition: "opacity 250ms ease-out", textShadow: "0 0 8px rgba(255,217,138,0.6)" }}
+        >
+          Pulse ready
+        </span>
       </div>
 
       <button
@@ -318,7 +336,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         type="button"
         onClick={wakeFromButton}
         aria-label="Wake: return to the portfolio"
-        className="pressable absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] min-h-11 rounded-full border border-white/25 bg-white/5 px-4 font-mono text-label uppercase tracking-[0.16em] text-white/85 backdrop-blur-md transition-colors hover:border-white/60 hover:text-white focus-visible:outline-offset-4"
+        className="archive-chrome pressable absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] min-h-11 rounded-full border border-white/25 bg-white/5 px-4 font-mono text-label uppercase tracking-[0.16em] text-white/85 backdrop-blur-md transition-colors hover:border-white/60 hover:text-white focus-visible:outline-offset-4"
       >
         Wake
       </button>
@@ -335,7 +353,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
       {hint && (
         <p
           aria-hidden="true"
-          className="archive-hint pointer-events-none absolute bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))] left-1/2 -translate-x-1/2 whitespace-nowrap text-center font-mono text-label uppercase tracking-[0.2em] text-white/70"
+          className="archive-hint archive-hud-item pointer-events-none absolute bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))] left-1/2 -translate-x-1/2 whitespace-nowrap text-center font-mono text-label uppercase tracking-[0.2em] text-white/70"
         >
           Drift toward the light
         </p>
@@ -373,7 +391,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
           aria-expanded={help}
           aria-controls="archive-controls"
           aria-label={help ? "Hide controls" : "Show controls"}
-          className="pressable grid size-11 place-items-center rounded-full border border-white/25 bg-white/5 font-mono text-label text-white/85 backdrop-blur-md transition-colors hover:border-white/60 hover:text-white focus-visible:outline-offset-4"
+          className="archive-chrome pressable grid size-11 place-items-center rounded-full border border-white/25 bg-white/5 font-mono text-label text-white/85 backdrop-blur-md transition-colors hover:border-white/60 hover:text-white focus-visible:outline-offset-4"
         >
           ?
         </button>

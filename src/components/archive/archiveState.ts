@@ -67,8 +67,6 @@ export function sealProgress(s: SealState): number {
 export interface HudEls {
   /** Compass arc group: rotated toward the nearest unfreed seal. */
   compass: SVGGElement | null;
-  /** Reticle charge segments, one per mote of charge. */
-  charge: (SVGPathElement | null)[];
   /** Outer ring that lights when the pulse is ready. */
   ready: SVGCircleElement | null;
   /** Reticle group (nudged when you fire without charge). */
@@ -91,7 +89,7 @@ export interface HudEls {
 
 export function createHudEls(): HudEls {
   return {
-    compass: null, charge: [null, null, null], ready: null, reticle: null,
+    compass: null, ready: null, reticle: null,
     count: null, diamonds: [null, null, null], readyLabel: null, motes: null, endLine: null, exited: false, vignette: null,
   };
 }

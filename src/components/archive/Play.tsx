@@ -91,11 +91,11 @@ function maybeStartEnding(g: ArchiveState, cam: THREE.Camera) {
   };
 }
 
+/** Dry fire: the reticle and the empty diamonds shake once. */
 function nudgeReticle(h: HudEls) {
-  h.reticle?.animate(
-    [{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }],
-    { duration: 220, easing: "ease-out" },
-  );
+  const shake = [{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }];
+  h.reticle?.animate(shake, { duration: 220, easing: "ease-out" });
+  h.motes?.animate(shake, { duration: 220, easing: "ease-out" });
 }
 
 /** True once per release request; clears it. */

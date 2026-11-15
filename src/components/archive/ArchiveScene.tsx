@@ -569,10 +569,19 @@ function writeHud(g: ArchiveState, h: HudEls, camera: THREE.Camera) {
     h.exited = true;
     window.dispatchEvent(new Event("archive-ending-exit"));
   }
-  h.charge.forEach((el, i) => {
-    if (el) el.style.opacity = i < g.charge ? "1" : "0.22";
+  const full = g.charge >= CHARGE_FULL;
+  h.diamonds.forEach((el, i) => {
+    if (el) el.setAttribute("fill-opacity", i < g.charge ? "1" : "0");
   });
-  if (h.ready) h.ready.style.opacity = g.charge >= CHARGE_FULL ? "1" : "0";
+  if (h.readyLabel) h.readyLabel.style.opacity = full ? "1" : "0";
+  if (h.ready) h.ready.style.opacity = full ? "1" : "0";
+  if (h.count) {
+    const n = String(g.seals.filter((s) => s.freed).length);
+    if (h.count.textContent !== n) h.count.textContent = n;
+    // The whole HUD steps aside for the ending; the chrome turns dark on the pale fog
+    const root = h.count.closest<HTMLElement>(".archive-root");
+    if (root) root.dataset.ending = end ? "1" : "0";
+  }
 }
 
 function HudDriver({ game, hud }: { game: React.RefObject<ArchiveState>; hud: React.RefObject<HudEls> }) {
