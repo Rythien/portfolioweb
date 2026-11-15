@@ -410,7 +410,17 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     // crystal GLB has joined the scene graph
     const t1 = window.setTimeout(warm, 600);
     const t2 = window.setTimeout(warm, 1800);
+    // The crystal loads after first paint and may join the graph later
+    // than both: warm again (once per burst) whenever it announces itself
+    let t3 = 0;
+    const onCrystal = () => {
+      window.clearTimeout(t3);
+      t3 = window.setTimeout(warm, 50);
+    };
+    window.addEventListener("crystal-ready", onCrystal);
     return () => {
+      window.removeEventListener("crystal-ready", onCrystal);
+      window.clearTimeout(t3);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };

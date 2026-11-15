@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "bake:crystal": "node scripts/bake-crystal.mjs",
     "gen:covers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-covers.mjs",
     "gen:crystal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-crystal.mjs",
     "test:archive": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/archive/flight.test.ts",

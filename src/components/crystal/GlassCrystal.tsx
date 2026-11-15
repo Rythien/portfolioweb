@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useMemo, useRef } from "react";
+import { forwardRef, use, useEffect, useMemo, useRef } from "react";
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
 import * as THREE from "three";
@@ -177,7 +177,25 @@ function buildShards(geos: THREE.BufferGeometry[], seed: number): ShardData[] {
   });
 }
 
+/**
+ * Resolves once the page has painted and finished loading. The crystal
+ * (~0.5 MB) must never compete with first paint or the page's own
+ * scripts, so its fetch waits for this; the scene suspends meanwhile
+ * (the preloader already waits for the scene's first frame).
+ */
+let _afterPaint: Promise<void> | null = null;
+function afterFirstPaint(): Promise<void> {
+  if (_afterPaint) return _afterPaint;
+  _afterPaint = new Promise<void>((resolve) => {
+    const painted = () => requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    if (document.readyState === "complete") painted();
+    else window.addEventListener("load", painted, { once: true });
+  });
+  return _afterPaint;
+}
+
 export function useCrystalData(seed = DEFAULT_SEED) {
+  use(afterFirstPaint());
   const buf = useLoader(THREE.FileLoader, CRYSTAL_URL, arrayBuffer) as unknown as ArrayBuffer;
   return useMemo(() => {
     const [intact, ...shardGeos] = decodeCrystal(buf);
@@ -458,6 +476,11 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const _off = useRef(new THREE.Vector3());
     const mergedFbo = useFBO(1024, 1024, { depthBuffer: true });
     const shardFbo = useFBO(CRYSTAL_MATERIAL.resolution.shard, CRYSTAL_MATERIAL.resolution.shard, { depthBuffer: true });
+
+    // Tell the Compositor to precompile now that the crystal is in the graph
+    useEffect(() => {
+      window.dispatchEvent(new Event("crystal-ready"));
+    }, []);
 
     useEffect(() => {
       if (!inclusionRef.current) return;
@@ -977,6 +1000,5 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   },
 );
 
-useLoader.preload(THREE.FileLoader, CRYSTAL_URL, arrayBuffer);
 
 export default GlassCrystal;
