@@ -43,6 +43,9 @@ export function patchVeilMaterial(material: THREE.Material | null): void {
   const m = material as THREE.Material & { [PATCHED]?: boolean };
   if (m[PATCHED]) return;
   m[PATCHED] = true;
+  // The headline is the hero's main content: compiled first (scene/warm.ts).
+  // troika derives its text material from this one and shares its userData.
+  material.userData.warmFirst = true;
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.fragmentShader = shader.fragmentShader

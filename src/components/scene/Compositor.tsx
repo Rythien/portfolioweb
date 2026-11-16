@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo, useEffect, useCallback } from "react";
+import { useRef, useMemo, useEffect, useLayoutEffect, useCallback } from "react";
 import { useFrame, useThree, createPortal } from "@react-three/fiber";
 import { useFBO } from "@react-three/drei";
 import * as THREE from "three";
@@ -10,6 +10,7 @@ import { useThemeStore, type Mode } from "@/store/useThemeStore";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getSectionProgress } from "@/store/useScrollStore";
 import { crystalEvents } from "@/hooks/useCrystalPose";
+import { guardScene, prewarmScene } from "./warm";
 
 /* ── Brush tuning ─────────────────────────────────────────────── */
 
@@ -282,21 +283,6 @@ interface CompositorProps {
 }
 
 
-/** Flip `transparent` on every material flagged userData.warmAlpha. */
-function flipAlphaVariants(scenes: THREE.Scene[]): THREE.Material[] {
-  const out = new Set<THREE.Material>();
-  for (const sc of scenes) {
-    sc.traverse((o) => {
-      const m = (o as THREE.Mesh).material;
-      for (const x of Array.isArray(m) ? m : m ? [m] : []) if (x.userData.warmAlpha) out.add(x);
-    });
-  }
-  for (const x of out) x.transparent = !x.transparent;
-  return [...out];
-}
-function flipBack(ms: THREE.Material[]): void {
-  for (const x of ms) x.transparent = !x.transparent;
-}
 
 export default function Compositor({ reducedMotion, isMobile }: CompositorProps) {
   const { gl, size } = useThree();
@@ -365,94 +351,46 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     crystalEvents.dreamLevel = f.level;
   }, [gl, brushTargetA, brushTargetB]);
 
-  // Shader warm-up during the preloader: precompile both portal scenes
-  // (including hidden shard/dream materials) and run one hidden frame of
-  // the flood shader so the first WAKE→DREAM click starts within a frame.
-  // The crystal GLB is preloaded at module scope in GlassCrystal.
-  const warmupRef = useRef(false);
-  useEffect(() => {
-    const warm = () => {
-      try {
-        // three compiles only visible objects, and the inactive mode's
-        // crystal, its shards, clouds and logos are all hidden: without
-        // this their programs compiled on the first frame they showed, a
-        // ~0.8 s stall right as the flood crossed into the other mode
-        const hidden: THREE.Object3D[] = [];
-        for (const sc of [wakeScene, dreamScene]) {
-          sc.traverse((o) => {
-            if (!o.visible) {
-              hidden.push(o);
-              o.visible = true;
-            }
-          });
-        }
-        try {
-          // Compile with a render target bound: every scene (and every
-          // crystal backdrop pass) draws into one, and three keys programs
-          // on output colour space / tone mapping, which differ from the
-          // screen. Compiled against the screen, the warm-up built variants
-          // nothing ever used.
-          gl.setRenderTarget(wakeTarget);
-          gl.compile(wakeScene, fboCamera);
-          gl.setRenderTarget(dreamTarget);
-          gl.compile(dreamScene, fboCamera);
-          // ...and again with the fading glass's `transparent` flipped:
-          // the opposite variant otherwise linked mid-scroll as the crystal
-          // broke (0.8-2.9 s stalls measured, scripts/perf/jank.mjs)
-          const flipped = flipAlphaVariants([wakeScene, dreamScene]);
-          if (flipped.length) {
-            gl.setRenderTarget(wakeTarget);
-            gl.compile(wakeScene, fboCamera);
-            gl.setRenderTarget(dreamTarget);
-            gl.compile(dreamScene, fboCamera);
-            flipBack(flipped);
-          }
-          gl.setRenderTarget(null);
-        } finally {
-          for (const o of hidden) o.visible = false;
-        }
-
-        const u = brushMaterial.uniforms;
-        u.uFloodActive.value = 1.0;
-        u.uFloodRadius.value = 0.4;
-        u.uFloodCenter.value.set(0.5, 0.5);
-        u.uPrevFrame.value = brushTargetA.texture;
-        gl.setRenderTarget(brushTargetB);
-        gl.render(brushQuadScene, brushOrthoCamera);
-        u.uFloodActive.value = 0.0;
-
-        // Restore the rest-state mask the flood frame just overwrote
-        const restColor =
-          useThemeStore.getState().mode === "dream" ? "#ffffff" : "#000000";
-        gl.setRenderTarget(brushTargetB);
-        gl.setClearColor(restColor, 1);
-        gl.clear();
-        gl.setRenderTarget(null);
-        gl.setClearColor("#000000", 0);
-        warmupRef.current = true;
-      } catch {
-        // A lost context during boot must never break the page
-      }
+  // Shader warm-up that never blocks the hero (scene/warm.ts). Every scene
+  // the page renders is guarded: anything whose program is not linked yet
+  // is drawn with a stand-in or skipped, and compiled in the background,
+  // one program at a time. Order: the WAKE hero, its hidden shards, the
+  // brush/flood pass, then DREAM (unless DREAM is what is on screen).
+  // A LAYOUT effect: it must be in place before the first frame renders
+  // (a passive effect ran only after that frame, whose unguarded draws
+  // linked programs synchronously, seconds on a software renderer).
+  useLayoutEffect(() => {
+    const dreamPrio = () => {
+      const t = useThemeStore.getState();
+      return t.mode === "dream" || t.transitioning ? 12 : 40;
     };
-    // Twice under the preloader: early, and again once the suspended
-    // crystal GLB has joined the scene graph
-    const t1 = window.setTimeout(warm, 600);
-    const t2 = window.setTimeout(warm, 1800);
-    // The crystal loads after first paint and may join the graph later
-    // than both: warm again (once per burst) whenever it announces itself
-    let t3 = 0;
+    const unguard = [
+      guardScene(wakeScene, gl, { phase: "page", priority: () => 10 }),
+      guardScene(dreamScene, gl, { phase: "page", priority: dreamPrio }),
+      guardScene(brushQuadScene, gl, { phase: "page", priority: () => 11 }),
+    ];
+    // Pre-warm what is not drawn yet (hidden shards, the other mode), and
+    // again once the crystal (loaded after first paint) joins the graph
+    const prewarm = () => {
+      prewarmScene(wakeScene, gl, { phase: "page", priority: 10, hiddenPriority: 20, kinds: ["fbo"], camera: fboCamera });
+      prewarmScene(brushQuadScene, gl, { phase: "page", priority: 30, kinds: ["fbo"], camera: brushOrthoCamera });
+      const d = dreamPrio();
+      prewarmScene(dreamScene, gl, { phase: "page", priority: d, hiddenPriority: d + 5, kinds: ["fbo"], camera: fboCamera });
+    };
+    const t1 = window.setTimeout(prewarm, 0);
+    let t2 = 0;
     const onCrystal = () => {
-      window.clearTimeout(t3);
-      t3 = window.setTimeout(warm, 50);
+      window.clearTimeout(t2);
+      t2 = window.setTimeout(prewarm, 50);
     };
     window.addEventListener("crystal-ready", onCrystal);
     return () => {
+      unguard.forEach((u) => u());
       window.removeEventListener("crystal-ready", onCrystal);
-      window.clearTimeout(t3);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [gl, wakeScene, dreamScene, brushTargetA, brushTargetB, wakeTarget, dreamTarget]);
+  }, [gl, wakeScene, dreamScene]);
 
   // Brush state
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
@@ -591,6 +529,8 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       FLOOD_DURATION * Math.abs(f.target - f.from)
     );
     crystalEvents.floodActive = true;
+    // Test hook (scripts/perf/slow.mjs): when the flood actually started
+    (window as unknown as { __floodStartedAt?: number }).__floodStartedAt = performance.now();
     crystalEvents.floodTarget = f.target === 1 ? "dream" : "wake";
     crystalEvents.floodCenterX = f.centerX * window.innerWidth;
     crystalEvents.floodCenterY = (1 - f.centerY) * window.innerHeight;

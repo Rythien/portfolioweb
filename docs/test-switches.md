@@ -54,3 +54,27 @@ Hooks it reads:
   outside a transition, linked) every program. Scripts that play the
   Archive wait for it: until then a queued link can stall a frame between
   two actions.
+
+## Shader warm-up and slow renderers
+
+`src/components/scene/warm.ts` keeps shader compiles off the critical path
+(see the comment at its top). Switches:
+
+| Switch | Effect |
+| --- | --- |
+| `gfx=full\|reduced` | Forces the graphics profile instead of probing (reduced: hero glass backdrop 512 and 4 samples, Archive DPR 1, no Archive pre-warm). The choice is kept for the session (sessionStorage `gfx-profile-v1`) and logged as `[gfx] profile: ...`. |
+| `warmdebug=1` | `window.__warmDebug` lists any guarded render that still built or first-used an unlinked program (empty = no draw blocked on a link); `window.__costs` times the procedural builds (`scene/costs.ts`). |
+
+Hooks: `__gfxProfile` (profile, probe ms, renderer), `__warm()` (queue,
+in-flight program, dropped pre-warm, slow issues), and the timestamps
+`scripts/perf/slow.mjs` reads: `__screenDrawnAt` (composite on screen),
+`__heroDrawnAt` (headline drawn with its real program),
+`__crystalDrawnAt` / `__archiveGlassDrawnAt` (glass first drawn, stand-in
+or real), `__archiveFirstFrameAt` (the void), `__floodStartedAt`,
+`__marqueeSyncedAt` (troika laid the headline out).
+
+`node scripts/perf/slow.mjs [--software] [--runs=2]` reports, per
+scenario, time to visible content, frame-time percentiles and the longest
+main-thread block (a MessageChannel heartbeat, which only stalls when the
+main thread is busy). `--software` forces Firefox onto WARP (Microsoft
+Basic Render Driver).

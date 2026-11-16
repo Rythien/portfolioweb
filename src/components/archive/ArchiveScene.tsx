@@ -18,6 +18,7 @@ import { CHARGE_FULL, type ArchiveState, type HudEls } from "./archiveState";
 import { ENDING } from "./game";
 import Reassembly from "./Reassembly";
 import StudioEnvironment from "@/components/crystal/StudioEnvironment";
+import { timed } from "@/components/scene/costs";
 import { projects } from "@/content/projects";
 
 /** Longest frame fed to the flight; a hitch never fast-forwards. */
@@ -217,7 +218,7 @@ const DUST_FRAG = /* glsl */ `
 
 function Dust({ count, reduced }: { count: number; reduced: boolean }) {
   const mat = useRef<THREE.ShaderMaterial>(null);
-  const data = useMemo(() => makeDust(count), [count]);
+  const data = useMemo(() => timed("archive: dust", () => makeDust(count)), [count]);
   const uniforms = useMemo(
     () => ({
       uCam: { value: new THREE.Vector3() },
@@ -293,7 +294,7 @@ const BANK_FRAG = /* glsl */ `
 
 function FogBanks({ count, game }: { count: number; game: React.RefObject<ArchiveState> }) {
   const mat = useRef<THREE.ShaderMaterial>(null);
-  const data = useMemo(() => makeBanks(count), [count]);
+  const data = useMemo(() => timed("archive: fog banks", () => makeBanks(count)), [count]);
   const uniforms = useMemo(() => ({ uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uFade: { value: 1 } }), []);
   useFrame((state) => {
     const u = mat.current?.uniforms;
@@ -427,6 +428,7 @@ function Pilot({ input, reduced, game, registry }: PilotProps) {
     // Test hook: frames rendered (Playwright times the handover with it)
     const tw = window as unknown as { __archiveFrames?: number };
     tw.__archiveFrames = (tw.__archiveFrames ?? 0) + 1;
+    if (tw.__archiveFrames === 1) (window as unknown as { __archiveFirstFrameAt?: number }).__archiveFirstFrameAt = performance.now();
     const f = flight.current;
     const inp = input.current;
     const dt = Math.min(delta, MAX_DT);
@@ -663,9 +665,9 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
   const hideCrystal = useCallback((o: THREE.Object3D | null) => hideFromBackdrop(registry, o), [registry]);
   // ONE material for every seal body, ONE for every orbiting shard: owned
   // here (on a hidden holder mesh), handed to the three seals
-  const glassProps = useMemo(() => crystalGlassProps("dream", "seal"), []);
-  const shardProps = useMemo(() => crystalGlassProps("dream", "shard"), []);
-  const cheapProps = useMemo(() => crystalCheapProps("dream"), []);
+  const glassProps = useMemo(() => timed("archive: seal glass props", () => crystalGlassProps("dream", "seal")), []);
+  const shardProps = useMemo(() => timed("archive: shard glass props", () => crystalGlassProps("dream", "shard")), []);
+  const cheapProps = useMemo(() => timed("archive: cheap props", () => crystalCheapProps("dream")), []);
   const [sealGlass, setSealGlass] = useState<THREE.Material | null>(null);
   const [shardGlass, setShardGlass] = useState<THREE.Material | null>(null);
   const [cheapSeal, setCheapSeal] = useState<THREE.Material | null>(null);

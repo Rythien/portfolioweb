@@ -16,6 +16,7 @@ import {
 } from "./archiveAudio";
 import type { InputState } from "./input";
 import type { SealRegistry } from "./Seal";
+import { timed } from "@/components/scene/costs";
 import { SEAL, SEALS } from "./layout";
 
 /**
@@ -206,7 +207,7 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
   const impactState = useRef<{ t0: number; kind: Hit["kind"]; alive: boolean }[]>(
     Array.from({ length: 4 }, () => ({ t0: 0, kind: "fizzle" as Hit["kind"], alive: false })),
   );
-  const tex = useMemo(() => textures(), []);
+  const tex = useMemo(() => timed("archive: mote textures", () => textures()), []);
   const buffers = useMemo(() => ({ pos: new Float32Array(MOTE_COUNT * 3), alpha: new Float32Array(MOTE_COUNT) }), []);
   const uniforms = useMemo(() => ({ uPx: { value: 1 }, uTime: { value: 0 } }), []);
 

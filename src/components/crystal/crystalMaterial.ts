@@ -8,6 +8,7 @@
 import * as THREE from "three";
 import { noise3 } from "./frostUtils";
 import { TARGET_SIZE, reliefHeight } from "./crystalGen";
+import { getGfxProfile, sliceIdle, type GfxProfile } from "@/components/scene/warm";
 
 export const CRYSTAL_MATERIAL = {
   /** Frost strength in the normal map (baked in: the material's own
@@ -60,6 +61,9 @@ export const CRYSTAL_MATERIAL = {
   slivers: 2,
   /** Backdrop FBO size (square). */
   resolution: { intact: 1024, shard: 384 },
+  /** The reduced profile (slow renderer, scene/warm.ts): the hero glass at
+   * 4 samples over a 512 px backdrop. Everything else is unchanged. */
+  reduced: { intactSamples: 4, intactResolution: 512 },
   /** Shards smaller than this on screen skip the backdrop (cheap glass).
    * Two thresholds so a shard near the line never flickers. */
   cheapShardPx: { off: 56, on: 64 },
@@ -112,19 +116,41 @@ function tileNoise(x: number, y: number, period: number, seed: number): number {
   return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
 }
 
-interface IceField {
-  /** Eroded relief, 0 (deepest pit) .. 1 (highest ridge), min-max normalised. */
-  relief: Float32Array;
+/*
+ * The maps below are built in idle slices (scene/warm.ts sliceIdle): built
+ * synchronously when the glass first rendered, they blocked the main
+ * thread for ~0.5 s on a slow machine. Each texture exists at once at its
+ * final size and format, filled with a neutral value (flat normals, mid
+ * roughness, no crevices), so the material's program never changes; the
+ * real texels replace it a moment later.
+ */
+
+/** A texture at its final size, filled with one RGBA value. */
+function placeholder(size: number, rgba: [number, number, number, number], wrapT: THREE.Wrapping): THREE.DataTexture {
+  const data = new Uint8Array(size * size * 4);
+  for (let k = 0; k < data.length; k += 4) {
+    data[k] = rgba[0];
+    data[k + 1] = rgba[1];
+    data[k + 2] = rgba[2];
+    data[k + 3] = rgba[3];
+  }
+  const tex = new THREE.DataTexture(data, size, size);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = wrapT;
+  tex.needsUpdate = true;
+  return tex;
+}
+function publish(tex: THREE.DataTexture, data: Uint8Array) {
+  (tex.image.data as Uint8Array).set(data);
+  tex.needsUpdate = true;
 }
 
-let _field: IceField | null = null;
 /**
  * ONE noise field drives every map: the roughness map and the iridescence
  * crevice mask both read `relief`, so wet-polished pits, frosted ridges
- * and the film in the crevices always line up.
+ * and the film in the crevices always line up. Built a row per step.
  */
-function iceField(): IceField {
-  if (_field) return _field;
+function* iceFieldRows(out: { relief?: Float32Array }) {
   const n = TEX * TEX;
   const relief = new Float32Array(n);
   let lo = Infinity, hi = -Infinity;
@@ -136,17 +162,10 @@ function iceField(): IceField {
       lo = Math.min(lo, h);
       hi = Math.max(hi, h);
     }
+    yield;
   }
   for (let k = 0; k < n; k++) relief[k] = (relief[k] - lo) / (hi - lo);
-  _field = { relief };
-  return _field;
-}
-
-function dataTexture(data: Uint8Array): THREE.DataTexture {
-  const tex = new THREE.DataTexture(data, TEX, TEX);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.needsUpdate = true;
-  return tex;
+  out.relief = relief;
 }
 
 /** Normal map texels per side: frostRepeat frost tiles of 256 each. */
@@ -166,29 +185,20 @@ function uvDir(u: number, v: number): [number, number, number] {
   return [c * Math.cos(phi), Math.sin(lat), c * Math.sin(phi)];
 }
 
-const _normalMaps = new Map<boolean, THREE.DataTexture>();
-/**
- * Sub-millimetre frost (frostRepeat tiles, at frostStrength), plus, with
- * `withRelief`, the fine relief (crystalGen DETAIL_OCTAVES, once around
- * the chunk, at its true slope). The intact mesh has the relief in its
- * geometry and takes the frost-only map; the shards (cut from the coarse
- * source mesh) take the relief from the map. Periodic in u; the mesh's
- * spherical UVs cover it exactly once.
- */
-export function getFrostNormalMap(withRelief = false): THREE.DataTexture {
-  const cached = _normalMaps.get(withRelief);
-  if (cached) return cached;
+function* normalMapRows(withRelief: boolean, tex: THREE.DataTexture) {
   const N = NTEX, R = CRYSTAL_MATERIAL.frostRepeat;
-  // Relief heights on the grid (one row of padding at the poles)
   const rel = new Float32Array(N * N);
   const fro = new Float32Array(N * N);
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
       const u = i / N, v = (j + 0.5) / N;
-      const [x, y, z] = uvDir(u, v);
-      rel[j * N + i] = withRelief ? reliefHeight(x, y, z) : 0;
+      if (withRelief) {
+        const [x, y, z] = uvDir(u, v);
+        rel[j * N + i] = reliefHeight(x, y, z);
+      }
       fro[j * N + i] = frostAt((u * R) % 1, (v * R) % 1);
     }
+    yield;
   }
   const data = new Uint8Array(N * N * 4);
   for (let j = 0; j < N; j++) {
@@ -211,61 +221,86 @@ export function getFrostNormalMap(withRelief = false): THREE.DataTexture {
       data[o + 2] = ((1 / len) * 0.5 + 0.5) * 255;
       data[o + 3] = 255;
     }
+    yield;
   }
-  const tex = new THREE.DataTexture(data, N, N);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.needsUpdate = true;
+  publish(tex, data);
+}
+
+const _normalMaps = new Map<boolean, THREE.DataTexture>();
+/**
+ * Sub-millimetre frost (frostRepeat tiles, at frostStrength), plus, with
+ * `withRelief`, the fine relief (crystalGen DETAIL_OCTAVES, once around
+ * the chunk, at its true slope). The intact mesh has the relief in its
+ * geometry and takes the frost-only map; the shards (cut from the coarse
+ * source mesh) take the relief from the map. Periodic in u; the mesh's
+ * spherical UVs cover it exactly once. Flat until its slices are done.
+ */
+export function getFrostNormalMap(withRelief = false): THREE.DataTexture {
+  const cached = _normalMaps.get(withRelief);
+  if (cached) return cached;
+  const tex = placeholder(NTEX, [128, 128, 255, 255], THREE.ClampToEdgeWrapping);
   _normalMaps.set(withRelief, tex);
+  sliceIdle(normalMapRows(withRelief, tex));
   return tex;
 }
 
 let _rough: THREE.DataTexture | null = null;
-/**
- * Roughness from the relief (G channel, as three reads it): wet-polished
- * in the pits, frosted matte on the ridges. The material's own roughness
- * is 1, so these texels are the final values.
- */
-export function getRoughnessMap(): THREE.DataTexture {
-  if (_rough) return _rough;
-  const R = iceField().relief;
+let _crevice: THREE.DataTexture | null = null;
+/** Both relief-driven maps, from one field, filled in one sliced job. */
+function* reliefMapsRows(rough: THREE.DataTexture, crevice: THREE.DataTexture) {
+  const field: { relief?: Float32Array } = {};
+  yield* iceFieldRows(field);
+  const R = field.relief!;
+  // Roughness (G channel, as three reads it): wet-polished in the pits,
+  // frosted matte on the ridges. The material's own roughness is 1, so
+  // these texels are the final values.
   const [lo, hi] = CRYSTAL_MATERIAL.roughnessRange;
-  const data = new Uint8Array(TEX * TEX * 4);
+  const rd = new Uint8Array(TEX * TEX * 4);
   for (let k = 0; k < TEX * TEX; k++) {
-    // Pits stay polished over a wide band, ridges frost quickly
     const t = THREE.MathUtils.smoothstep(R[k], 0.25, 0.8);
     const g = Math.round((lo + (hi - lo) * t) * 255);
-    data[k * 4] = data[k * 4 + 1] = data[k * 4 + 2] = g;
-    data[k * 4 + 3] = 255;
+    rd[k * 4] = rd[k * 4 + 1] = rd[k * 4 + 2] = g;
+    rd[k * 4 + 3] = 255;
   }
-  _rough = dataTexture(data);
-  return _rough;
-}
-
-let _crevice: THREE.DataTexture | null = null;
-/**
- * Iridescence mask (R channel): the inverse of the relief, so the thin
- * film sits in the crevices, gathered into a few soft diagonal runs so
- * it still reads as streaks rather than speckle.
- */
-export function getCreviceMap(): THREE.DataTexture {
-  if (_crevice) return _crevice;
-  const R = iceField().relief;
-  const data = new Uint8Array(TEX * TEX * 4);
+  publish(rough, rd);
+  yield;
+  // Iridescence mask (R channel): the inverse of the relief, so the thin
+  // film sits in the crevices, gathered into a few soft diagonal runs so
+  // it still reads as streaks rather than speckle.
+  const cd = new Uint8Array(TEX * TEX * 4);
   for (let j = 0; j < TEX; j++) {
     for (let i = 0; i < TEX; i++) {
       const u = i / TEX, v = j / TEX;
       const k = j * TEX + i;
-      const crevice = THREE.MathUtils.smoothstep(1 - R[k], 0.45, 0.85);
+      const c = THREE.MathUtils.smoothstep(1 - R[k], 0.45, 0.85);
       const warp = noise3(Math.cos(u * TAU) * 2, v * 4, Math.sin(u * TAU) * 2) - 0.5;
       const run = 0.35 + 0.65 * Math.pow(Math.max(0, Math.cos((u * 3 + v * 1.4 + warp * 0.6) * TAU)), 4);
-      const s = Math.round(Math.min(1, crevice * run * 1.3) * 255);
-      data[k * 4] = data[k * 4 + 1] = data[k * 4 + 2] = s;
-      data[k * 4 + 3] = 255;
+      const sv = Math.round(Math.min(1, c * run * 1.3) * 255);
+      cd[k * 4] = cd[k * 4 + 1] = cd[k * 4 + 2] = sv;
+      cd[k * 4 + 3] = 255;
     }
+    yield;
   }
-  _crevice = dataTexture(data);
-  return _crevice;
+  publish(crevice, cd);
+}
+function ensureReliefMaps() {
+  if (_rough && _crevice) return;
+  const mid = Math.round(((CRYSTAL_MATERIAL.roughnessRange[0] + CRYSTAL_MATERIAL.roughnessRange[1]) / 2) * 255);
+  _rough = placeholder(TEX, [mid, mid, mid, 255], THREE.RepeatWrapping);
+  _crevice = placeholder(TEX, [0, 0, 0, 255], THREE.RepeatWrapping);
+  sliceIdle(reliefMapsRows(_rough, _crevice));
+}
+
+/** Roughness from the relief (see reliefMapsRows); mid roughness until built. */
+export function getRoughnessMap(): THREE.DataTexture {
+  ensureReliefMaps();
+  return _rough!;
+}
+
+/** Iridescence crevice mask (see reliefMapsRows); empty until built. */
+export function getCreviceMap(): THREE.DataTexture {
+  ensureReliefMaps();
+  return _crevice!;
 }
 
 /* ── The shared glass props (intact crystal, shards, Archive seals) ── */
@@ -285,7 +320,16 @@ export const UNUSED_FBO = 32;
  * hero shards and the seals' orbiters; seal: Archive seal bodies. */
 export type GlassKind = keyof typeof CRYSTAL_MATERIAL.samples;
 
-export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint, kind: GlassKind = "intact") {
+/** Backdrop size of the intact crystal for a profile. */
+export function intactResolution(profile: GfxProfile = getGfxProfile()): number {
+  return profile === "reduced" ? CRYSTAL_MATERIAL.reduced.intactResolution : CRYSTAL_MATERIAL.resolution.intact;
+}
+
+export function crystalGlassProps(
+  variant: keyof typeof CRYSTAL_MATERIAL.tint,
+  kind: GlassKind = "intact",
+  profile: GfxProfile = getGfxProfile(),
+) {
   const tint = CRYSTAL_MATERIAL.tint[variant];
   return {
     transmission: 1,
@@ -299,7 +343,7 @@ export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint, k
     distortion: CRYSTAL_MATERIAL.distortion,
     distortionScale: CRYSTAL_MATERIAL.distortionScale,
     temporalDistortion: CRYSTAL_MATERIAL.temporalDistortion,
-    samples: CRYSTAL_MATERIAL.samples[kind],
+    samples: kind === "intact" && profile === "reduced" ? CRYSTAL_MATERIAL.reduced.intactSamples : CRYSTAL_MATERIAL.samples[kind],
     attenuationDistance: CRYSTAL_MATERIAL.attenuationDistance,
     envMapIntensity: CRYSTAL_MATERIAL.envMapIntensity,
     color: tint.color,
@@ -402,10 +446,22 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
   const m = material as THREE.Material & { [PATCHED]?: boolean };
   if (m[PATCHED]) return;
   m[PATCHED] = true;
-  // Crystal glass fades (intact crossfade, shards fading in), which flips
-  // `transparent` and selects another program (three's OPAQUE define): the
-  // Compositor warm-up builds both variants of anything carrying this flag
+  // Crystal glass fades (intact crossfade, shards fading in, the intro).
+  // It is ALWAYS transparent: at opacity 1 that draws exactly as opaque,
+  // and toggling it selected another program (three's OPAQUE define) that
+  // then had to be compiled mid-fade; three also keeps drawing with the old
+  // program until something else forces a program change, so which
+  // variant a frame used depended on history. One variant, no race.
+  // userData.warmAlpha marks crystal glass for scene/warm.ts (stand-in look,
+  // no backdrop-pass variant).
+  material.transparent = true;
   material.userData.warmAlpha = true;
+  // drei's MeshTransmissionMaterial adds USE_TRANSMISSION to material.defines
+  // inside onBeforeCompile, i.e. after three has keyed the program: the
+  // first program ever built had the wrong key and the next draw built
+  // another, synchronously. Set it up front so the first build is the one.
+  const mtm = material as THREE.Material & { uniforms?: { buffer?: unknown }; defines?: Record<string, string> };
+  if (mtm.uniforms?.buffer !== undefined) mtm.defines = { ...(mtm.defines ?? {}), USE_TRANSMISSION: "" };
   const base = material.onBeforeCompile.bind(material);
   material.onBeforeCompile = (shader, renderer) => {
     base(shader, renderer);

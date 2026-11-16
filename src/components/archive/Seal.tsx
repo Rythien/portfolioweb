@@ -8,6 +8,7 @@ import { sealProgress, sealSlug, type ArchiveState, type SealState } from "./arc
 import { ENDING, FREE, type SealTarget, type V3 } from "./game";
 import type { Project } from "@/content/projects";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
+import { timed } from "@/components/scene/costs";
 import { playMote } from "./archiveAudio";
 
 /** Test hook (archivefreeze=1): seals hold still, for repeatable hit shots. */
@@ -432,14 +433,14 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
     shards: Array.from({ length: SEAL.orbiters }, () => ({ p: [0, 0, 0] as V3, r: 0.5 })),
     freed: false,
   });
-  const coverTex = useMemo(() => coverTexture(cover), [cover]);
-  const ringTex = useMemo(() => nameRingTexture(`${label}   ·   `), [label]);
-  const glowTex = useMemo(() => innerGlowTexture(), []);
-  const geo = useMemo(() => sealGeometry(101 + index * 37), [index]);
+  const coverTex = useMemo(() => timed("seal: cover texture", () => coverTexture(cover)), [cover]);
+  const ringTex = useMemo(() => timed("seal: ring texture", () => nameRingTexture(`${label}   ·   `)), [label]);
+  const glowTex = useMemo(() => timed("seal: glow texture", () => innerGlowTexture()), []);
+  const geo = useMemo(() => timed("seal: geometry", () => sealGeometry(101 + index * 37)), [index]);
   // Every facet's overlay, built once: the lit one moves after each hit
-  const facets = useMemo(() => Array.from({ length: 12 }, (_, f) => facetGeometry(geo, f)), [geo]);
-  const orbiters = useMemo(() => makeOrbiters(900 + index * 53), [index]);
-  const fragments = useMemo(() => makeFragments(1300 + index * 71), [index]);
+  const facets = useMemo(() => timed("seal: facets", () => Array.from({ length: 12 }, (_, f) => facetGeometry(geo, f))), [geo]);
+  const orbiters = useMemo(() => timed("seal: orbiters", () => makeOrbiters(900 + index * 53)), [index]);
+  const fragments = useMemo(() => timed("seal: fragments", () => makeFragments(1300 + index * 71)), [index]);
   const facetUniforms = useMemo(
     () => ({
       uTime: { value: 0 },

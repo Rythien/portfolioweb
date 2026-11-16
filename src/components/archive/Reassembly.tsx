@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { decodeCrystal, TARGET_SIZE } from "@/components/crystal/crystalGen";
 import { UNUSED_FBO, applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import { ENDING } from "./game";
+import { timed } from "@/components/scene/costs";
 import type { ArchiveState } from "./archiveState";
 
 /**
@@ -39,7 +40,7 @@ interface Props {
 
 export default function Reassembly({ game, buffer, hide, glowTex, reduced }: Props) {
   const buf = useLoader(THREE.FileLoader, CRYSTAL_URL, arrayBuffer) as unknown as ArrayBuffer;
-  const geo = useMemo(() => decodeCrystal(buf)[0], [buf]);
+  const geo = useMemo(() => timed("archive: reassembly decode", () => decodeCrystal(buf)[0]), [buf]);
   // The seals' kind (4 samples): it then shares the seal body's program.
   // At "intact" (8 samples) it was its own program, and ANGLE took ~5 s to
   // compile it (the sample loop is unrolled), all of it on the GPU process

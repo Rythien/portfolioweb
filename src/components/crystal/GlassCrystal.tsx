@@ -18,9 +18,12 @@ import {
   applyCrystalShader,
   crystalCheapProps,
   crystalGlassProps,
+  intactResolution,
   thicknessFor,
 } from "./crystalMaterial";
-import { HERO_LOGO_FILL, getHeroLogos, getUnitLogos } from "./logoGeometry";
+import { useGfxProfile } from "@/components/scene/warm";
+import { timed } from "@/components/scene/costs";
+import { HERO_LOGO_FILL, useHeroLogos, useUnitLogos } from "./logoGeometry";
 
 /** Seconds between hero logo swaps in the intact crystal. */
 export const LOGO_CYCLE_SECONDS = 3.5;
@@ -206,10 +209,10 @@ function afterFirstPaint(): Promise<void> {
 export function useCrystalData(seed = DEFAULT_SEED) {
   use(afterFirstPaint());
   const buf = useLoader(THREE.FileLoader, CRYSTAL_URL, arrayBuffer) as unknown as ArrayBuffer;
-  return useMemo(() => {
+  return useMemo(() => timed("crystal: decode + build shards", () => {
     const [intact, ...shardGeos] = decodeCrystal(buf);
     return { intact, shards: buildShards(shardGeos, seed) };
-  }, [buf, seed]);
+  }), [buf, seed]);
 }
 
 /*
@@ -402,17 +405,19 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     // ONE material: every value below is shared by the intact mesh and the
     // shards; only thickness (by mesh size), backdrop resolution and
     // sample count differ
+    // The session's profile (scene/warm.ts): reduced = fewer samples, smaller backdrop
+    const gfx = useGfxProfile();
     const glass = useMemo(
       () => ({
-        ...crystalGlassProps(variant, "intact"),
+        ...timed("crystal: intact glass props (textures)", () => crystalGlassProps(variant, "intact", gfx)),
         ...(DEBUG?.freeze != null ? { temporalDistortion: 0 } : {}),
         // Rim + streak shading chained onto drei's own shader patch
         ref: (m: unknown) => applyCrystalShader(m as THREE.Material | null),
       }),
-      [variant],
+      [variant, gfx],
     );
-    const shardGlass = useMemo(() => crystalGlassProps(variant, "shard"), [variant]);
-    const cheapGlass = useMemo(() => crystalCheapProps(variant), [variant]);
+    const shardGlass = useMemo(() => timed("crystal: shard glass props (normal map)", () => crystalGlassProps(variant, "shard")), [variant]);
+    const cheapGlass = useMemo(() => timed("crystal: cheap glass props", () => crystalCheapProps(variant)), [variant]);
     /** Bounding radius per shard (local units), for its on-screen size. */
     const shardRadii = useMemo(
       () => shards.map((s) => {
@@ -427,12 +432,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     // Hero logo size: HERO_LOGO_FILL of the intact crystal's smallest side,
     // computed from the mesh (its thinnest caliper is still wider, so the
     // logo never pokes out of the silhouette at any angle)
-    const heroLogos = useMemo(() => {
+    const heroLogoSize = useMemo(() => {
       intactGeo.computeBoundingBox();
       const d = intactGeo.boundingBox!.getSize(new THREE.Vector3());
-      return getHeroLogos(HERO_LOGO_FILL * Math.min(d.x, d.y, d.z), variant);
-    }, [intactGeo, variant]);
-    const unitLogos = useMemo(() => getUnitLogos(variant), [variant]);
+      return HERO_LOGO_FILL * Math.min(d.x, d.y, d.z);
+    }, [intactGeo]);
+    // Built in idle slices: empty for a moment, then the whole set
+    const heroLogos = useHeroLogos(heroLogoSize, variant);
+    const unitLogos = useUnitLogos(variant);
     // The largest shards (by volume) each carry a logo, sized from the
     // shard's own bounds; smaller shards and debris carry none
     const shardLogoSlots = useMemo(() => {
@@ -510,7 +517,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const showShardsRef = useRef(false);
     const _invQ = useRef(new THREE.Quaternion());
     const _off = useRef(new THREE.Vector3());
-    const mergedFbo = useFBO(CRYSTAL_MATERIAL.resolution.intact, CRYSTAL_MATERIAL.resolution.intact, { depthBuffer: true });
+    const backdropSize = intactResolution(gfx);
+    const mergedFbo = useFBO(backdropSize, backdropSize, { depthBuffer: true });
     /** Each shard's transmission material (the cheap one is swapped in when tiny). */
     const shardGlassRefs = useRef<(THREE.Material | null)[]>([]);
     /** The shared non-transmissive stand-in for tiny shards. */
@@ -668,7 +676,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           mat.visible = !mergedHidden;
           if (!mergedHidden) {
             mat.opacity = (1 - crossfade) * fade;
-            mat.transparent = crossfade > 0 || fade < 1;
+            // Always transparent (see applyCrystalShader): at opacity 1 it
+            // draws exactly as opaque, and one program variant means no
+            // second shader to compile mid-fade
           }
         }
       }
@@ -748,7 +758,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         const sMat = shardGlassRefs.current[i];
         if (sMat) {
           sMat.opacity = shardOpacity;
-          sMat.transparent = shardOpacity < 1;
+          // (always transparent: one program variant)
         }
         if (i === 0 && cheapRef.current) cheapRef.current.opacity = CRYSTAL_MATERIAL.cheap[variant].opacity * shardOpacity;
 

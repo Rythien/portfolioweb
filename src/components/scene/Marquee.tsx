@@ -43,6 +43,9 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
   const [tileCount, setTileCount] = useState(6);
 
   const measureTile = useCallback(() => {
+    // Test hook (scripts/perf/slow.mjs): troika finished laying out the headline
+    const tw = window as unknown as { __marqueeSyncedAt?: number };
+    tw.__marqueeSyncedAt ??= performance.now();
     const mesh = tileRefs.current[0] as unknown as {
       textRenderInfo?: { blockBounds?: [number, number, number, number] };
       geometry: THREE.BufferGeometry;

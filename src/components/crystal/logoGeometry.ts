@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
+import { useSyncExternalStore } from "react";
+import { sliceIdle } from "@/components/scene/warm";
 import {
   siNextdotjs,
   siReact,
@@ -176,16 +178,27 @@ export interface LogoData {
   title: string;
 }
 
-const _cache = new Map<string, LogoData[]>();
+/*
+ * Logo sets are built in idle slices, one icon per step (scene/warm.ts
+ * sliceIdle): all ~10 icons extruded synchronously on the crystal's first
+ * render cost ~0.25 s per set on a slow machine, four sets in all. A set
+ * is published whole, once its area-evening pass is done (the pass needs
+ * every icon), so a logo never appears and then changes size.
+ */
+interface SetState {
+  logos: LogoData[];
+  done: boolean;
+  listeners: Set<() => void>;
+}
+const _sets = new Map<string, SetState>();
+const EMPTY: LogoData[] = [];
 
-function buildSet(shape: LogoShape): LogoData[] {
-  const key = `${shape.width}:${shape.depth}:${shape.bevel}`;
-  const cached = _cache.get(key);
-  if (cached) return cached;
+function* buildSetSteps(shape: LogoShape, st: SetState) {
   const built: { geometry: THREE.BufferGeometry; title: string; area: number }[] = [];
   for (const icon of ICONS) {
     const r = pathToGeometry(icon.path, shape);
     if (r) built.push({ geometry: r.geo, title: icon.title, area: r.area });
+    yield;
   }
   // Even out visual weight: a thin outline mark (React) reads far lighter
   // than a solid one (TypeScript) at the same diagonal. Scale each into
@@ -200,17 +213,41 @@ function buildSet(shape: LogoShape): LogoData[] {
       b.geometry.computeBoundingBox();
     }
   }
-  const logos: LogoData[] = built.map(({ geometry, title }) => ({ geometry, title }));
-  _cache.set(key, logos);
-  return logos;
+  st.logos = built.map(({ geometry, title }) => ({ geometry, title }));
+  st.done = true;
+  st.listeners.forEach((l) => l());
 }
 
-/** Every icon at hero size (diagonal `size`, area-evened, 0.26 deep), in cycle order. */
-export function getHeroLogos(size: number, bevel: BevelKind = "wake"): LogoData[] {
-  return buildSet({ width: size, depth: HERO_LOGO_DEPTH, bevel: BEVEL[bevel] });
+function ensureSet(shape: LogoShape): SetState {
+  const key = `${shape.width}:${shape.depth}:${shape.bevel}`;
+  let st = _sets.get(key);
+  if (!st) {
+    st = { logos: EMPTY, done: false, listeners: new Set() };
+    _sets.set(key, st);
+    sliceIdle(buildSetSteps(shape, st));
+  }
+  return st;
 }
 
-/** Every icon at unit width, same order as getHeroLogos; scale to size. */
-export function getUnitLogos(bevel: BevelKind = "wake"): LogoData[] {
-  return buildSet({ width: 1, depth: UNIT_DEPTH, bevel: BEVEL[bevel] });
+function useLogoSet(shape: LogoShape): LogoData[] {
+  const st = ensureSet(shape);
+  return useSyncExternalStore(
+    (cb) => {
+      st.listeners.add(cb);
+      return () => st.listeners.delete(cb);
+    },
+    () => st.logos,
+    () => EMPTY,
+  );
+}
+
+/** Every icon at hero size (diagonal `size`, area-evened, 0.26 deep), in
+ * cycle order. Empty until the whole set is built. */
+export function useHeroLogos(size: number, bevel: BevelKind = "wake"): LogoData[] {
+  return useLogoSet({ width: size, depth: HERO_LOGO_DEPTH, bevel: BEVEL[bevel] });
+}
+
+/** Every icon at unit width, same order as useHeroLogos; scale to size. */
+export function useUnitLogos(bevel: BevelKind = "wake"): LogoData[] {
+  return useLogoSet({ width: 1, depth: UNIT_DEPTH, bevel: BEVEL[bevel] });
 }

@@ -7,6 +7,7 @@ import { useArchiveProgress } from "@/store/useArchiveProgress";
 import { getProjectBySlug } from "@/content/projects";
 import { useThemeStore } from "@/store/useThemeStore";
 import { useArchiveStore } from "@/store/useArchiveStore";
+import { getGfxProfile, whenSettled } from "@/components/scene/warm";
 import { crystalEvents } from "@/hooks/crystalState";
 
 // The Archive (and three.js for it) is fetched on the visitor's first
@@ -43,7 +44,10 @@ export default function ArchiveSlot() {
   const [active, setActive] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Warm on first interaction, or at once if the page loads in DREAM
+  // Pre-mount (hidden) on the first interaction, but only on the full
+  // profile and only once the hero, its shards and the flood are compiled
+  // (scene/warm.ts): the Archive is never warmed ahead of the hero. A mode
+  // switch or a load in DREAM mounts it at once, whatever the profile.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     // Test hook (Playwright finish shots of the DREAM page): never in the UI
@@ -54,10 +58,15 @@ export default function ArchiveSlot() {
     }
     const events = ["pointermove", "pointerdown", "wheel", "keydown", "touchstart", "scroll"] as const;
     let idle = 0;
+    let cancelSettle = () => {};
     const go = () => {
       events.forEach((e) => window.removeEventListener(e, go));
-      const ric = window.requestIdleCallback;
-      idle = ric ? ric(() => setWarm(true), { timeout: 1500 }) : window.setTimeout(() => setWarm(true), 200);
+      if (getGfxProfile() === "reduced") return;
+      cancelSettle = whenSettled("page", 30, () => {
+        if (getGfxProfile() === "reduced") return;
+        const ric = window.requestIdleCallback;
+        idle = ric ? ric(() => setWarm(true), { timeout: 1500 }) : window.setTimeout(() => setWarm(true), 200);
+      });
     };
     events.forEach((e) => window.addEventListener(e, go, { passive: true }));
     // Nobody interacts before a mode switch, but a switch must still work
@@ -68,6 +77,7 @@ export default function ArchiveSlot() {
       events.forEach((e) => window.removeEventListener(e, go));
       window.cancelIdleCallback?.(idle);
       window.clearTimeout(idle);
+      cancelSettle();
       unsub();
     };
   }, []);

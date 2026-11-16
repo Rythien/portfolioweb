@@ -9,6 +9,7 @@ import CrystalCursor from "@/components/crystal/CrystalCursor";
 import { SITE_DATA } from "@/content/site";
 import { TimerClock, muteClockDeprecationUntilSwapped } from "./timerClock";
 import { exposePrograms } from "./programHook";
+import { guardScene, probeProfile, setPhasePaused } from "./warm";
 import { useArchiveStore } from "@/store/useArchiveStore";
 
 // Armed before the Canvas builds its store; released in onCreated
@@ -95,6 +96,8 @@ export default function SceneRoot() {
     const apply = () => {
       const state = canvasRef.current;
       if (!state) return;
+      // The page's shader warm-up pauses with it (scene/warm.ts)
+      setPhasePaused("page", useArchiveStore.getState().open);
       if (document.hidden || useArchiveStore.getState().open) {
         state.setFrameloop("never");
       } else {
@@ -136,6 +139,10 @@ export default function SceneRoot() {
         onCreated={(state) => {
           canvasRef.current = state;
           exposePrograms("page", state.gl);
+          // First program of the session: the fill-rate probe that picks
+          // the profile; then the composite quad, guarded like every scene
+          probeProfile(state.gl);
+          guardScene(state.scene, state.gl, { phase: "page", priority: () => 9 });
           if (useArchiveStore.getState().open) state.setFrameloop("never");
           // Frame timing on THREE.Timer instead of the deprecated Clock
           state.set({ clock: new TimerClock() as unknown as THREE.Clock });
