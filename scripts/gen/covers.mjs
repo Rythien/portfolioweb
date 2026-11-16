@@ -40,6 +40,8 @@ const ROOT = process.cwd();
 const W = 1600;
 const H = 1000;
 const KINDS = ["cover", "detail-1", "detail-2", "detail-3"];
+/** WebP quality for every output (was 0.86 full / 0.82 small). */
+const WEBP_QUALITY = 0.72;
 
 /* ── CLI ────────────────────────────────────────────────────────── */
 
@@ -137,7 +139,7 @@ const PAGE = /* html */ `<!doctype html>
 import * as THREE from "three";
 import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 
-const W = ${W}, H = ${H}, SS = 2;
+const W = ${W}, H = ${H}, SS = 2, WEBP_QUALITY = ${WEBP_QUALITY};
 const MARGIN = 96;
 // CPU-backed 2D canvases: accelerated raster (stacked blur passes in
 // particular) is not bit-exact between runs, and outputs must reproduce
@@ -793,8 +795,8 @@ function renderKind(kind, mode, o, cache) {
   edgeMat.dispose();
   planeGeo.dispose();
   return {
-    full: out.toDataURL("image/webp", 0.86),
-    small: small.toDataURL("image/webp", 0.82),
+    full: out.toDataURL("image/webp", WEBP_QUALITY),
+    small: small.toDataURL("image/webp", WEBP_QUALITY),
   };
 }
 
