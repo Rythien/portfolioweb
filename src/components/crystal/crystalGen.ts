@@ -14,16 +14,20 @@ import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.j
 /* ── Tuning: retune the chunk here, then `npm run gen:crystal` ── */
 
 export const SEED = 90;
-/** Icosphere recursion depth (3 -> 1280 faces). Only the coarse fbm
- * displacement is geometry; the fine relief is in the normal map. */
-export const ICO_SUBDIVISIONS = 3;
+/** Icosphere recursion depth of the INTACT mesh (4 -> 5120 faces): its fine
+ * relief (DETAIL_OCTAVES) is real geometry, so the silhouette has bumps. */
+export const ICO_SUBDIVISIONS = 4;
+/** Recursion depth of the mesh the SHARDS are cut from (3 -> 1280 faces):
+ * coarse fbm only, the fine relief is in their normal map. Shards tumble
+ * small and fast; their silhouettes never needed the bumps. */
+export const SHARD_ICO_SUBDIVISIONS = 3;
 export const FBM_AMP = 0.14;
 export const FBM_FREQ = 1.6;
 export const FBM_OCTAVES = 4;
 /** Fine relief: [frequency, amplitude] pairs (amplitude on the unit
- * sphere), one value-noise octave each. Baked into the normal map
- * (crystalMaterial), not the geometry: on every surface, the flat cuts
- * included, for a quarter of the vertices. */
+ * sphere), one value-noise octave each. Geometry on the intact mesh
+ * (after the clip, so it erodes the flat cuts too); baked into the
+ * shards' normal map instead (crystalMaterial). */
 export const DETAIL_OCTAVES: [number, number][] = [[6, 0.025], [11, 0.012]];
 
 /** Fine relief height at a unit direction (see DETAIL_OCTAVES). */
@@ -156,31 +160,52 @@ function unwrapSeam(us: number[]): number[] {
   return us.map((u) => (u < 0.5 ? u + 1 : u));
 }
 
-/** The intact chunk as a non-indexed geometry with creased normals + UVs. */
-export function buildChunk(): THREE.BufferGeometry {
-  const { verts, faces } = icosphere(ICO_SUBDIVISIONS);
+/** Coarse chunk shape at a unit-sphere vertex: fbm, axis scale, clip. */
+function coarsePoint(v: THREE.Vector3, planes: ClipPlane[]): THREE.Vector3 {
+  // Displace along the (radial) normal by seeded fbm
+  const r = 1 + FBM_AMP * (2 * fbm(v.x * FBM_FREQ, v.y * FBM_FREQ, v.z * FBM_FREQ, SEED) - 1);
+  const q = v.clone().multiplyScalar(r);
+  q.set(q.x * AXIS_SCALE[0], q.y * AXIS_SCALE[1], q.z * AXIS_SCALE[2]);
+  // Project anything past a plane back onto it: flat cuts, ridges kept.
+  // Repeated so a vertex past two planes ends up inside both.
+  for (let it = 0; it < 4; it++) {
+    for (const pl of planes) {
+      const over = q.dot(pl.n) - pl.d;
+      if (over > 0) q.addScaledVector(pl.n, -over);
+    }
+  }
+  return q;
+}
+
+/**
+ * One fit for both meshes: the coarse shard-source chunk's bounding box,
+ * centred and scaled to TARGET_SIZE. The intact mesh uses the same
+ * transform, so its relief sits on exactly the shape the shards come from.
+ */
+function chunkFit(planes: ClipPlane[]): { c: THREE.Vector3; k: number } {
+  const p = icosphere(SHARD_ICO_SUBDIVISIONS).verts.map((v) => coarsePoint(v, planes));
+  const box = new THREE.Box3().setFromPoints(p);
+  const size = box.getSize(new THREE.Vector3());
+  return { c: box.getCenter(new THREE.Vector3()), k: TARGET_SIZE / Math.max(size.x, size.y, size.z) };
+}
+
+/**
+ * The chunk as a non-indexed geometry with creased normals + UVs.
+ * Defaults: the intact mesh (ICO_SUBDIVISIONS, fine relief in geometry).
+ */
+export function buildChunk(levels = ICO_SUBDIVISIONS, relief = true): THREE.BufferGeometry {
+  const { verts, faces } = icosphere(levels);
   const planes = clipPlanes();
   const p = verts.map((v) => {
-    // Displace along the (radial) normal by seeded fbm
-    const r = 1 + FBM_AMP * (2 * fbm(v.x * FBM_FREQ, v.y * FBM_FREQ, v.z * FBM_FREQ, SEED) - 1);
-    const q = v.clone().multiplyScalar(r);
-    q.set(q.x * AXIS_SCALE[0], q.y * AXIS_SCALE[1], q.z * AXIS_SCALE[2]);
-    // Project anything past a plane back onto it: flat cuts, ridges kept.
-    // Repeated so a vertex past two planes ends up inside both.
-    for (let it = 0; it < 4; it++) {
-      for (const pl of planes) {
-        const over = q.dot(pl.n) - pl.d;
-        if (over > 0) q.addScaledVector(pl.n, -over);
-      }
+    const q = coarsePoint(v, planes);
+    if (relief) {
+      // Fine relief on top, along the radial direction
+      const len = q.length();
+      q.multiplyScalar((len + reliefHeight(v.x, v.y, v.z)) / len);
     }
     return q;
   });
-
-  // Fit: centre the bounding box, uniform scale to TARGET_SIZE
-  const box = new THREE.Box3().setFromPoints(p);
-  const c = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const k = TARGET_SIZE / Math.max(size.x, size.y, size.z);
+  const { c, k } = chunkFit(planes);
   for (const v of p) v.sub(c).multiplyScalar(k);
 
   const pos = new Float32Array(faces.length * 9);
@@ -491,12 +516,15 @@ export interface CrystalData {
   intact: THREE.BufferGeometry;
   /** Shards in the intact mesh's own coordinates (laid back together). */
   shards: THREE.BufferGeometry[];
+  /** The coarse mesh the shards are cut from (not written to the .bin). */
+  source: THREE.BufferGeometry;
   stats: FractureStats;
 }
 
 export function generateCrystal(): CrystalData {
   const intact = buildChunk();
-  const base = soupFrom(intact);
+  const source = buildChunk(SHARD_ICO_SUBDIVISIONS, false);
+  const base = soupFrom(source);
   const sites = voronoiSites();
   const stats: FractureStats = { capFailures: 0, nonStarCaps: 0 };
   const shards: THREE.BufferGeometry[] = [];
@@ -510,7 +538,7 @@ export function generateCrystal(): CrystalData {
     });
     if (soup.length) shards.push(geometryFrom(soup));
   });
-  return { intact, shards, stats };
+  return { intact, shards, source, stats };
 }
 
 /* ── Compact binary: build script writes it, the client reads it ── */

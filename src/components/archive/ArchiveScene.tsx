@@ -663,7 +663,7 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
   const hideCrystal = useCallback((o: THREE.Object3D | null) => hideFromBackdrop(registry, o), [registry]);
   // ONE material for every seal body, ONE for every orbiting shard: owned
   // here (on a hidden holder mesh), handed to the three seals
-  const glassProps = useMemo(() => crystalGlassProps("dream", "intact"), []);
+  const glassProps = useMemo(() => crystalGlassProps("dream", "seal"), []);
   const shardProps = useMemo(() => crystalGlassProps("dream", "shard"), []);
   const cheapProps = useMemo(() => crystalCheapProps("dream"), []);
   const [sealGlass, setSealGlass] = useState<THREE.Material | null>(null);

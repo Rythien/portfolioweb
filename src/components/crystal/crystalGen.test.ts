@@ -1,16 +1,25 @@
 // The intact crystal and its shards are one object. Run: npm run test:crystal
+//
+// The shards are cut from a coarse source mesh (SHARD_ICO_SUBDIVISIONS, no
+// fine relief); the intact mesh is the same shape at ICO_SUBDIVISIONS with
+// the fine relief in geometry. So shards are checked against the source,
+// and the intact mesh against the source within the relief's amplitude.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import * as THREE from "three";
-import { generateCrystal, encodeCrystal, decodeCrystal, volumeOf, SHARD_COUNT } from "./crystalGen.ts";
+import { generateCrystal, encodeCrystal, decodeCrystal, volumeOf, SHARD_COUNT, DETAIL_OCTAVES, TARGET_SIZE } from "./crystalGen.ts";
 
 const BIN = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "public", "models", "crystal-chunk.bin");
 const file = readFileSync(BIN);
 const decoded = decodeCrystal(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength));
 const [intact, ...shards] = decoded;
+// The shard source, quantised exactly as the shards were (same encoder,
+// same position scale: the source lies inside the shards' extent)
+const gen = generateCrystal();
+const source = decodeCrystal(encodeCrystal([gen.intact, ...gen.shards, gen.source])).at(-1)!;
 
 type Tri = { a: THREE.Vector3; b: THREE.Vector3; c: THREE.Vector3; n: THREE.Vector3[]; fracture: boolean };
 function tris(g: THREE.BufferGeometry): Tri[] {
@@ -29,9 +38,9 @@ test("the committed crystal-chunk.bin is exactly what the generator produces", (
   assert.ok(fresh.equals(file), "stale: run npm run gen:crystal");
 });
 
-test("shards are closed solids that together hold the intact volume", () => {
+test("shards are closed solids that together hold the source volume", () => {
   assert.equal(shards.length, SHARD_COUNT);
-  const vi = volumeOf(intact);
+  const vi = volumeOf(source);
   const vs = shards.reduce((a, g) => a + volumeOf(g), 0);
   assert.ok(Math.abs(vs - vi) / vi < 1e-5, `volume ${vs} vs ${vi}`);
   for (const [i, g] of shards.entries()) {
@@ -56,8 +65,8 @@ test("shards are closed solids that together hold the intact volume", () => {
   }
 });
 
-test("every shard's outer surface is a piece of the intact surface, same normals", () => {
-  const I = tris(intact);
+test("every shard's outer surface is a piece of the source surface, same normals", () => {
+  const I = tris(source);
   const outer = shards.flatMap((g) => tris(g).filter((t) => !t.fracture));
   const bary = new THREE.Vector3();
   const tri = new THREE.Triangle();
@@ -79,11 +88,11 @@ test("every shard's outer surface is a piece of the intact surface, same normals
     const ns = t.n[0].clone().add(t.n[1]).add(t.n[2]).normalize();
     worstNormal = Math.max(worstNormal, ni.angleTo(ns));
   }
-  assert.ok(worstDist < 2e-4, `outer surface strays ${worstDist} from the intact mesh`);
+  assert.ok(worstDist < 2e-4, `outer surface strays ${worstDist} from the source mesh`);
   assert.ok(THREE.MathUtils.radToDeg(worstNormal) < 2, `normals differ by ${THREE.MathUtils.radToDeg(worstNormal).toFixed(2)} deg`);
   const ai = I.reduce((s, t) => s + area(t), 0);
   const ao = outer.reduce((s, t) => s + area(t), 0);
-  assert.ok(Math.abs(ao - ai) / ai < 1e-4, `outer area ${ao} vs intact ${ai}`);
+  assert.ok(Math.abs(ao - ai) / ai < 1e-4, `outer area ${ao} vs source ${ai}`);
 });
 
 test("fracture faces are new and flat (one normal per face)", () => {
@@ -137,13 +146,14 @@ export function silhouette(geos: THREE.BufferGeometry[], dir: THREE.Vector3, px 
   return mask;
 }
 
-test("the shards laid back together reconstruct the intact silhouette exactly", () => {
-  const dirs = [
+const DIRS = [
     [0, 0, 1], [0, 0, -1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0],
     [1, 1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, -1], [-1, -1, 1], [-1, 1, -1], [1, -1, -1], [-1, -1, -1],
   ].map(([x, y, z]) => new THREE.Vector3(x, y, z).normalize());
-  for (const d of dirs) {
-    const a = silhouette([intact], d);
+
+test("the shards laid back together reconstruct the source silhouette exactly", () => {
+  for (const d of DIRS) {
+    const a = silhouette([source], d);
     const b = silhouette(shards, d);
     let diff = 0, cover = 0;
     for (let i = 0; i < a.length; i++) {
@@ -152,5 +162,25 @@ test("the shards laid back together reconstruct the intact silhouette exactly", 
     }
     assert.ok(cover > 5000, "empty silhouette");
     assert.equal(diff, 0, `view ${d.toArray().map((v) => v.toFixed(2))}: ${diff} of ${cover} pixels differ`);
+  }
+});
+
+test("the intact mesh is the source shape plus relief, no more", () => {
+  // Relief is at most the sum of the octave amplitudes (unit sphere), scaled
+  // by the fit; allow 2 px of the 256 px silhouette for rasterisation
+  const reliefMax = DETAIL_OCTAVES.reduce((a, [, amp]) => a + amp, 0);
+  for (const d of DIRS) {
+    const a = silhouette([intact], d);
+    const b = silhouette([source], d);
+    let diff = 0, cover = 0;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) diff++;
+      cover += b[i];
+    }
+    // Differing pixels ~ perimeter x relief band; perimeter ~ 2*pi*sqrt(cover/pi)
+    const perimeter = 2 * Math.sqrt(Math.PI * cover);
+    const band = (reliefMax * (TARGET_SIZE / 2)) / (2.8 / 256) + 2;
+    assert.ok(diff > 0, "intact has no relief");
+    assert.ok(diff < perimeter * band, `view ${d.toArray().map((v) => v.toFixed(2))}: ${diff} px differ, more than the relief allows (${(perimeter * band).toFixed(0)})`);
   }
 });

@@ -1,8 +1,9 @@
 /**
- * ONE material for the intact crystal and every shard. Shards may differ
- * only in thickness (scaled by their size), backdrop resolution and
- * sample count; every other value, and the relief and streak textures
- * themselves (the same texture objects), are shared.
+ * ONE material for the intact crystal and every shard. Kinds may differ
+ * only in thickness (scaled by their size), backdrop resolution, sample
+ * count and normal map (the intact mesh has its fine relief in geometry,
+ * the shards get it from the map); every other value, and the roughness
+ * and streak textures themselves (the same texture objects), are shared.
  */
 import * as THREE from "three";
 import { noise3 } from "./frostUtils";
@@ -34,7 +35,7 @@ export const CRYSTAL_MATERIAL = {
   distortionScale: 0.2,
   temporalDistortion: 0.02,
   /** Refraction samples per pixel (drei recompiles per value). */
-  samples: { intact: 4, shard: 3 },
+  samples: { intact: 8, shard: 3, seal: 4 },
   attenuationDistance: 5,
   envMapIntensity: 1.0,
   /** Thin film: oil-slick streaks, masked to the crevices (inverse relief). */
@@ -52,7 +53,7 @@ export const CRYSTAL_MATERIAL = {
   /** Thin elongated inclusion slivers (intact count; shards share them). */
   slivers: 3,
   /** Backdrop FBO size (square). */
-  resolution: { intact: 512, shard: 384 },
+  resolution: { intact: 1024, shard: 384 },
   /** Shards smaller than this on screen skip the backdrop (cheap glass).
    * Two thresholds so a shard near the line never flickers. */
   cheapShardPx: { off: 56, on: 64 },
@@ -159,15 +160,18 @@ function uvDir(u: number, v: number): [number, number, number] {
   return [c * Math.cos(phi), Math.sin(lat), c * Math.sin(phi)];
 }
 
-let _frost: THREE.DataTexture | null = null;
+const _normalMaps = new Map<boolean, THREE.DataTexture>();
 /**
- * The one normal map: the fine relief (crystalGen DETAIL_OCTAVES, once
- * around the chunk, at its true slope) plus sub-millimetre frost
- * (frostRepeat tiles, at frostStrength). Periodic in u; the mesh's
+ * Sub-millimetre frost (frostRepeat tiles, at frostStrength), plus, with
+ * `withRelief`, the fine relief (crystalGen DETAIL_OCTAVES, once around
+ * the chunk, at its true slope). The intact mesh has the relief in its
+ * geometry and takes the frost-only map; the shards (cut from the coarse
+ * source mesh) take the relief from the map. Periodic in u; the mesh's
  * spherical UVs cover it exactly once.
  */
-export function getFrostNormalMap(): THREE.DataTexture {
-  if (_frost) return _frost;
+export function getFrostNormalMap(withRelief = false): THREE.DataTexture {
+  const cached = _normalMaps.get(withRelief);
+  if (cached) return cached;
   const N = NTEX, R = CRYSTAL_MATERIAL.frostRepeat;
   // Relief heights on the grid (one row of padding at the poles)
   const rel = new Float32Array(N * N);
@@ -176,7 +180,7 @@ export function getFrostNormalMap(): THREE.DataTexture {
     for (let i = 0; i < N; i++) {
       const u = i / N, v = (j + 0.5) / N;
       const [x, y, z] = uvDir(u, v);
-      rel[j * N + i] = reliefHeight(x, y, z);
+      rel[j * N + i] = withRelief ? reliefHeight(x, y, z) : 0;
       fro[j * N + i] = frostAt((u * R) % 1, (v * R) % 1);
     }
   }
@@ -202,11 +206,12 @@ export function getFrostNormalMap(): THREE.DataTexture {
       data[o + 3] = 255;
     }
   }
-  _frost = new THREE.DataTexture(data, N, N);
-  _frost.wrapS = THREE.RepeatWrapping;
-  _frost.wrapT = THREE.ClampToEdgeWrapping;
-  _frost.needsUpdate = true;
-  return _frost;
+  const tex = new THREE.DataTexture(data, N, N);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  _normalMaps.set(withRelief, tex);
+  return tex;
 }
 
 let _rough: THREE.DataTexture | null = null;
@@ -270,7 +275,11 @@ export function getCreviceMap(): THREE.DataTexture {
  */
 export const UNUSED_FBO = 32;
 
-export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint, kind: "intact" | "shard" = "intact") {
+/** intact: the hero crystal (and the Archive's reassembled one); shard:
+ * hero shards and the seals' orbiters; seal: Archive seal bodies. */
+export type GlassKind = keyof typeof CRYSTAL_MATERIAL.samples;
+
+export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint, kind: GlassKind = "intact") {
   const tint = CRYSTAL_MATERIAL.tint[variant];
   return {
     transmission: 1,
@@ -289,7 +298,7 @@ export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint, k
     envMapIntensity: CRYSTAL_MATERIAL.envMapIntensity,
     color: tint.color,
     attenuationColor: tint.attenuationColor,
-    normalMap: getFrostNormalMap(),
+    normalMap: getFrostNormalMap(kind === "shard"),
     normalScale: new THREE.Vector2(1, 1),
     iridescence: CRYSTAL_MATERIAL.iridescence,
     iridescenceIOR: CRYSTAL_MATERIAL.iridescenceIOR,
