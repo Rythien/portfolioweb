@@ -12,7 +12,8 @@ import { patchVeilMaterial, updateVeil } from "./marqueeVeil";
 const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("crystalfreeze");
 
 const HEADLINE_TILE = `${SITE_DATA.hero.headlineLine1}  ${SITE_DATA.hero.headlineLine2}  ·  `;
-const FONT_URL = "/fonts/inter-tight-bold.ttf";
+// Subset of Inter Tight Bold (npm run gen:font): only what the headline can use
+const FONT_URL = "/fonts/inter-tight-bold-subset.woff";
 
 const FBO_HALF_FOV_RAD = (50 / 2) * (Math.PI / 180);
 const FBO_CAM_Z = 6;

@@ -8,7 +8,8 @@ import GlassCrystal from "@/components/crystal/GlassCrystal";
 import { useFractureStore } from "@/store/useFractureStore";
 
 const HEADLINE = "Designing interfaces that breathe with life.";
-const FONT_URL = "/fonts/inter-tight-bold.ttf";
+// Subset of Inter Tight Bold (npm run gen:font): only what the headline can use
+const FONT_URL = "/fonts/inter-tight-bold-subset.woff";
 const TILE_COUNT = 3;
 
 function MarqueeText() {
