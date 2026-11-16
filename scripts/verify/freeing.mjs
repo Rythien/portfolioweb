@@ -27,6 +27,9 @@ await page.goto(`${BASE}/?nopreload=1&mode=dream`, { waitUntil: "domcontentloade
 await page.evaluate(() => localStorage.removeItem("archive-progress-v1"));
 await page.goto(`${BASE}/?nopreload=1&mode=dream&archiveaim=${seal}&archivecharge=3&archivefreeze=1`, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(9000);
+// ...and the Archive warm-up finished: until then queued shader links can
+// stall a frame between two actions (window.__archiveWarmMs is set at the end)
+await page.waitForFunction(() => window.__archiveWarmMs !== undefined, null, { timeout: 60000 });
 await page.locator(".archive-stage").focus();
 
 for (let k = 0; k < 3; k++) {

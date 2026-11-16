@@ -22,6 +22,9 @@ await page.goto(`${BASE}/?nopreload=1&mode=dream&noarchive=1`, { waitUntil: "dom
 await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: ["4c-iced-coffee", "kinetic-archive"], recovered: [], hintSeen: true })));
 await page.goto(`${BASE}/?nopreload=1&mode=dream&archiveaim=0&archivecharge=3&archivefreeze=1`, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(9000);
+// ...and the Archive warm-up finished: until then queued shader links can
+// stall a frame between two actions (window.__archiveWarmMs is set at the end)
+await page.waitForFunction(() => window.__archiveWarmMs !== undefined, null, { timeout: 60000 });
 await page.locator(".archive-stage").focus();
 check((await page.locator(".archive-count").innerText().catch(() => "")).includes("2"), "HUD counts the two saved seals");
 for (let k = 0; k < 3; k++) {

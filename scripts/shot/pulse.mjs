@@ -28,6 +28,9 @@ const check = (ok, msg) => {
 
 await page.goto(`${BASE}/?nopreload=1&mode=dream&archiveaim=${seal}&archivecharge=3&archivefreeze=1`, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(9000);
+// ...and the Archive warm-up finished: until then queued shader links can
+// stall a frame between two actions (window.__archiveWarmMs is set at the end)
+await page.waitForFunction(() => window.__archiveWarmMs !== undefined, null, { timeout: 60000 });
 await page.locator(".archive-stage").focus();
 await page.screenshot({ path: resolve(shots, "pulse-charged.png") });
 const ready = await page.evaluate(() => getComputedStyle(document.querySelector(".archive-hud circle[r='16']")).opacity);

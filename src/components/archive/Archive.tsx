@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Canvas, useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -15,6 +15,8 @@ function arc(r: number, a0: number, a1: number): string {
   return `M ${p(a0)} A ${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${p(a1)}`;
 }
 import { TimerClock, muteClockDeprecationUntilSwapped } from "@/components/scene/timerClock";
+import { exposePrograms } from "@/components/scene/programHook";
+import { useThemeStore } from "@/store/useThemeStore";
 
 interface ArchiveProps {
   /** The slot writes the flood-tracking clip-path straight onto this. */
@@ -33,14 +35,64 @@ interface ArchiveProps {
  * program and renders a single frame (uploading geometry, allocating
  * render targets), so revealing it later costs no frames.
  */
-function Warmup() {
+/** Test hook: what each warm-up step cost (compile calls, then the wait for the link). */
+function logWarm(o: THREE.Object3D, mats: THREE.Material[], compileMs: number, linkMs: number) {
+  const w = window as unknown as { __archiveWarmLog?: { what: string; compile: number; link: number }[] };
+  (w.__archiveWarmLog ??= []).push({
+    what: `${o.type}${o.name ? " " + o.name : ""}: ${mats.map((m) => m.type + "[" + Object.keys((m as THREE.ShaderMaterial).uniforms ?? {}).slice(0, 4).join(",") + "]").join("+")}`,
+    compile: Math.round(compileMs),
+    link: Math.round(linkMs),
+  });
+}
+
+/*
+ * Firefox has no parallel shader compile, and its GPU process links
+ * programs for every WebGL context on the page in turn: while the Archive's
+ * shaders link, the WAKE page's own frames queue behind them. So the warm-up
+ * runs only while the visitor is idle, one drawable per step, and waits for
+ * that step's links to finish before yielding: the GPU-process work happens
+ * now, while nobody is scrolling, not a moment later in the middle of it.
+ */
+const WARM_IDLE_MS = 1000;
+let lastInput = 0;
+const INPUT_EVENTS = ["scroll", "wheel", "keydown", "touchstart", "pointerdown"] as const;
+function markInput() {
+  lastInput = performance.now();
+}
+function programsOf(gl: THREE.WebGLRenderer): Set<unknown> {
+  return new Set(gl.info.programs ?? []);
+}
+/** Block until every program built since `before` has linked. */
+function waitForLinks(gl: THREE.WebGLRenderer, before: Set<unknown>) {
+  const ctx = gl.getContext();
+  for (const p of gl.info.programs ?? []) {
+    if (before.has(p)) continue;
+    const prog = (p as unknown as { program?: WebGLProgram }).program;
+    if (prog) ctx.getProgramParameter(prog, ctx.LINK_STATUS);
+  }
+}
+
+/**
+ * How the warm-up runs, decided at mount:
+ * idle  - a normal visit: one drawable at a time while the visitor is idle,
+ *         screen and render-target variants, each step's links awaited
+ * load  - loaded straight into DREAM: everything at once, both variants,
+ *         then every link settled in one deliberate stall before play
+ * flood - mounted by a mode switch already under way: screen variants only
+ *         and no waiting (anything more lumped seconds into one frame of the
+ *         transition; render-target variants compile on first use instead)
+ */
+type WarmMode = "idle" | "load" | "flood";
+
+function Warmup({ onDone, mode }: { onDone: () => void; mode: WarmMode }) {
+  const eager = mode !== "idle";
   const { gl, scene, camera, invalidate } = useThree();
   useEffect(() => {
     let live = true;
     const t0 = performance.now();
     let longest = 0;
-    // One drawable at a time, everything else hidden, in idle slots: the
-    // programs get built without one long block on the WAKE page
+    // One drawable at a time, everything else hidden, while the visitor is
+    // idle (WARM_IDLE_MS without scroll, wheel, key or touch)
     // Collected in the first idle slot, not here: the seals mount a render
     // later (once the shared glass materials exist) and must be included
     const items: THREE.Object3D[] = [];
@@ -58,15 +110,26 @@ function Warmup() {
       warmHidden = items.map((o) => o.userData.warm === true);
     };
     const seen = new Set<string>();
+    // The seals' backdrop pass draws the scene into a render target, and
+    // three keys programs on output colour space and tone mapping, which
+    // differ from the screen: compile that variant too (any target will do)
+    const fboVariant = new THREE.WebGLRenderTarget(1, 1);
     let i = 0;
     let handle = 0;
     const idle = (cb: () => void) =>
       window.requestIdleCallback ? window.requestIdleCallback(cb, { timeout: 500 }) : window.setTimeout(cb, 16);
+    INPUT_EVENTS.forEach((e) => window.addEventListener(e, markInput, { passive: true, capture: true }));
     const step = () => {
       if (!live) return;
+      if (!eager && performance.now() - lastInput < WARM_IDLE_MS) {
+        handle = window.setTimeout(step, 250);
+        return;
+      }
       if (!collected) collect();
       const t = performance.now();
-      while (i < items.length && performance.now() - t < 8) {
+      let built = false;
+      // Eager: the old 8 ms batches, no link waits (the flood is animating)
+      while (i < items.length && (eager ? performance.now() - t < 8 : !built)) {
         const o = items[i];
         const mats = ([] as THREE.Material[]).concat((o as THREE.Mesh).material ?? []);
         const key = mats.map((m) => m.uuid).join(",");
@@ -77,7 +140,21 @@ function Warmup() {
           const hiddenParents: THREE.Object3D[] = [];
           for (let p = o.parent; p; p = p.parent) if (!p.visible) { p.visible = true; hiddenParents.push(p); }
           o.visible = true;
+          const before = programsOf(gl);
+          const c0 = performance.now();
           gl.compile(scene, camera);
+          // Crystal glass is hidden from the backdrop pass: no FBO variant
+          const glass = mats.some((m) => m.userData.warmAlpha);
+          if (!glass && mode !== "flood") {
+            const prev = gl.getRenderTarget();
+            gl.setRenderTarget(fboVariant);
+            gl.compile(scene, camera);
+            gl.setRenderTarget(prev);
+          }
+          const c1 = performance.now();
+          if (!eager) waitForLinks(gl, before);
+          logWarm(o, mats, c1 - c0, performance.now() - c1);
+          built = true;
           hiddenParents.forEach((p) => (p.visible = false));
           items.forEach((x, k) => (x.visible = vis[k]));
         }
@@ -88,6 +165,11 @@ function Warmup() {
         handle = idle(step);
         return;
       }
+      // Loaded straight into DREAM: settle every queued link now, one
+      // deliberate stall as the Archive starts, rather than wherever the
+      // GPU process happens to finish (it landed between a player's shots)
+      if (mode === "load") waitForLinks(gl, new Set());
+      onDone();
       invalidate();
       const w = window as unknown as { __archiveWarmMs?: number; __archiveWarmBlockMs?: number };
       w.__archiveWarmMs = performance.now() - t0;
@@ -98,9 +180,11 @@ function Warmup() {
       live = false;
       window.cancelIdleCallback?.(handle);
       window.clearTimeout(handle);
+      fboVariant.dispose();
+      INPUT_EVENTS.forEach((e) => window.removeEventListener(e, markInput, { capture: true }));
       items.forEach((x, k) => (x.visible = vis[k]));
     };
-  }, [gl, scene, camera, invalidate]);
+  }, [gl, scene, camera, invalidate, onDone, eager, mode]);
   return null;
 }
 
@@ -116,6 +200,17 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
   const hudRef = useRef<HudEls>(createHudEls());
   // Armed before the Canvas builds its store; released in onCreated
   const [restoreConsole] = useState(() => (typeof window !== "undefined" ? muteClockDeprecationUntilSwapped() : null));
+  /** The warm-up has built every program: the canvas may render (on demand) while hidden. */
+  const [warmed, setWarmed] = useState(false);
+  /** How the warm-up runs (see WarmMode): mounted by a mode switch under way,
+   * loaded straight into DREAM, or warmed while the visitor is idle. The first
+   * two render on mount: the programs are needed now. */
+  const [warmMode] = useState<WarmMode>(() => {
+    const t = useThemeStore.getState();
+    return t.transitioning ? "flood" : t.mode === "dream" ? "load" : "idle";
+  });
+  const eager = warmMode !== "idle";
+  const markWarmed = useCallback(() => setWarmed(true), []);
   const stageRef = useRef<HTMLDivElement>(null);
   const wakeRef = useRef<HTMLButtonElement>(null);
   const [reduced] = useState(
@@ -264,15 +359,19 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
           dpr={[1, 1.25]}
           camera={{ fov: 62, near: 0.1, far: 600, position: [0, 0, 18] }}
           gl={{ antialias: true, powerPreference: "high-performance" }}
-          frameloop={active ? "always" : "demand"}
+          // "never" until the warm-up is done: a first render on mount queued
+          // every program link at once, ~10 s of GPU-process work the page's
+          // frames then waited behind (Warmup builds them one by one, idle)
+          frameloop={active ? "always" : warmed || eager ? "demand" : "never"}
           onCreated={(state) => {
+            exposePrograms("archive", state.gl);
             state.set({ clock: new TimerClock() as unknown as THREE.Clock });
             restoreConsole?.();
           }}
           className="archive-canvas"
         >
           <ArchiveScene input={inputRef} reduced={reduced} lowPower={lowPower} game={gameRef} hud={hudRef} />
-          <Warmup />
+          <Warmup onDone={markWarmed} mode={warmMode} />
         </Canvas>
         {/* Soft vignette: the void closes in at the edges */}
         <div

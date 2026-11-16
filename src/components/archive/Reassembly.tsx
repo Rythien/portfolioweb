@@ -5,7 +5,7 @@ import { useFrame, useLoader } from "@react-three/fiber";
 import { MeshTransmissionMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { decodeCrystal, TARGET_SIZE } from "@/components/crystal/crystalGen";
-import { applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
+import { UNUSED_FBO, applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import { ENDING } from "./game";
 import type { ArchiveState } from "./archiveState";
 
@@ -40,7 +40,11 @@ interface Props {
 export default function Reassembly({ game, buffer, hide, glowTex, reduced }: Props) {
   const buf = useLoader(THREE.FileLoader, CRYSTAL_URL, arrayBuffer) as unknown as ArrayBuffer;
   const geo = useMemo(() => decodeCrystal(buf)[0], [buf]);
-  const glass = useMemo(() => crystalGlassProps("dream"), []);
+  // The seals' kind (4 samples): it then shares the seal body's program.
+  // At "intact" (8 samples) it was its own program, and ANGLE took ~5 s to
+  // compile it (the sample loop is unrolled), all of it on the GPU process
+  // the page's frames wait behind
+  const glass = useMemo(() => crystalGlassProps("dream", "seal"), []);
   const group = useRef<THREE.Group>(null);
   const flash = useRef<THREE.Sprite>(null);
   const light = useRef<THREE.PointLight>(null);
@@ -53,8 +57,10 @@ export default function Reassembly({ game, buffer, hide, glowTex, reduced }: Pro
     grp.visible = !!end;
     if (!end) {
       if (flash.current) flash.current.visible = false;
+      if (light.current) light.current.intensity = 0;
       return;
     }
+    if (light.current) light.current.position.set(end.point[0], end.point[1], end.point[2]);
     const et = g.t - end.t0;
     const t0 = ENDING.converge - 0.4;
     const k = (et - t0) / ENDING.form;
@@ -80,14 +86,17 @@ export default function Reassembly({ game, buffer, hide, glowTex, reduced }: Pro
 
   return (
     <group>
+      {/* Outside the hidden group and always visible (intensity 0 until the
+          ending): three bakes the point-light count into every lit program,
+          so a light appearing at the ending recompiled the whole Archive */}
+      <pointLight ref={light} color="#e9dfff" intensity={0} distance={14} decay={1.4} />
       <group ref={group} visible={false}>
-        <pointLight ref={light} color="#e9dfff" intensity={0} distance={14} decay={1.4} />
         <mesh ref={hide} geometry={geo} frustumCulled={false} userData={{ warm: true }}>
           <MeshTransmissionMaterial
             {...glass}
             buffer={buffer}
             thickness={thicknessFor(TARGET_SIZE)}
-            resolution={32}
+            resolution={UNUSED_FBO}
             ref={(m: unknown) => applyCrystalShader(m as THREE.Material | null)}
           />
         </mesh>
