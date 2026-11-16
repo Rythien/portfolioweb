@@ -20,8 +20,8 @@ export const VEIL = {
   /** Opacity multiplier at the centre: a slight softening only. The type
    * must stay readable through the glass, bent and broken by it; that
    * refracted type is what makes the ice read as transparent (at 0.28 the
-   * crystal turned into an opaque grey pebble). */
-  centre: 0.72,
+   * crystal turned into an opaque grey pebble). 0.88: nearly off. */
+  centre: 0.88,
   /** Fraction of the radius, at the rim, over which it eases back to 1. */
   feather: 0.35,
 } as const;

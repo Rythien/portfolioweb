@@ -23,11 +23,17 @@ export const CRYSTAL_MATERIAL = {
   shardThicknessScale: 0.35,
   /** Ice disperses far less than a prism. */
   chromaticAberration: 0.045,
-  anisotropicBlur: 0.1,
+  anisotropicBlur: 0.05,
   /** 1, so the roughness map (roughnessRange) gives the final values. */
   roughness: 1,
   /** Wet-polished pits .. frosted ridges, from the shared relief field. */
-  roughnessRange: [0.02, 0.38] as [number, number],
+  roughnessRange: [0.02, 0.18] as [number, number],
+  /** Frost follows the silhouette: roughness eases from roughnessRange[0]
+   * (looking straight through the thick middle: clear) to the map's value
+   * at grazing angles by (1 - |n.v|)^frostRimPower. Real ice is clearest
+   * through the middle. drei's refraction blur is driven by roughness, so
+   * this is what keeps the headline readable through the centre. */
+  frostRimPower: 2,
   /** Wet sheen on fresh faces. */
   clearcoat: 0.6,
   clearcoatRoughness: 0.1,
@@ -49,9 +55,9 @@ export const CRYSTAL_MATERIAL = {
   /** Fresnel rim along the silhouette. */
   rim: { color: "#ffffff", power: 4, intensity: 0.7 },
   /** Internal cloud: ice is never optically empty. */
-  cloud: { scale: 0.82, opacity: 0.03 },
+  cloud: { scale: 0.82, opacity: 0.015 },
   /** Thin elongated inclusion slivers (intact count; shards share them). */
-  slivers: 3,
+  slivers: 2,
   /** Backdrop FBO size (square). */
   resolution: { intact: 1024, shard: 384 },
   /** Shards smaller than this on screen skip the backdrop (cheap glass).
@@ -345,6 +351,8 @@ interface RimUniforms {
   rimPower: { value: number };
   rimIntensity: { value: number };
   streakDarken: { value: number };
+  frostRimPower: { value: number };
+  clearRoughness: { value: number };
 }
 
 const shared: RimUniforms = {
@@ -352,6 +360,8 @@ const shared: RimUniforms = {
   rimPower: { value: CRYSTAL_MATERIAL.rim.power },
   rimIntensity: { value: CRYSTAL_MATERIAL.rim.intensity },
   streakDarken: { value: CRYSTAL_MATERIAL.streakDarken },
+  frostRimPower: { value: CRYSTAL_MATERIAL.frostRimPower },
+  clearRoughness: { value: CRYSTAL_MATERIAL.roughnessRange[0] },
 };
 
 const PATCHED = Symbol("crystalShader");
@@ -372,6 +382,8 @@ function rimUniforms(o?: RimOverride): RimUniforms {
       rimPower: { value: o.power ?? CRYSTAL_MATERIAL.rim.power },
       rimIntensity: { value: o.intensity ?? CRYSTAL_MATERIAL.rim.intensity },
       streakDarken: shared.streakDarken,
+      frostRimPower: shared.frostRimPower,
+      clearRoughness: shared.clearRoughness,
     };
     _rimSets.set(key, u);
   }
@@ -397,7 +409,19 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "void main() {",
-        "uniform vec3 rimColor;\nuniform float rimPower;\nuniform float rimIntensity;\nuniform float streakDarken;\nvoid main() {",
+        "uniform vec3 rimColor;\nuniform float rimPower;\nuniform float rimIntensity;\nuniform float streakDarken;\nuniform float frostRimPower;\nuniform float clearRoughness;\nvoid main() {",
+      )
+      .replace(
+        "#include <roughnessmap_fragment>",
+        `#include <roughnessmap_fragment>
+        #ifndef FLAT_SHADED
+        {
+          // Clear through the middle, frosted toward the silhouette
+          vec3 frostView = isOrthographic ? vec3( 0.0, 0.0, 1.0 ) : normalize( vViewPosition );
+          float frostW = pow( 1.0 - clamp( abs( dot( normalize( vNormal ), frostView ) ), 0.0, 1.0 ), frostRimPower );
+          roughnessFactor = mix( clearRoughness, roughnessFactor, frostW );
+        }
+        #endif`,
       )
       .replace(
         "#include <dithering_fragment>",
@@ -413,6 +437,6 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
       );
   };
   const baseKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v1`;
+  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v2`;
   material.needsUpdate = true;
 }
