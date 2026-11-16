@@ -43,9 +43,19 @@ for (let k = 0; k < 40; k++) {
   if (Math.abs(y - scrollBefore) < 0.5) break;
   scrollBefore = y;
 }
-await page.waitForFunction(() => typeof window.__archiveWarmMs === "number", null, { timeout: 15000 }).catch(() => {});
-const warm = await page.evaluate(() => ({ total: window.__archiveWarmMs, block: window.__archiveWarmBlockMs }));
-check(typeof warm.total === "number", `Archive warmed during WAKE idle (ready after ${warm.total?.toFixed(0)} ms, longest warm-up task ${warm.block?.toFixed(0)} ms)`);
+// The Archive pre-warms in WAKE only on the full profile, and only once the
+// hero's own shaders are built (scene/warm.ts); on the reduced profile
+// (slow renderer) it must not pre-warm at all
+const profile = await page.evaluate(() => window.__gfxProfile?.profile);
+if (profile === "reduced") {
+  await page.waitForTimeout(3000);
+  const mounted = await page.evaluate(() => typeof window.__archiveWarmMs === "number");
+  check(!mounted, `reduced profile: Archive not pre-warmed in WAKE (${mounted ? "it was" : "it was not"})`);
+} else {
+  await page.waitForFunction(() => typeof window.__archiveWarmMs === "number", null, { timeout: 30000 }).catch(() => {});
+  const total = await page.evaluate(() => window.__archiveWarmMs);
+  check(typeof total === "number", `Archive warmed during WAKE idle (${profile} profile, ready at ${total?.toFixed(0)} ms)`);
+}
 
 // Handover timing, measured in the page from the click itself
 await page.evaluate(() => {
