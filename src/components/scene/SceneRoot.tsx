@@ -8,6 +8,7 @@ import Compositor from "./Compositor";
 import CrystalCursor from "@/components/crystal/CrystalCursor";
 import { SITE_DATA } from "@/content/site";
 import { TimerClock, muteClockDeprecationUntilSwapped } from "./timerClock";
+import { exposePrograms } from "./programHook";
 import { useArchiveStore } from "@/store/useArchiveStore";
 
 // Armed before the Canvas builds its store; released in onCreated
@@ -134,6 +135,7 @@ export default function SceneRoot() {
         frameloop={reducedMotion ? "demand" : "always"}
         onCreated={(state) => {
           canvasRef.current = state;
+          exposePrograms("page", state.gl);
           if (useArchiveStore.getState().open) state.setFrameloop("never");
           // Frame timing on THREE.Timer instead of the deprecated Clock
           state.set({ clock: new TimerClock() as unknown as THREE.Clock });
