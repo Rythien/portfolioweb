@@ -73,14 +73,23 @@ function playSwapTick() {
  * Test-only views behind URL params (Playwright comparisons; the UI never
  * sets them): crystalview=assembled shows the shards laid back together in
  * place of the intact mesh; crystalfreeze=<s> pins rotation and the logo;
- * crystallogo=0 hides the hero logo (to sample the glass behind it).
+ * crystallogo=0 hides the hero logo (to sample the glass behind it);
+ * crystallogo=matte paints the logo and its contour flat magenta, so a
+ * test can find the logo's exact (refracted) silhouette. A frozen pose
+ * also stills the glass shimmer (temporalDistortion), so two loads of
+ * the same pose match pixel for pixel.
  */
 const DEBUG = (() => {
   if (typeof window === "undefined") return null;
   const q = new URLSearchParams(window.location.search);
   const freeze = q.has("crystalfreeze") ? Number(q.get("crystalfreeze")) : null;
   if (freeze !== null) setCrystalTimeOverride(freeze);
-  return { assembled: q.get("crystalview") === "assembled", freeze, noLogo: q.get("crystallogo") === "0" };
+  return {
+    assembled: q.get("crystalview") === "assembled",
+    freeze,
+    noLogo: q.get("crystallogo") === "0",
+    matte: q.get("crystallogo") === "matte",
+  };
 })();
 
 const _swayEuler = new THREE.Euler();
@@ -243,6 +252,18 @@ const LOGO_LOOK = {
     rimOpacity: 0.35,
   },
 } as const;
+/** Test-only (crystallogo=matte): logo and contour in one flat key colour. */
+const MATTE_LOOK = {
+  color: "#ff00ff",
+  emissive: "#ff00ff",
+  emissiveIntensity: 1,
+  side: "#ff00ff",
+  roughness: 1,
+  metalness: 0,
+  envMapIntensity: 0,
+  rim: "#ff00ff",
+  rimOpacity: 1,
+} as const;
 /*
  * Shard logos are drawn over their shard, not refracted through it: seen
  * only through a small tumbling faceted shard, the WAKE logos smeared
@@ -359,7 +380,7 @@ function setCloudOpacity(g: THREE.Object3D, k: number) {
 const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake", active = true }, ref) {
     const { intact: intactGeo, shards } = useCrystalData(seed);
-    const logoLook = LOGO_LOOK[variant];
+    const logoLook = DEBUG?.matte ? { ...MATTE_LOOK, rimScale: LOGO_LOOK[variant].rimScale } : LOGO_LOOK[variant];
     useCrystalSound();
 
     // ONE material: every value below is shared by the intact mesh and the
@@ -368,6 +389,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const glass = useMemo(
       () => ({
         ...crystalGlassProps(variant, "intact"),
+        ...(DEBUG?.freeze != null ? { temporalDistortion: 0 } : {}),
         // Rim + streak shading chained onto drei's own shader patch
         ref: (m: unknown) => applyCrystalShader(m as THREE.Material | null),
       }),
