@@ -2,7 +2,7 @@
  * The crystal chunk and its shards, from one procedural source.
  *
  * Pure (three.js only, no DOM), deterministic, and run at build time by
- * scripts/gen-crystal.mjs, which writes public/models/crystal-chunk.bin.
+ * scripts/gen/crystal.mjs, which writes public/models/crystal-chunk.bin.
  * The intact mesh and every shard come from the SAME displaced-and-clipped
  * mesh: shards are Voronoi cells cut out of it, so a shard's outer surface
  * is literally a piece of the intact surface (same positions, normals and
