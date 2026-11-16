@@ -1,8 +1,8 @@
 /**
- * The marquee softens behind the crystal. Black headline type sitting
- * at full strength behind pale ice left no logo colour that could
- * separate from both, so inside a soft disc that follows the crystal the
- * type fades to VEIL.centre of its opacity.
+ * The marquee softens slightly behind the crystal: inside a soft disc
+ * that follows the crystal the type fades to VEIL.centre of its opacity.
+ * Logo contrast against black type comes from the logo's dark contour
+ * (GlassCrystal LOGO_LOOK), not from hiding the type.
  *
  * The marquee is drawn several times a frame: on screen and into the
  * crystal's backdrop FBOs (which is where the type seen *through* the
@@ -17,8 +17,11 @@ import { useFractureStore } from "@/store/useFractureStore";
 export const VEIL = {
   /** Disc radius as a multiple of the crystal's on-screen radius. */
   radius: 1.35,
-  /** Opacity multiplier at the centre. */
-  centre: 0.28,
+  /** Opacity multiplier at the centre: a slight softening only. The type
+   * must stay readable through the glass, bent and broken by it; that
+   * refracted type is what makes the ice read as transparent (at 0.28 the
+   * crystal turned into an opaque grey pebble). */
+  centre: 0.72,
   /** Fraction of the radius, at the rim, over which it eases back to 1. */
   feather: 0.35,
 } as const;

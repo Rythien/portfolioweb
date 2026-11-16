@@ -10,7 +10,7 @@ import { TARGET_SIZE } from "./crystalGen";
 
 export const CRYSTAL_MATERIAL = {
   /** Normal map is sub-millimetre frost only; relief is in the geometry. */
-  normalScale: 0.09,
+  normalScale: 0.06,
   /** Frost normal map repeats around the chunk (it tiles in u and v). */
   frostRepeat: 3,
   ior: 1.35,
@@ -46,7 +46,7 @@ export const CRYSTAL_MATERIAL = {
   /** Fresnel rim along the silhouette. */
   rim: { color: "#ffffff", power: 4, intensity: 0.7 },
   /** Internal cloud: ice is never optically empty. */
-  cloud: { scale: 0.82, opacity: 0.045 },
+  cloud: { scale: 0.82, opacity: 0.03 },
   /** Thin elongated inclusion slivers (intact count; shards share them). */
   slivers: 3,
   /** Backdrop FBO size: the only other thing a shard may change. */

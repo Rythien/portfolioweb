@@ -212,17 +212,21 @@ export function useCrystalData(seed = DEFAULT_SEED) {
  */
 const LOGO_LOOK = {
   wake: {
-    // Mid-grey metal (around #8d96a4): with the marquee veiled behind the
-    // glass the logo no longer has to out-dark black type. Emissive stays
-    // low or the face lifts into the ice's own lightness.
-    color: "#87909e",
+    // Mid-grey metal. No single fill separates from both pale ice and
+    // the black type refracted through it, so the logo carries a thin dark
+    // contour (the rim) and the face stays mid-grey. Emissive stays low
+    // or the face lifts into the ice's own lightness.
+    color: "#9aa3b1",
     emissive: "#7a8391",
     emissiveIntensity: 0.04,
     side: "#3a404a",
     roughness: 0.45,
     metalness: 0.0,
     envMapIntensity: 0.9,
-    rim: "#6f7889",
+    /** Dark contour: separates the face from ice AND from black type. */
+    rim: "#2b3140",
+    rimScale: 1.03,
+    rimOpacity: 0.6,
   },
   dream: {
     color: "#ffffff",
@@ -233,10 +237,10 @@ const LOGO_LOOK = {
     metalness: 0.1,
     envMapIntensity: 4.0,
     rim: "#c8b8ff",
+    rimScale: 1.02,
+    rimOpacity: 0.35,
   },
 } as const;
-const RIM_SCALE = 1.02;
-const RIM_OPACITY = 0.35;
 /*
  * Shard logos are drawn over their shard, not refracted through it: seen
  * only through a small tumbling faceted shard, the WAKE logos smeared
@@ -594,9 +598,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           if (rim.geometry !== heroMesh.geometry) rim.geometry = heroMesh.geometry;
           rim.position.copy(heroMesh.position);
           rim.quaternion.copy(heroMesh.quaternion);
-          rim.scale.copy(heroMesh.scale).multiplyScalar(RIM_SCALE);
+          rim.scale.copy(heroMesh.scale).multiplyScalar(logoLook.rimScale);
           rim.visible = heroMesh.visible && heroOpacity > 0.001;
-          (rim.material as THREE.MeshBasicMaterial).opacity = RIM_OPACITY * heroOpacity;
+          (rim.material as THREE.MeshBasicMaterial).opacity = logoLook.rimOpacity * heroOpacity;
         }
       }
 
@@ -793,8 +797,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           if (rim.geometry !== logo.geometry) rim.geometry = logo.geometry;
           rim.position.copy(logo.position);
           rim.quaternion.copy(logo.quaternion);
-          rim.scale.copy(logo.scale).multiplyScalar(RIM_SCALE);
-          (rim.material as THREE.MeshBasicMaterial).opacity = RIM_OPACITY * logoK;
+          rim.scale.copy(logo.scale).multiplyScalar(logoLook.rimScale);
+          (rim.material as THREE.MeshBasicMaterial).opacity = logoLook.rimOpacity * logoK;
         }
       }
     });
@@ -870,7 +874,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               color={logoLook.rim}
               side={THREE.BackSide}
               transparent
-              opacity={RIM_OPACITY}
+              opacity={logoLook.rimOpacity}
               depthWrite={false}
             />
           </mesh>
