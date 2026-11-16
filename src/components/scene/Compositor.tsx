@@ -281,6 +281,23 @@ interface CompositorProps {
   isMobile: boolean;
 }
 
+
+/** Flip `transparent` on every material flagged userData.warmAlpha. */
+function flipAlphaVariants(scenes: THREE.Scene[]): THREE.Material[] {
+  const out = new Set<THREE.Material>();
+  for (const sc of scenes) {
+    sc.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      for (const x of Array.isArray(m) ? m : m ? [m] : []) if (x.userData.warmAlpha) out.add(x);
+    });
+  }
+  for (const x of out) x.transparent = !x.transparent;
+  return [...out];
+}
+function flipBack(ms: THREE.Material[]): void {
+  for (const x of ms) x.transparent = !x.transparent;
+}
+
 export default function Compositor({ reducedMotion, isMobile }: CompositorProps) {
   const { gl, size } = useThree();
 
@@ -379,6 +396,17 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
           gl.compile(wakeScene, fboCamera);
           gl.setRenderTarget(dreamTarget);
           gl.compile(dreamScene, fboCamera);
+          // ...and again with the fading glass's `transparent` flipped:
+          // the opposite variant otherwise linked mid-scroll as the crystal
+          // broke (0.8-2.9 s stalls measured, scripts/perf/jank.mjs)
+          const flipped = flipAlphaVariants([wakeScene, dreamScene]);
+          if (flipped.length) {
+            gl.setRenderTarget(wakeTarget);
+            gl.compile(wakeScene, fboCamera);
+            gl.setRenderTarget(dreamTarget);
+            gl.compile(dreamScene, fboCamera);
+            flipBack(flipped);
+          }
           gl.setRenderTarget(null);
         } finally {
           for (const o of hidden) o.visible = false;

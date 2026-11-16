@@ -402,6 +402,10 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
   const m = material as THREE.Material & { [PATCHED]?: boolean };
   if (m[PATCHED]) return;
   m[PATCHED] = true;
+  // Crystal glass fades (intact crossfade, shards fading in), which flips
+  // `transparent` and selects another program (three's OPAQUE define): the
+  // Compositor warm-up builds both variants of anything carrying this flag
+  material.userData.warmAlpha = true;
   const base = material.onBeforeCompile.bind(material);
   material.onBeforeCompile = (shader, renderer) => {
     base(shader, renderer);
