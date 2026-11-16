@@ -46,9 +46,60 @@ export const HERO_LOGO_DEPTH = 0.26;
  * depth-to-size ratio as a hero logo of ~1.4. */
 const UNIT_DEPTH = HERO_LOGO_DEPTH / 1.4;
 
-// Bevel in SVG units (icons are 24 units wide): wide enough that the
-// rounded edge reads as form and catches the strip light
-const BEVEL = 0.8;
+/**
+ * Bevel in SVG units (icons are 24 units wide). WAKE: wide, because the
+ * bevel is the logo's edge highlight; it carries its own light material
+ * (GlassCrystal LOGO_LOOK.bevel) and catches the key light, and a lit edge
+ * survives the glass's refraction blur where a dark outline does not.
+ * DREAM: the original narrow bevel (its glowing face + violet walls + rim
+ * already read; a wide bevel there either flattened the mark or matched
+ * the lavender type behind it).
+ */
+export const BEVEL = { wake: 1.4, dream: 0.8 } as const;
+export type BevelKind = keyof typeof BEVEL;
+
+/** Faces whose normal is within this of the extrusion plane are walls;
+ * between walls and caps is bevel. */
+const WALL_MAX_NZ = 0.2;
+const CAP_MIN_NZ = 0.98;
+
+/**
+ * Re-group a (non-indexed) extrusion into 0 = caps, 1 = straight walls,
+ * 2 = bevel, by each face's normal: ExtrudeGeometry puts walls and bevel
+ * in one group, and the bevel needs its own material.
+ */
+function splitBevel(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  const P = geo.getAttribute("position");
+  const names = Object.keys(geo.attributes);
+  const buckets: number[][] = [[], [], []];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let t = 0; t < P.count; t += 3) {
+    a.fromBufferAttribute(P, t);
+    b.fromBufferAttribute(P, t + 1);
+    c.fromBufferAttribute(P, t + 2);
+    const n = b.sub(a).cross(c.sub(a));
+    const len = n.length();
+    const nz = len > 1e-12 ? Math.abs(n.z) / len : 0;
+    buckets[nz >= CAP_MIN_NZ ? 0 : nz <= WALL_MAX_NZ ? 1 : 2].push(t);
+  }
+  const out = new THREE.BufferGeometry();
+  const order = buckets.flat();
+  for (const name of names) {
+    const src = geo.getAttribute(name) as THREE.BufferAttribute;
+    const k = src.itemSize;
+    const arr = new (src.array.constructor as Float32ArrayConstructor)(src.array.length);
+    order.forEach((t, i) => {
+      for (let v = 0; v < 3; v++) for (let j = 0; j < k; j++) arr[(i * 3 + v) * k + j] = src.array[(t + v) * k + j];
+    });
+    out.setAttribute(name, new THREE.BufferAttribute(arr, k));
+  }
+  let start = 0;
+  buckets.forEach((bk, g) => {
+    out.addGroup(start, bk.length * 3, g);
+    start += bk.length * 3;
+  });
+  return out;
+}
 
 interface LogoShape {
   /** Bounding-box diagonal (x/y) after fitting. */
@@ -106,12 +157,13 @@ function pathToGeometry(pathData: string, shape: LogoShape): { geo: THREE.Buffer
     const k = shape.width / diag;
     geo.scale(k, k, shape.depth / depth);
 
-    // ExtrudeGeometry keeps two groups: 0 = front/back caps, 1 = side
-    // walls + bevel. GlassCrystal gives the walls a darker material so the
-    // extrusion edge shows.
+    // Groups: 0 = front/back caps, 1 = straight walls (darker, so the
+    // extrusion reads as form), 2 = bevel (light: the edge highlight)
     geo.computeVertexNormals();
-    geo.computeBoundingBox();
-    return { geo, area: filledArea(shapes) * k * k };
+    const out = splitBevel(geo);
+    geo.dispose();
+    out.computeBoundingBox();
+    return { geo: out, area: filledArea(shapes) * k * k };
   } catch {
     return null;
   }
@@ -154,11 +206,11 @@ function buildSet(shape: LogoShape): LogoData[] {
 }
 
 /** Every icon at hero size (diagonal `size`, area-evened, 0.26 deep), in cycle order. */
-export function getHeroLogos(size: number): LogoData[] {
-  return buildSet({ width: size, depth: HERO_LOGO_DEPTH, bevel: BEVEL });
+export function getHeroLogos(size: number, bevel: BevelKind = "wake"): LogoData[] {
+  return buildSet({ width: size, depth: HERO_LOGO_DEPTH, bevel: BEVEL[bevel] });
 }
 
 /** Every icon at unit width, same order as getHeroLogos; scale to size. */
-export function getUnitLogos(): LogoData[] {
-  return buildSet({ width: 1, depth: UNIT_DEPTH, bevel: BEVEL });
+export function getUnitLogos(bevel: BevelKind = "wake"): LogoData[] {
+  return buildSet({ width: 1, depth: UNIT_DEPTH, bevel: BEVEL[bevel] });
 }

@@ -215,18 +215,18 @@ export function useCrystalData(seed = DEFAULT_SEED) {
 /*
  * Logo look. A logo reads by its silhouette plus its edge shading, so the
  * faces stay lit by the environment (low emissive: at 2.0 the WAKE logo
- * blew out into a flat grey disc) and the extrusion walls get a darker
- * material so the edge shows. DREAM may glow, never above 0.9. No
- * ghost copies anywhere: the glass makes a logo readable, not an overlay.
- * The rim is an inverted hull that keeps a
- * defined outline against the light page.
+ * blew out into a flat grey disc), the straight walls get a darker
+ * material so the extrusion shows, and the wide bevel gets a LIGHT one
+ * that catches the key light as an edge highlight: a lit edge survives
+ * the glass's refraction blur, a dark outline does not. DREAM may glow,
+ * never above 0.9. No ghost copies anywhere. The rim (an inverted hull
+ * outline) is off in WAKE, where the bevel replaced it.
  */
 const LOGO_LOOK = {
   wake: {
-    // Mid-grey metal. No single fill separates from both pale ice and
-    // the black type refracted through it, so the logo carries a thin dark
-    // contour (the rim) and the face stays mid-grey. Emissive stays low
-    // or the face lifts into the ice's own lightness.
+    // Mid-grey metal; the light bevel separates it from both pale ice and
+    // the dark type refracted through it. Emissive stays low or the face
+    // lifts into the ice's own lightness.
     color: "#9aa3b1",
     emissive: "#7a8391",
     emissiveIntensity: 0.04,
@@ -234,10 +234,16 @@ const LOGO_LOOK = {
     roughness: 0.45,
     metalness: 0.0,
     envMapIntensity: 0.9,
-    /** Dark contour: separates the face from ice AND from black type. */
+    /** Bevel: the edge highlight. Smoother and more reflective than the face. */
+    bevel: "#d4dae4",
+    bevelRoughness: 0.25,
+    bevelEnvMapIntensity: 1.6,
+    bevelEmissiveScale: 1,
+    /** The dark contour is retired here (the bevel does its job); kept as a
+     * value so DREAM's rim and the matte test view share one path. */
     rim: "#2b3140",
     rimScale: 1.03,
-    rimOpacity: 0.6,
+    rimOpacity: 0,
   },
   dream: {
     color: "#ffffff",
@@ -247,6 +253,12 @@ const LOGO_LOOK = {
     roughness: 0.3,
     metalness: 0.1,
     envMapIntensity: 4.0,
+    // DREAM is unchanged: its (narrow) bevel wears the violet wall colour,
+    // as it did when bevel and walls were one material
+    bevel: "#8f80d6",
+    bevelRoughness: 0.3,
+    bevelEnvMapIntensity: 4.0,
+    bevelEmissiveScale: 0.25,
     rim: "#c8b8ff",
     rimScale: 1.02,
     rimOpacity: 0.35,
@@ -258,6 +270,10 @@ const MATTE_LOOK = {
   emissive: "#ff00ff",
   emissiveIntensity: 1,
   side: "#ff00ff",
+  bevel: "#ff00ff",
+  bevelRoughness: 1,
+  bevelEnvMapIntensity: 0,
+  bevelEmissiveScale: 1,
   roughness: 1,
   metalness: 0,
   envMapIntensity: 0,
@@ -380,7 +396,7 @@ function setCloudOpacity(g: THREE.Object3D, k: number) {
 const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
   function GlassCrystal({ seed = DEFAULT_SEED, variant = "wake", active = true }, ref) {
     const { intact: intactGeo, shards } = useCrystalData(seed);
-    const logoLook = DEBUG?.matte ? { ...MATTE_LOOK, rimScale: LOGO_LOOK[variant].rimScale } : LOGO_LOOK[variant];
+    const logoLook = DEBUG?.matte ? { ...MATTE_LOOK, rimScale: LOGO_LOOK[variant].rimScale, rimOpacity: LOGO_LOOK[variant].rimOpacity > 0 ? 1 : 0 } : LOGO_LOOK[variant];
     useCrystalSound();
 
     // ONE material: every value below is shared by the intact mesh and the
@@ -414,9 +430,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const heroLogos = useMemo(() => {
       intactGeo.computeBoundingBox();
       const d = intactGeo.boundingBox!.getSize(new THREE.Vector3());
-      return getHeroLogos(HERO_LOGO_FILL * Math.min(d.x, d.y, d.z));
-    }, [intactGeo]);
-    const unitLogos = useMemo(() => getUnitLogos(), []);
+      return getHeroLogos(HERO_LOGO_FILL * Math.min(d.x, d.y, d.z), variant);
+    }, [intactGeo, variant]);
+    const unitLogos = useMemo(() => getUnitLogos(variant), [variant]);
     // The largest shards (by volume) each carry a logo, sized from the
     // shard's own bounds; smaller shards and debris carry none
     const shardLogoSlots = useMemo(() => {
@@ -640,7 +656,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           rim.position.copy(heroMesh.position);
           rim.quaternion.copy(heroMesh.quaternion);
           rim.scale.copy(heroMesh.scale).multiplyScalar(logoLook.rimScale);
-          rim.visible = heroMesh.visible && heroOpacity > 0.001;
+          rim.visible = heroMesh.visible && heroOpacity > 0.001 && logoLook.rimOpacity > 0;
           (rim.material as THREE.MeshBasicMaterial).opacity = logoLook.rimOpacity * heroOpacity;
         }
       }
@@ -674,7 +690,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           const l = shardLogoRefs.current[slot.rank];
           const r = shardRimRefs.current[slot.rank];
           if (l) l.visible = v;
-          if (r) r.visible = v;
+          if (r) r.visible = v && logoLook.rimOpacity > 0;
         }
       };
       setShardLogos(false);
@@ -924,6 +940,18 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
               transparent
               opacity={1}
             />
+            {/* Light bevel: the edge highlight */}
+            <meshStandardMaterial
+              attach="material-2"
+              color={logoLook.bevel}
+              emissive={logoLook.emissive}
+              emissiveIntensity={logoLook.emissiveIntensity * logoLook.bevelEmissiveScale}
+              roughness={logoLook.bevelRoughness}
+              metalness={logoLook.metalness}
+              envMapIntensity={logoLook.bevelEnvMapIntensity}
+              transparent
+              opacity={1}
+            />
           </mesh>
         )}
 
@@ -1054,6 +1082,18 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
                   roughness={logoLook.roughness}
                   metalness={logoLook.metalness}
                   envMapIntensity={logoLook.envMapIntensity}
+                  transparent
+                  opacity={0}
+                  depthWrite={false}
+                />
+                <meshStandardMaterial
+                  attach="material-2"
+                  color={logoLook.bevel}
+                  emissive={logoLook.emissive}
+                  emissiveIntensity={logoLook.emissiveIntensity * logoLook.bevelEmissiveScale}
+                  roughness={logoLook.bevelRoughness}
+                  metalness={logoLook.metalness}
+                  envMapIntensity={logoLook.bevelEnvMapIntensity}
                   transparent
                   opacity={0}
                   depthWrite={false}
