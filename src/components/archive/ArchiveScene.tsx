@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
-import { applyCrystalShader, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
+import { UNUSED_FBO, applyCrystalShader, crystalCheapProps, crystalGlassProps, thicknessFor } from "@/components/crystal/crystalMaterial";
 import * as THREE from "three";
 import { setPadOpen } from "@/hooks/crystalAudio";
 import {
@@ -519,6 +519,37 @@ function SealBackdrop({ registry, fbo }: { registry: SealRegistry; fbo: THREE.We
   return null;
 }
 
+/* ── Which seal refracts ──────────────────────────────────────────
+ * Only the nearest unfreed seal wears transmission. Another takes over
+ * only once it is NEAREST_HYST units closer than the current one, so
+ * hovering near the midpoint never flickers between the two looks. */
+
+const NEAREST_HYST = 4;
+const _sp = new THREE.Vector3();
+
+function pickNearest(r: SealRegistry, g: ArchiveState, camera: THREE.Camera) {
+  const dist = (i: number) => camera.position.distanceTo(_sp.set(SEALS[i].pos[0], SEALS[i].pos[1], SEALS[i].pos[2]));
+  let best = -1;
+  let bestD = Infinity;
+  SEALS.forEach((_, i) => {
+    if (g.seals[i].freed) return;
+    const d = dist(i);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  const cur = r.nearest;
+  const curOk = cur >= 0 && !g.seals[cur].freed;
+  if (!curOk || (best >= 0 && best !== cur && bestD < dist(cur) - NEAREST_HYST)) r.nearest = best;
+}
+
+function NearestSeal({ registry, game }: { registry: SealRegistry; game: React.RefObject<ArchiveState> }) {
+  // Priority -1: before the seals' own frames, which read registry.nearest
+  useFrame(({ camera }) => pickNearest(registry, game.current, camera), -1);
+  return null;
+}
+
 /* ── HUD: compass toward the nearest unfreed seal, reticle charge ── */
 
 const _cv = new THREE.Vector3();
@@ -628,13 +659,17 @@ export interface ArchiveSceneProps {
 export default function ArchiveScene({ input, reduced, lowPower, game, hud }: ArchiveSceneProps) {
   const { size } = useThree();
   const backdrop = useFBO(Math.max(256, Math.round(size.width * 0.6)), Math.max(256, Math.round(size.height * 0.6)));
-  const registry = useMemo<SealRegistry>(() => ({ backdropHidden: new Set(), bodies: [], targets: [] }), []);
+  const registry = useMemo<SealRegistry>(() => ({ backdropHidden: new Set(), bodies: [], targets: [], nearest: -1 }), []);
   const hideCrystal = useCallback((o: THREE.Object3D | null) => hideFromBackdrop(registry, o), [registry]);
   // ONE material for every seal body, ONE for every orbiting shard: owned
   // here (on a hidden holder mesh), handed to the three seals
-  const glassProps = useMemo(() => crystalGlassProps("dream"), []);
+  const glassProps = useMemo(() => crystalGlassProps("dream", "intact"), []);
+  const shardProps = useMemo(() => crystalGlassProps("dream", "shard"), []);
+  const cheapProps = useMemo(() => crystalCheapProps("dream"), []);
   const [sealGlass, setSealGlass] = useState<THREE.Material | null>(null);
   const [shardGlass, setShardGlass] = useState<THREE.Material | null>(null);
+  const [cheapSeal, setCheapSeal] = useState<THREE.Material | null>(null);
+  const [cheapShard, setCheapShard] = useState<THREE.Material | null>(null);
   const holdSealGlass = useCallback((m: unknown) => {
     applyCrystalShader(m as THREE.Material | null, SEAL_RIM);
     if (m) setSealGlass(m as THREE.Material);
@@ -642,6 +677,14 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
   const holdShardGlass = useCallback((m: unknown) => {
     applyCrystalShader(m as THREE.Material | null, SHARD_RIM);
     if (m) setShardGlass(m as THREE.Material);
+  }, []);
+  const holdCheapSeal = useCallback((m: THREE.Material | null) => {
+    applyCrystalShader(m, SEAL_RIM);
+    if (m) setCheapSeal(m);
+  }, []);
+  const holdCheapShard = useCallback((m: THREE.Material | null) => {
+    applyCrystalShader(m, SHARD_RIM);
+    if (m) setCheapShard(m);
   }, []);
   return (
     <>
@@ -657,13 +700,22 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
       {/* The same studio the hero crystal is lit by, so the ice matches */}
       <StudioEnvironment variant="dream" />
       <SealBackdrop registry={registry} fbo={backdrop} />
-      <mesh visible={false}>
-        <MeshTransmissionMaterial {...glassProps} buffer={backdrop.texture} thickness={thicknessFor(SEAL_SIZE)} resolution={32} ref={holdSealGlass} />
+      <NearestSeal registry={registry} game={game} />
+      {/* Holders for the shared materials (hidden; userData.warm: the
+          Warmup compiles them even while no seal wears one) */}
+      <mesh visible={false} userData={{ warm: true }}>
+        <MeshTransmissionMaterial {...glassProps} buffer={backdrop.texture} thickness={thicknessFor(SEAL_SIZE)} resolution={UNUSED_FBO} ref={holdSealGlass} />
       </mesh>
-      <mesh visible={false}>
-        <MeshTransmissionMaterial {...glassProps} buffer={backdrop.texture} thickness={thicknessFor(1.2, true)} resolution={32} flatShading ref={holdShardGlass} />
+      <mesh visible={false} userData={{ warm: true }}>
+        <MeshTransmissionMaterial {...shardProps} buffer={backdrop.texture} thickness={thicknessFor(1.2, true)} resolution={UNUSED_FBO} flatShading ref={holdShardGlass} />
       </mesh>
-      {sealGlass && shardGlass && SEALS.map((spot, i) => {
+      <mesh visible={false} userData={{ warm: true }}>
+        <meshPhysicalMaterial {...cheapProps} ref={holdCheapSeal} />
+      </mesh>
+      <mesh visible={false} userData={{ warm: true }}>
+        <meshPhysicalMaterial {...cheapProps} flatShading ref={holdCheapShard} />
+      </mesh>
+      {sealGlass && shardGlass && cheapSeal && cheapShard && SEALS.map((spot, i) => {
         const pr = projects[spot.project];
         return (
           <Seal
@@ -676,6 +728,8 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
             reduced={reduced}
             glassMaterial={sealGlass}
             shardMaterial={shardGlass}
+            cheapGlassMaterial={cheapSeal}
+            cheapShardMaterial={cheapShard}
             registry={registry}
             state={game.current}
           />

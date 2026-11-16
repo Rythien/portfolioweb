@@ -1,17 +1,18 @@
 /**
  * ONE material for the intact crystal and every shard. Shards may differ
- * only in thickness (scaled by their size) and backdrop resolution; every
- * other value, and the frost and streak textures themselves (the same
- * texture objects), are shared.
+ * only in thickness (scaled by their size), backdrop resolution and
+ * sample count; every other value, and the relief and streak textures
+ * themselves (the same texture objects), are shared.
  */
 import * as THREE from "three";
 import { noise3 } from "./frostUtils";
-import { TARGET_SIZE } from "./crystalGen";
+import { TARGET_SIZE, reliefHeight } from "./crystalGen";
 
 export const CRYSTAL_MATERIAL = {
-  /** Normal map is sub-millimetre frost only; relief is in the geometry. */
-  normalScale: 0.06,
-  /** Frost normal map repeats around the chunk (it tiles in u and v). */
+  /** Frost strength in the normal map (baked in: the material's own
+   * normalScale is 1 so the fine relief keeps its true slope). */
+  frostStrength: 0.06,
+  /** Frost tiles this many times around the chunk inside the one map. */
   frostRepeat: 3,
   ior: 1.35,
   /** Thickness per world unit of the mesh's largest side. */
@@ -32,7 +33,8 @@ export const CRYSTAL_MATERIAL = {
   distortion: 0.1,
   distortionScale: 0.2,
   temporalDistortion: 0.02,
-  samples: 8,
+  /** Refraction samples per pixel (drei recompiles per value). */
+  samples: { intact: 4, shard: 3 },
   attenuationDistance: 5,
   envMapIntensity: 1.0,
   /** Thin film: oil-slick streaks, masked to the crevices (inverse relief). */
@@ -49,8 +51,18 @@ export const CRYSTAL_MATERIAL = {
   cloud: { scale: 0.82, opacity: 0.03 },
   /** Thin elongated inclusion slivers (intact count; shards share them). */
   slivers: 3,
-  /** Backdrop FBO size: the only other thing a shard may change. */
-  resolution: { intact: 1024, shard: 768 },
+  /** Backdrop FBO size (square). */
+  resolution: { intact: 512, shard: 384 },
+  /** Shards smaller than this on screen skip the backdrop (cheap glass).
+   * Two thresholds so a shard near the line never flickers. */
+  cheapShardPx: { off: 56, on: 64 },
+  /** The non-transmissive stand-in (far Archive seals, tiny shards):
+   * MeshPhysicalMaterial, transmission off, alpha-blended. */
+  cheap: {
+    wake: { opacity: 0.5, envMapIntensity: 1.2 },
+    /** Matched by eye to the real glass at Archive seal distances. */
+    dream: { opacity: 0.82, envMapIntensity: 1.2 },
+  },
   tint: {
     wake: { color: "#e8f1f5", attenuationColor: "#d8edf8" },
     dream: { color: "#c4b5fd", attenuationColor: "#c9bcf2" },
@@ -96,8 +108,6 @@ function tileNoise(x: number, y: number, period: number, seed: number): number {
 interface IceField {
   /** Eroded relief, 0 (deepest pit) .. 1 (highest ridge), min-max normalised. */
   relief: Float32Array;
-  /** Sub-millimetre frost height (fully tileable, for the normal map). */
-  frost: Float32Array;
 }
 
 let _field: IceField | null = null;
@@ -110,7 +120,6 @@ function iceField(): IceField {
   if (_field) return _field;
   const n = TEX * TEX;
   const relief = new Float32Array(n);
-  const frost = new Float32Array(n);
   let lo = Infinity, hi = -Infinity;
   for (let j = 0; j < TEX; j++) {
     for (let i = 0; i < TEX; i++) {
@@ -119,15 +128,10 @@ function iceField(): IceField {
       relief[j * TEX + i] = h;
       lo = Math.min(lo, h);
       hi = Math.max(hi, h);
-      // Frost: two fine tileable octaves plus faint wandering ripples
-      const x = u * 48, y = v * 48;
-      const f = tileNoise(x, y, 48, 3) * 0.6 + tileNoise(x * 2, y * 2, 96, 5) * 0.4;
-      const ripple = Math.sin((v * 64 + u * 32 + f * 3) * TAU) * 0.08;
-      frost[j * TEX + i] = f + ripple;
     }
   }
   for (let k = 0; k < n; k++) relief[k] = (relief[k] - lo) / (hi - lo);
-  _field = { relief, frost };
+  _field = { relief };
   return _field;
 }
 
@@ -138,31 +142,70 @@ function dataTexture(data: Uint8Array): THREE.DataTexture {
   return tex;
 }
 
+/** Normal map texels per side: frostRepeat frost tiles of 256 each. */
+const NTEX = 256 * CRYSTAL_MATERIAL.frostRepeat;
+
+/** Sub-millimetre frost height at tile coordinates (tiles every 1). */
+function frostAt(x: number, y: number): number {
+  const fx = x * 48, fy = y * 48;
+  const f = tileNoise(fx, fy, 48, 3) * 0.6 + tileNoise(fx * 2, fy * 2, 96, 5) * 0.4;
+  return f + Math.sin((y * 64 + x * 32 + f * 3) * TAU) * 0.08;
+}
+
+/** Unit direction for a spherical UV (crystalGen sphericalUV, inverted). */
+function uvDir(u: number, v: number): [number, number, number] {
+  const phi = (u - 0.5) * TAU, lat = (v - 0.5) * Math.PI;
+  const c = Math.cos(lat);
+  return [c * Math.cos(phi), Math.sin(lat), c * Math.sin(phi)];
+}
+
 let _frost: THREE.DataTexture | null = null;
 /**
- * Sub-millimetre frost only: the eroded relief now lives in the geometry
- * (crystalGen DETAIL_OCTAVES). Tileable, so it can repeat finely.
+ * The one normal map: the fine relief (crystalGen DETAIL_OCTAVES, once
+ * around the chunk, at its true slope) plus sub-millimetre frost
+ * (frostRepeat tiles, at frostStrength). Periodic in u; the mesh's
+ * spherical UVs cover it exactly once.
  */
 export function getFrostNormalMap(): THREE.DataTexture {
   if (_frost) return _frost;
-  const H = iceField().frost;
-  const data = new Uint8Array(TEX * TEX * 4);
-  const k = 6;
-  for (let j = 0; j < TEX; j++) {
-    for (let i = 0; i < TEX; i++) {
-      const hL = H[j * TEX + ((i - 1 + TEX) % TEX)], hR = H[j * TEX + ((i + 1) % TEX)];
-      const hD = H[((j - 1 + TEX) % TEX) * TEX + i], hU = H[((j + 1) % TEX) * TEX + i];
-      const dx = (hL - hR) * k, dy = (hD - hU) * k;
-      const len = Math.hypot(dx, dy, 1);
-      const o = (j * TEX + i) * 4;
-      data[o] = ((dx / len) * 0.5 + 0.5) * 255;
-      data[o + 1] = ((dy / len) * 0.5 + 0.5) * 255;
+  const N = NTEX, R = CRYSTAL_MATERIAL.frostRepeat;
+  // Relief heights on the grid (one row of padding at the poles)
+  const rel = new Float32Array(N * N);
+  const fro = new Float32Array(N * N);
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const u = i / N, v = (j + 0.5) / N;
+      const [x, y, z] = uvDir(u, v);
+      rel[j * N + i] = reliefHeight(x, y, z);
+      fro[j * N + i] = frostAt((u * R) % 1, (v * R) % 1);
+    }
+  }
+  const data = new Uint8Array(N * N * 4);
+  for (let j = 0; j < N; j++) {
+    const jd = Math.max(0, j - 1), ju = Math.min(N - 1, j + 1);
+    const lat = ((j + 0.5) / N - 0.5) * Math.PI;
+    // Arc length on the unit sphere per texel, in u (shrinks to the poles) and v
+    const du = (TAU / N) * Math.max(0.15, Math.cos(lat));
+    const dv = Math.PI / N;
+    for (let i = 0; i < N; i++) {
+      const il = (i - 1 + N) % N, ir = (i + 1) % N;
+      // Frost as the old map had it: strength x 6 per texel difference, 256 texels a tile
+      const sx = (rel[j * N + ir] - rel[j * N + il]) / (2 * du)
+        + (fro[j * N + ir] - fro[j * N + il]) * CRYSTAL_MATERIAL.frostStrength * 6;
+      const sy = (rel[ju * N + i] - rel[jd * N + i]) / ((ju - jd) * dv)
+        + (fro[ju * N + i] - fro[jd * N + i]) * CRYSTAL_MATERIAL.frostStrength * 6;
+      const len = Math.hypot(sx, sy, 1);
+      const o = (j * N + i) * 4;
+      data[o] = ((-sx / len) * 0.5 + 0.5) * 255;
+      data[o + 1] = ((-sy / len) * 0.5 + 0.5) * 255;
       data[o + 2] = ((1 / len) * 0.5 + 0.5) * 255;
       data[o + 3] = 255;
     }
   }
-  _frost = dataTexture(data);
-  _frost.repeat.set(CRYSTAL_MATERIAL.frostRepeat, CRYSTAL_MATERIAL.frostRepeat);
+  _frost = new THREE.DataTexture(data, N, N);
+  _frost.wrapS = THREE.RepeatWrapping;
+  _frost.wrapT = THREE.ClampToEdgeWrapping;
+  _frost.needsUpdate = true;
   return _frost;
 }
 
@@ -219,9 +262,15 @@ export function getCreviceMap(): THREE.DataTexture {
 /**
  * Props for drei's MeshTransmissionMaterial built from CRYSTAL_MATERIAL.
  * Everything that wears this ice uses it, so the finish cannot drift;
- * callers add only thickness, buffer and resolution.
+ * callers add only thickness and buffer. `kind` picks the sample count.
+ *
+ * Pass `resolution={UNUSED_FBO}`: drei allocates two FBOs of that size
+ * per material even when `buffer` is supplied, and every caller here
+ * supplies its own backdrop (sized by CRYSTAL_MATERIAL.resolution).
  */
-export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint) {
+export const UNUSED_FBO = 32;
+
+export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint, kind: "intact" | "shard" = "intact") {
   const tint = CRYSTAL_MATERIAL.tint[variant];
   return {
     transmission: 1,
@@ -235,13 +284,43 @@ export function crystalGlassProps(variant: keyof typeof CRYSTAL_MATERIAL.tint) {
     distortion: CRYSTAL_MATERIAL.distortion,
     distortionScale: CRYSTAL_MATERIAL.distortionScale,
     temporalDistortion: CRYSTAL_MATERIAL.temporalDistortion,
-    samples: CRYSTAL_MATERIAL.samples,
+    samples: CRYSTAL_MATERIAL.samples[kind],
     attenuationDistance: CRYSTAL_MATERIAL.attenuationDistance,
     envMapIntensity: CRYSTAL_MATERIAL.envMapIntensity,
     color: tint.color,
     attenuationColor: tint.attenuationColor,
     normalMap: getFrostNormalMap(),
-    normalScale: new THREE.Vector2(CRYSTAL_MATERIAL.normalScale, CRYSTAL_MATERIAL.normalScale),
+    normalScale: new THREE.Vector2(1, 1),
+    iridescence: CRYSTAL_MATERIAL.iridescence,
+    iridescenceIOR: CRYSTAL_MATERIAL.iridescenceIOR,
+    iridescenceThicknessMinimum: CRYSTAL_MATERIAL.iridescenceThicknessMinimum,
+    iridescenceThicknessMaximum: CRYSTAL_MATERIAL.iridescenceThicknessMaximum,
+    iridescenceMap: getCreviceMap(),
+  };
+}
+
+/**
+ * The stand-in for MeshTransmissionMaterial where refraction cannot be
+ * seen: far Archive seals and shards a few dozen pixels across. Plain
+ * MeshPhysicalMaterial, transmission off (no backdrop, no samples),
+ * alpha-blended so what is inside still shows. Same tint, maps, coat and
+ * film as the real glass, so the swap is invisible at that size.
+ */
+export function crystalCheapProps(variant: keyof typeof CRYSTAL_MATERIAL.tint) {
+  const tint = CRYSTAL_MATERIAL.tint[variant];
+  return {
+    transmission: 0,
+    transparent: true,
+    depthWrite: false,
+    opacity: CRYSTAL_MATERIAL.cheap[variant].opacity,
+    color: tint.attenuationColor,
+    roughness: CRYSTAL_MATERIAL.roughness,
+    roughnessMap: getRoughnessMap(),
+    clearcoat: CRYSTAL_MATERIAL.clearcoat,
+    clearcoatRoughness: CRYSTAL_MATERIAL.clearcoatRoughness,
+    envMapIntensity: CRYSTAL_MATERIAL.cheap[variant].envMapIntensity,
+    normalMap: getFrostNormalMap(),
+    normalScale: new THREE.Vector2(1, 1),
     iridescence: CRYSTAL_MATERIAL.iridescence,
     iridescenceIOR: CRYSTAL_MATERIAL.iridescenceIOR,
     iridescenceThicknessMinimum: CRYSTAL_MATERIAL.iridescenceThicknessMinimum,

@@ -259,7 +259,9 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         onPointerCancel={onPointerUp}
       >
         <Canvas
-          dpr={lowPower ? [1, 1.25] : [1, 1.5]}
+          // 1.25 cap in the Archive (the awake page keeps 1.5): full-screen
+          // fog, transmission and the seals' backdrop all scale with it
+          dpr={[1, 1.25]}
           camera={{ fov: 62, near: 0.1, far: 600, position: [0, 0, 18] }}
           gl={{ antialias: true, powerPreference: "high-performance" }}
           frameloop={active ? "always" : "demand"}

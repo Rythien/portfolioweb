@@ -14,7 +14,9 @@ import { createGlowTexture } from "./frostUtils";
 import { decodeCrystal, TARGET_SIZE } from "./crystalGen";
 import {
   CRYSTAL_MATERIAL,
+  UNUSED_FBO,
   applyCrystalShader,
+  crystalCheapProps,
   crystalGlassProps,
   thicknessFor,
 } from "./crystalMaterial";
@@ -361,14 +363,25 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     useCrystalSound();
 
     // ONE material: every value below is shared by the intact mesh and the
-    // shards; only thickness (by mesh size) and backdrop resolution differ
+    // shards; only thickness (by mesh size), backdrop resolution and
+    // sample count differ
     const glass = useMemo(
       () => ({
-        ...crystalGlassProps(variant),
+        ...crystalGlassProps(variant, "intact"),
         // Rim + streak shading chained onto drei's own shader patch
         ref: (m: unknown) => applyCrystalShader(m as THREE.Material | null),
       }),
       [variant],
+    );
+    const shardGlass = useMemo(() => crystalGlassProps(variant, "shard"), [variant]);
+    const cheapGlass = useMemo(() => crystalCheapProps(variant), [variant]);
+    /** Bounding radius per shard (local units), for its on-screen size. */
+    const shardRadii = useMemo(
+      () => shards.map((s) => {
+        s.geometry.computeBoundingSphere();
+        return s.geometry.boundingSphere?.radius ?? 0;
+      }),
+      [shards],
     );
 
     const glowTex = useMemo(() => createGlowTexture(128), []);
@@ -459,7 +472,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const showShardsRef = useRef(false);
     const _invQ = useRef(new THREE.Quaternion());
     const _off = useRef(new THREE.Vector3());
-    const mergedFbo = useFBO(1024, 1024, { depthBuffer: true });
+    const mergedFbo = useFBO(CRYSTAL_MATERIAL.resolution.intact, CRYSTAL_MATERIAL.resolution.intact, { depthBuffer: true });
+    /** Each shard's transmission material (the cheap one is swapped in when tiny). */
+    const shardGlassRefs = useRef<(THREE.Material | null)[]>([]);
+    /** The shared non-transmissive stand-in for tiny shards. */
+    const cheapRef = useRef<THREE.MeshPhysicalMaterial>(null);
+    /** Per shard: wearing the cheap glass (hysteresis on its on-screen size). */
+    const shardCheap = useRef<boolean[]>([]);
     const shardFbo = useFBO(CRYSTAL_MATERIAL.resolution.shard, CRYSTAL_MATERIAL.resolution.shard, { depthBuffer: true });
 
     // Tell the Compositor to precompile now that the crystal is in the graph
@@ -649,8 +668,10 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         mergedRef.current.visible = true;
       }
 
-      // Render shared backdrop FBO for shard transmission
-      if (showShards) {
+      // Render shared backdrop FBO for shard transmission, unless every
+      // shard is too small to show refraction (last frame's sizes)
+      const anyShardGlass = shards.some((_, i) => !shardCheap.current[i]);
+      if (showShards && anyShardGlass) {
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];
           if (m) m.visible = false;
@@ -686,11 +707,12 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (!showShards) continue;
 
         const shardOpacity = assembled ? fade : smoothstep(0.05, 0.15, breakVal) * fade;
-        const sMat = mesh.material as THREE.MeshPhysicalMaterial;
+        const sMat = shardGlassRefs.current[i];
         if (sMat) {
           sMat.opacity = shardOpacity;
           sMat.transparent = shardOpacity < 1;
         }
+        if (i === 0 && cheapRef.current) cheapRef.current.opacity = CRYSTAL_MATERIAL.cheap[variant].opacity * shardOpacity;
 
         const s = shards[i];
 
@@ -755,6 +777,26 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       const parent = heroLogoRef.current?.parent ?? null;
       if (parent) _parentInvQ.copy(parent.quaternion).invert();
       else _parentInvQ.identity();
+
+      // Tiny shards skip refraction: below ~60 px across they wear the
+      // cheap glass and stay out of the backdrop's reason to exist
+      const { off: cheapOff, on: cheapOn } = CRYSTAL_MATERIAL.cheapShardPx;
+      for (let i = 0; i < shards.length; i++) {
+        const mesh = shardMeshRefs.current[i];
+        const real = shardGlassRefs.current[i];
+        if (!mesh || !real) continue;
+        let cheap = shardCheap.current[i] ?? false;
+        if (showShards && !assembled && cheapRef.current) {
+          mesh.getWorldPosition(_wp);
+          const px = 2 * shardRadii[i] * mesh.scale.x * groupScale * pxPerUnitAt(portalCamera.position.z - _wp.z);
+          cheap = cheap ? px < cheapOn : px < cheapOff;
+        } else {
+          cheap = false;
+        }
+        shardCheap.current[i] = cheap;
+        const want = cheap && cheapRef.current ? cheapRef.current : real;
+        if (mesh.material !== want) mesh.material = want;
+      }
       for (const slot of shardLogoSlots) {
         const logo = shardLogoRefs.current[slot.rank];
         const rim = shardRimRefs.current[slot.rank];
@@ -886,7 +928,19 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             {...glass}
             buffer={mergedFbo.texture}
             thickness={thicknessFor(TARGET_SIZE)}
-            resolution={CRYSTAL_MATERIAL.resolution.intact}
+            resolution={UNUSED_FBO}
+          />
+        </mesh>
+
+        {/* Holder for the tiny-shard stand-in glass (hidden: compiled by
+            the warm-up, worn by shards under CRYSTAL_MATERIAL.cheapShardPx) */}
+        <mesh visible={false}>
+          <meshPhysicalMaterial
+            ref={(m: THREE.MeshPhysicalMaterial | null) => {
+              applyCrystalShader(m);
+              cheapRef.current = m;
+            }}
+            {...cheapGlass}
           />
         </mesh>
 
@@ -900,10 +954,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             visible={false}
           >
             <MeshTransmissionMaterial
-              {...glass}
+              {...shardGlass}
+              ref={(m: unknown) => {
+                applyCrystalShader(m as THREE.Material | null);
+                shardGlassRefs.current[i] = m as THREE.Material | null;
+              }}
               buffer={shardFbo.texture}
               thickness={thicknessFor(shard.size, true)}
-              resolution={CRYSTAL_MATERIAL.resolution.shard}
+              resolution={UNUSED_FBO}
             />
           </mesh>
         ))}

@@ -345,6 +345,8 @@ export interface SealRegistry {
   bodies: (THREE.Object3D | null)[];
   /** What a pulse can hit at each seal, refreshed every frame. */
   targets: SealTarget[];
+  /** The one seal wearing real transmission (nearest unfreed; -1: none). */
+  nearest: number;
 }
 
 interface SealProps {
@@ -361,6 +363,9 @@ interface SealProps {
    * shard (ArchiveScene owns them; they read the shared backdrop). */
   glassMaterial: THREE.Material;
   shardMaterial: THREE.Material;
+  /** Their non-transmissive stand-ins, worn while another seal is nearest. */
+  cheapGlassMaterial: THREE.Material;
+  cheapShardMaterial: THREE.Material;
   registry: SealRegistry;
   state: ArchiveState;
 }
@@ -373,6 +378,9 @@ function registerSeal(r: SealRegistry, index: number, body: THREE.Object3D | nul
 function unregisterSeal(r: SealRegistry, index: number, hide: THREE.Object3D[]) {
   hide.forEach((o) => r.backdropHidden.delete(o));
   r.bodies[index] = null;
+}
+function wearMaterial(o: THREE.Mesh | null, m: THREE.Material) {
+  if (o && o.material !== m) o.material = m;
 }
 function writeTarget(r: SealRegistry, index: number, t: SealTarget) {
   r.targets[index] = t;
@@ -393,7 +401,7 @@ export const SHARD_RIM = { intensity: 1.0, power: 2.4 };
 /** Seal body size (tallest side), for its glass thickness. */
 export const SEAL_SIZE = SEAL.radius * 2 * 1.22;
 
-export default function Seal({ spot, index, cover, label, project, reduced, glassMaterial, shardMaterial, registry, state }: SealProps) {
+export default function Seal({ spot, index, cover, label, project, reduced, glassMaterial, shardMaterial, cheapGlassMaterial, cheapShardMaterial, registry, state }: SealProps) {
   const body = useRef<THREE.Group>(null);
   const coverRef = useRef<THREE.Mesh>(null);
   const facetMesh = useRef<THREE.Mesh>(null);
@@ -466,6 +474,11 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
     const end = state.ending;
     const et = end ? state.t - end.t0 : -1;
     const conv = end ? easeInOut(et / ENDING.converge) : 0;
+
+    // Only the nearest seal refracts; the others wear the cheap glass
+    const real = registry.nearest === index;
+    wearMaterial(glass.current, real ? glassMaterial : cheapGlassMaterial);
+    wearMaterial(swarm.current, real ? shardMaterial : cheapShardMaterial);
 
     if (body.current) {
       body.current.rotation.y += delta * 0.08 * k * (index % 2 ? -1 : 1);

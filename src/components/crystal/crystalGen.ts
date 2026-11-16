@@ -14,15 +14,26 @@ import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.j
 /* ── Tuning: retune the chunk here, then `npm run gen:crystal` ── */
 
 export const SEED = 90;
-/** Icosphere recursion depth (4 -> 5120 faces): fine relief needs the verts. */
-export const ICO_SUBDIVISIONS = 4;
+/** Icosphere recursion depth (3 -> 1280 faces). Only the coarse fbm
+ * displacement is geometry; the fine relief is in the normal map. */
+export const ICO_SUBDIVISIONS = 3;
 export const FBM_AMP = 0.14;
 export const FBM_FREQ = 1.6;
 export const FBM_OCTAVES = 4;
-/** Fine relief baked into the geometry after the clip (it erodes the flat
- * cuts too): [frequency, amplitude] pairs, one value-noise octave each.
- * The normal map is left for sub-millimetre frost only. */
+/** Fine relief: [frequency, amplitude] pairs (amplitude on the unit
+ * sphere), one value-noise octave each. Baked into the normal map
+ * (crystalMaterial), not the geometry: on every surface, the flat cuts
+ * included, for a quarter of the vertices. */
 export const DETAIL_OCTAVES: [number, number][] = [[6, 0.025], [11, 0.012]];
+
+/** Fine relief height at a unit direction (see DETAIL_OCTAVES). */
+export function reliefHeight(x: number, y: number, z: number): number {
+  let dr = 0;
+  DETAIL_OCTAVES.forEach(([f, a], o) => {
+    dr += a * (2 * valueNoise(x * f, y * f, z * f, SEED + 7001 + o * 31) - 1);
+  });
+  return dr;
+}
 export const AXIS_SCALE: [number, number, number] = [1.08, 1.0, 0.92];
 export const PLANE_COUNT = 8;
 export const PLANE_MIN = 0.66;
@@ -162,13 +173,6 @@ export function buildChunk(): THREE.BufferGeometry {
         if (over > 0) q.addScaledVector(pl.n, -over);
       }
     }
-    // Fine relief on top, along the radial direction
-    let dr = 0;
-    DETAIL_OCTAVES.forEach(([f, a], o) => {
-      dr += a * (2 * valueNoise(v.x * f, v.y * f, v.z * f, SEED + 7001 + o * 31) - 1);
-    });
-    const len = q.length();
-    q.multiplyScalar((len + dr) / len);
     return q;
   });
 
