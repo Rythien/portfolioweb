@@ -39,15 +39,28 @@ export default function Header() {
     return () => clearInterval(interval);
   }, []);
 
+  // Backdrop appears once the page has scrolled past 40px
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 40);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
+
   return (
+    <>
+    {/* A sibling of the header, not a child: below lg it must sit under
+        the section strip (z-40), which the header's z-50 would cover */}
+    <div
+      aria-hidden="true"
+      data-on={scrolled ? "" : undefined}
+      className="header-scrim fixed top-0 left-0 right-0 z-[39] pointer-events-none"
+    />
     <header data-reveal className="fixed top-0 left-0 right-0 z-50 pointer-events-none text-ink">
-      {/* Mode-aware scrim: legibility over the scene in both WAKE and DREAM.
-          Below lg it is solid so header + rail strip form one clean band
-          that copy scrolls under instead of colliding with */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 max-lg:bg-surface lg:bg-gradient-to-b lg:from-surface/90 lg:via-surface/40 lg:to-transparent"
-      />
+      {/* Below lg the header is solid so header + rail strip form one
+          band; the scrim above adds the fade under it once scrolled */}
+      <div aria-hidden="true" className="absolute inset-0 max-lg:bg-surface" />
       <div className="relative max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between w-full">
         {/* Brand Name */}
         <div className="pointer-events-auto">
@@ -172,5 +185,6 @@ export default function Header() {
         </nav>
       )}
     </header>
+    </>
   );
 }

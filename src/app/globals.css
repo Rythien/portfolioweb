@@ -284,6 +284,42 @@ textarea:focus-visible {
       rgba(99, 102, 241, calc(var(--dream, 0) * 0.14));
 }
 
+/* ── Header backdrop ──────────────────────────────────────────── */
+
+/* Once the page has scrolled, copy passes under the header through this:
+   solid page colour behind the nav (and the section strip below lg), then
+   a 72px fade to transparent. The mask fades the colour and the blur
+   together, so the blur has no hard bottom edge. */
+.header-scrim {
+  --scrim-solid: 108px; /* header 80 + section strip 28 */
+  --scrim-fade: 72px;
+  height: calc(var(--scrim-solid) + var(--scrim-fade));
+  background-color: var(--t-surface);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 var(--scrim-solid),
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, #000 var(--scrim-solid), transparent 100%);
+  opacity: 0;
+  transition:
+    opacity 300ms var(--ease-out-expo),
+    background-color 600ms cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+@media (min-width: 64rem) {
+  .header-scrim {
+    /* No strip on the desktop rail layout: solid only behind the nav row */
+    --scrim-solid: 64px;
+  }
+}
+
+.header-scrim[data-on] {
+  opacity: 1;
+}
+
 /* Tactile press feedback for button-like chrome */
 .pressable {
   transition: transform 120ms var(--ease-out-expo);
