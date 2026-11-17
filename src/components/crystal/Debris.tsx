@@ -102,11 +102,11 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
     const breakVal = useFractureStore.getState().breakVal;
     const elapsed = state.clock.elapsedTime;
 
-    // Chips only live over the hero and the Works section
+    // Chips live over the hero only (hover break): drifting across Works
+    // and Recognition they read as dust on the screen. They fade out as
+    // the hero scrolls away (progress 0.5 = at rest, 1 = gone)
     const heroP = getSectionProgress("top");
-    const worksP = getSectionProgress("works");
-    const inScope = heroP < 1 || (worksP > 0 && worksP < 1);
-    const fadeTarget = inScope ? 1 : 0;
+    const fadeTarget = 1 - smoothstep(0.62, 0.85, heroP);
     sectionFade.current +=
       (fadeTarget - sectionFade.current) * (1 - Math.exp(-6 * delta));
     if (Math.abs(sectionFade.current - fadeTarget) < 0.005)
@@ -115,6 +115,8 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
     const visibility =
       smoothstep(0.08, 0.2, breakVal) * sectionFade.current * getCrystalPose().fade;
     inst.visible = visibility > 0.001;
+    // Test hook (scripts/verify/debris.mjs): chip opacity this frame
+    (window as unknown as { __debrisVisibility: number }).__debrisVisibility = visibility;
     if (!inst.visible) return;
 
     // Shared transmission FBO — cleared to the scene background so the
