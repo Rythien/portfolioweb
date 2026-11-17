@@ -35,7 +35,7 @@ export default function ModePill() {
       data-magnetic
       aria-pressed={mode === value}
       aria-label={`Switch to ${value} mode`}
-      className={`pressable text-label px-4 py-2.5 rounded-full transition-all duration-300 focus-visible:outline-offset-4 ${
+      className={`pressable text-label h-full flex items-center px-4 rounded-full transition-all duration-300 focus-visible:outline-offset-4 ${
         mode === value
           ? "bg-ink text-surface font-semibold"
           : "text-ink/80 hover:text-ink"
@@ -53,7 +53,7 @@ export default function ModePill() {
       <div
         role="group"
         aria-label="Site mode"
-        className="flex items-center gap-0 rounded-full border border-rule bg-surface/90 backdrop-blur-xl font-mono transition-colors hover:border-rule-hover"
+        className="h-[var(--pill-h)] flex items-stretch gap-0 rounded-full border border-rule bg-surface/90 backdrop-blur-xl font-mono transition-colors hover:border-rule-hover"
       >
         {segment("wake", "Wake")}
         {segment("dream", "Dream")}

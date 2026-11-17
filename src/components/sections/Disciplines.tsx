@@ -45,7 +45,7 @@ export default function Disciplines() {
       ref={sectionRef}
       id="disciplines"
       aria-label="Disciplines and Expertise"
-      className="scroll-mt-[108px] lg:scroll-mt-20 pt-32 pb-16 sm:pb-24 lg:pb-32 border-t border-rule"
+      className="scroll-mt-[108px] lg:scroll-mt-20 pt-32 section-end border-t border-rule"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div

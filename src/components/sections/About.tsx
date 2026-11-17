@@ -47,7 +47,7 @@ export default function About() {
       ref={sectionRef}
       id="about"
       aria-label="About Searon Maharjan"
-      className="scroll-mt-24 py-16 sm:py-24 lg:py-32 border-t border-rule relative"
+      className="scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule relative"
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         {/* One copy column (max-w-4xl, 10 of 12 columns at 1280) for the

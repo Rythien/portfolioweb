@@ -21,6 +21,11 @@
      inline each frame during the flood so every DOM-side dream effect
      moves with the transition; at rest the mode attribute owns it. */
   --dream: 0;
+  /* The fixed WAKE/DREAM pill (ModePill) is this tall; every content
+     section ends with this much extra room so its last row can always be
+     scrolled clear of the pill */
+  --pill-h: 44px;
+  --pill-clear: calc(var(--pill-h) + 32px);
 }
 
 html[data-mode="dream"] {
@@ -296,6 +301,26 @@ textarea:focus-visible {
 
 .discipline-title {
   font-size: min(clamp(2rem, 1.5rem + 2.5vw, 3.5rem), 11cqi);
+}
+
+/* ── Section rhythm ───────────────────────────────────────────── */
+
+/* Bottom padding of a content section: the usual rhythm (4/6/8rem) plus
+   the pill's clearance, so the last row never ends under the pill */
+.section-end {
+  padding-bottom: calc(4rem + var(--pill-clear));
+}
+
+@media (min-width: 40rem) {
+  .section-end {
+    padding-bottom: calc(6rem + var(--pill-clear));
+  }
+}
+
+@media (min-width: 64rem) {
+  .section-end {
+    padding-bottom: calc(8rem + var(--pill-clear));
+  }
 }
 
 /* ── Header backdrop ──────────────────────────────────────────── */
