@@ -110,8 +110,13 @@ export default function SceneRoot() {
     const unsub = useArchiveStore.subscribe((s, prev) => {
       if (s.open !== prev.open) apply();
     });
+    // Reduced motion renders on demand: scrolling must ask for a frame,
+    // or the crystal never swaps to its parked pose (or fades with Works)
+    const onScroll = () => canvasRef.current?.invalidate();
+    if (reducedMotion) window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       document.removeEventListener("visibilitychange", apply);
+      window.removeEventListener("scroll", onScroll);
       unsub();
     };
   }, [reducedMotion]);

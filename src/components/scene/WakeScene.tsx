@@ -96,17 +96,15 @@ function useSparkleTexture() {
 
 /* ── Crystal (uses shared pose) ─────────────────────────────────── */
 
-function WakeCrystal({
-  reducedMotion,
-}: {
-  reducedMotion: boolean;
-  isMobile: boolean;
-}) {
+// Reduced motion is handled in the pose itself (crystalState)
+function WakeCrystal() {
   const groupRef = useRef<THREE.Group>(null);
   const pose = useCrystalPose();
 
   useFrame(() => {
-    if (!groupRef.current || reducedMotion) return;
+    // Reduced motion too: the pose itself holds still (no travel, no
+    // spin) and swaps hero -> parked inside a fade (crystalState)
+    if (!groupRef.current) return;
     groupRef.current.position.set(pose.x, pose.y, pose.z);
     groupRef.current.scale.setScalar(pose.scale);
     groupRef.current.rotation.y = pose.rotY;
@@ -337,7 +335,7 @@ export default function WakeScene({
       <color attach="background" args={["#E9E7E2"]} />
       <StudioEnvironment variant="wake" />
       <Marquee color="#1a1a1e" isMobile={isMobile} reducedMotion={reducedMotion} />
-      <WakeCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
+      <WakeCrystal />
       <CrystalHover />
       <Debris seed={42} />
       <OrbitRing reducedMotion={reducedMotion} />

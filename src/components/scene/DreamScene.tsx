@@ -23,17 +23,15 @@ function seededRandom(seed: number) {
 
 /* ── Crystal wrapper (shared pose) ─────────────────────────────── */
 
-function DreamCrystal({
-  reducedMotion,
-}: {
-  reducedMotion: boolean;
-  isMobile: boolean;
-}) {
+// Reduced motion is handled in the pose itself (crystalState)
+function DreamCrystal() {
   const groupRef = useRef<THREE.Group>(null);
   const pose = useCrystalPose();
 
   useFrame(() => {
-    if (!groupRef.current || reducedMotion) return;
+    // Reduced motion too: the pose itself holds still (no travel, no
+    // spin) and swaps hero -> parked inside a fade (crystalState)
+    if (!groupRef.current) return;
     groupRef.current.position.set(pose.x, pose.y, pose.z);
     groupRef.current.scale.setScalar(pose.scale);
     groupRef.current.rotation.y = pose.rotY;
@@ -336,7 +334,7 @@ export default function DreamScene({
       <StudioEnvironment variant="dream" />
 
       <Marquee color="#a8b4ff" isMobile={isMobile} reducedMotion={reducedMotion} />
-      <DreamCrystal reducedMotion={reducedMotion} isMobile={isMobile} />
+      <DreamCrystal />
       <Debris seed={42} />
 
       <DustParticles />

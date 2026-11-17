@@ -7,11 +7,84 @@
  */
 import { getSectionProgress } from "@/store/useScrollStore";
 import { useFractureStore } from "@/store/useFractureStore";
+import { cubicBezier } from "@/motion/bezier";
+import { stepSpring, zetaForOvershoot, type Spring } from "@/motion/spring";
 
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 }
+
+/** x mapped from [a, b] to [0, 1], clamped. */
+function remap01(x: number, a: number, b: number): number {
+  return Math.max(0, Math.min(1, (x - a) / (b - a)));
+}
+
+/* ── The hero -> parked move ──────────────────────────────────────
+ *
+ * One segment, u: 0 when About enters the viewport, 1 after
+ * SEGMENT_VH viewport heights of scroll. It is eased ONCE with
+ * SEGMENT_EASE, and every channel reads that eased progress p, each over
+ * its own window so they arrive one after another instead of together:
+ *
+ *   position  p 0    -> 0.8   leads, and lands first
+ *   scale     p 0.12 -> 1     starts a beat later and runs longer
+ *   rotation  p 0.25 -> 1     the spin eases out last and the crystal
+ *                             comes to rest at a deliberate angle
+ *
+ * The channels' targets are then followed by springs (not an
+ * exponential damp): position critically damped (no overshoot), scale
+ * with ~3% overshoot so it lands with a little weight.
+ */
+const SEGMENT_VH = 1.6;
+/**
+ * A strong ease-out on purpose. Measured on the same wheel scroll
+ * (scripts/verify/crystal-arc.mjs, peak crystal travel per px of scroll):
+ * this curve 2.5, in-out (0.65,0,0.35,1) 3.8, (0.4,0,0.2,1) 3.7, the old
+ * smoothstep 3.6. About's copy reaches the hero crystal ~130px into the
+ * scroll, and the copy clamp must have it clear by then: a curve that
+ * starts gently leaves the clamp to yank it out of the way.
+ */
+const SEGMENT_EASE = cubicBezier(0.16, 1, 0.3, 1);
+const POS_WINDOW: [number, number] = [0, 0.8];
+const SCALE_WINDOW: [number, number] = [0.12, 1];
+const ROT_WINDOW: [number, number] = [0.25, 1];
+/** Spring stiffness (rad/s): settles in ~0.6-0.8 s after the target stops. */
+const POS_OMEGA = 7;
+const SCALE_OMEGA = 6;
+const SCALE_ZETA = zetaForOvershoot(0.03);
+/** Free spin (rad/s) and the wobble on X, as before. */
+const SPIN = 0.15;
+/**
+ * Resting angles: a quarter-turn apart, so the crystal never has more
+ * than 90 deg to travel to the next one ahead. 0.3 rad is the hero's
+ * 2 s pose (crystalfreeze=2), a three-quarter view with the logo clear.
+ */
+const REST_Y = 0.3;
+const REST_STEP = Math.PI / 2;
+const REST_X = 0.1;
+/** Settling glides no faster than this (rad/s), then eases in. */
+const SETTLE_MAX_SPEED = 0.6;
+const SETTLE_GAIN = 1.2;
+/** Reduced motion: where in the segment the hero -> parked swap happens
+ * (0.04 = ~58px of scroll at 1440), at the bottom of a short fade. */
+const REDUCED_SWAP_U = 0.04;
+
+const _posX: Spring = { x: 0.6, v: 0 };
+const _posY: Spring = { x: 0, v: 0 };
+const _scale: Spring = { x: 1, v: 0 };
+let _springsPrimed = false;
+let _rotY = 0;
+let _rotVel = SPIN;
+/** The resting angle being settled toward, or null while spinning freely. */
+let _restTarget: number | null = null;
+/** Last segment progress, for the test hook. */
+let _lastU = 0;
+
+const _reducedMotion =
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)")
+    : null;
 
 export interface CrystalPose {
   x: number;
@@ -43,7 +116,7 @@ const pose: CrystalPose = {
   clamp: 0,
 };
 
-const _d = { s: 0, x: 0.6, y: 0, scale: 1.0, breakVal: 0, fade: 1 };
+const _d = { s: 0, breakVal: 0, fade: 1 };
 
 /** Matches SceneRoot's isMobile breakpoint. */
 export const MOBILE_MAX_PX = 768;
@@ -79,11 +152,16 @@ let _copyRightPx = -1;
 let _copyMeasuredAt = -Infinity;
 let _copyPxW = 0;
 
+/** About's top in page coordinates (the segment starts as it enters), or -1. */
+let _aboutDocTop = -1;
+
 function measureCopy() {
   _copyRects = [];
   _copyRightPx = -1;
   if (typeof document === "undefined") return;
   const sy = window.scrollY;
+  const about = document.getElementById("about");
+  _aboutDocTop = about ? about.getBoundingClientRect().top + sy : -1;
   document.querySelectorAll("[data-crystal-avoid]").forEach((el) => {
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return;
@@ -241,14 +319,24 @@ export function tickCrystalPose(
   const view: View = { d: camZ, ppu: pxW / (2 * halfW), pxW, pxH };
 
   const rawS = getSectionProgress("works");
-  const aboutP = getSectionProgress("about");
   const l = 1 - Math.exp(-4 * delta);
   _d.s += (rawS - _d.s) * l;
   const s = _d.s;
+  const dt = Math.min(Math.max(delta, 0), 0.1);
+  const reduced = !!_reducedMotion?.matches;
 
-  // 0 = hero composition, 1 = parked in the right-hand empty column
-  // for About/Disciplines
-  const park = smoothstep(0.08, 0.45, aboutP);
+  // The segment u (see the top of the file), eased once into p. Until
+  // About is measured, its section progress stands in so nothing moves early
+  let u: number;
+  if (_aboutDocTop >= 0 && typeof window !== "undefined") {
+    const vh = window.innerHeight;
+    const start = _aboutDocTop - vh;
+    u = remap01(window.scrollY, start, start + SEGMENT_VH * vh);
+  } else {
+    u = remap01(getSectionProgress("about"), 0, 0.45);
+  }
+  _lastU = u;
+  const p = SEGMENT_EASE(u);
   const narrow = halfW < 2.4;
   // Parked just right of the About body / Disciplines description columns
   // (measured), shrunk to fit the space left before the viewport edge
@@ -277,15 +365,21 @@ export function tickCrystalPose(
   const heroX = mobile ? 0 : 0.6;
   const heroY = mobile ? MOBILE_HERO_Y : 0;
   const heroScale = mobile ? 0.9 : 1.35;
-  const tx = heroX + (xPark - heroX) * park;
+  // Channel progress. Reduced motion: no travel at all, the hero pose,
+  // then the parked pose, swapped at the bottom of a fade (pose.fade
+  // below) near the START of the segment: it must be parked before
+  // About's copy arrives (~130px in), or the copy clamp slides it aside
+  const posP = reduced ? (u < REDUCED_SWAP_U ? 0 : 1) : remap01(p, POS_WINDOW[0], POS_WINDOW[1]);
+  const scaleP = reduced ? posP : remap01(p, SCALE_WINDOW[0], SCALE_WINDOW[1]);
+  const tx = heroX + (xPark - heroX) * posP;
   // Parked slightly below centre, in the pocket right of the body copy
-  const ty = heroY + (PARK_Y - heroY) * park;
-  const ts = heroScale + (Math.max(parkScale, PARK_SCALE_MIN) - heroScale) * park;
+  const ty = heroY + (PARK_Y - heroY) * posP;
+  const ts = heroScale + (Math.max(parkScale, PARK_SCALE_MIN) - heroScale) * scaleP;
 
   // The crystal system leaves with Works; on narrow viewports there is
   // no empty column, so it also sits out About/Disciplines onward
   let fadeTarget = 1 - smoothstep(0.86, 0.985, rawS);
-  if (narrow || noRoom) fadeTarget = Math.min(fadeTarget, 1 - park);
+  if (narrow || noRoom) fadeTarget = Math.min(fadeTarget, 1 - posP);
   _d.fade += (fadeTarget - _d.fade) * (1 - Math.exp(-6 * delta));
 
   // Scroll-driven break: starts as Works enters, fully broken by 0.25
@@ -300,14 +394,24 @@ export function tickCrystalPose(
   // Whichever source is higher wins
   const tb = Math.max(scrollBreak, _hoverBreakVal, _introBreak);
 
-  _d.x += (tx - _d.x) * l;
-  _d.y += (ty - _d.y) * l;
-  _d.scale += (ts - _d.scale) * l;
+  // Springs follow the channel targets. First frame (under the
+  // preloader) and reduced motion: placed, not travelled
+  if (!_springsPrimed || reduced) {
+    _posX.x = tx;
+    _posY.x = ty;
+    _scale.x = ts;
+    _posX.v = _posY.v = _scale.v = 0;
+    _springsPrimed = true;
+  } else {
+    stepSpring(_posX, tx, POS_OMEGA, 1, dt);
+    stepSpring(_posY, ty, POS_OMEGA, 1, dt);
+    stepSpring(_scale, ts, SCALE_OMEGA, SCALE_ZETA, dt);
+  }
   _d.breakVal += (tb - _d.breakVal) * l;
 
   const rf = 1.0 - smoothstep(0, 0.25, s) * 0.7;
   // Clamped so the parked crystal never leaves the viewport vertically
-  const y = Math.max(-0.9, Math.min(0.9, _d.y));
+  const y = Math.max(-0.9, Math.min(0.9, _posY.x));
   let scaleBoost = 0;
   if (_reassembleStart >= 0) {
     const rt = elapsed - _reassembleStart;
@@ -317,17 +421,48 @@ export function tickCrystalPose(
       _reassembleStart = -1;
     }
   }
-  const clamped = clampOffCopy(_d.x, y, _d.scale + scaleBoost, view);
+  const clamped = clampOffCopy(_posX.x, y, _scale.x + scaleBoost, view);
   pose.x = clamped.x;
   pose.y = y;
   pose.z = 0;
   pose.scale = clamped.s;
   pose.clamp = clamped.w;
   pose.breakVal = _d.breakVal;
-  pose.fade = _d.fade;
-  const rotT = _timeOverride ?? elapsed;
-  pose.rotY = rotT * 0.15 * rf;
-  pose.rotX = Math.sin(rotT * 0.1) * 0.2 * rf;
+  // Reduced motion: the hero -> parked swap happens inside a fade
+  pose.fade = reduced ? _d.fade * smoothstep(0.004, 0.03, Math.abs(u - REDUCED_SWAP_U)) : _d.fade;
+
+  // Rotation: speed is integrated, so changing it never jumps the angle.
+  // Over ROT_WINDOW the spin eases out and the crystal glides to the next
+  // resting angle ahead (never backwards, at most SETTLE_MAX_SPEED); as
+  // Works breaks it, it spins freely again
+  const settle = remap01(p, ROT_WINDOW[0], ROT_WINDOW[1]) * (1 - smoothstep(0.02, 0.15, s));
+  if (_timeOverride !== null) {
+    // Test hook (crystalfreeze): the pose is a pure function of that time
+    pose.rotY = _timeOverride * SPIN * rf;
+    pose.rotX = Math.sin(_timeOverride * 0.1) * 0.2 * rf;
+  } else if (reduced) {
+    _rotY = REST_Y;
+    pose.rotY = REST_Y;
+    pose.rotX = REST_X;
+  } else {
+    const free = SPIN * rf;
+    let want = free;
+    if (settle > 0.001) {
+      // At least ~20 deg ahead, so it never arrives mid-ease and backs up
+      if (_restTarget === null) {
+        _restTarget = REST_Y + REST_STEP * Math.ceil((_rotY + 0.35 - REST_Y) / REST_STEP);
+      }
+      const glide = Math.max(-SETTLE_MAX_SPEED, Math.min(SETTLE_MAX_SPEED, (_restTarget - _rotY) * SETTLE_GAIN));
+      want = free * (1 - settle) + glide * settle;
+    } else {
+      _restTarget = null;
+    }
+    _rotVel += (want - _rotVel) * (1 - Math.exp(-5 * dt));
+    _rotY += _rotVel * dt;
+    const wobble = Math.sin(elapsed * 0.1) * 0.2 * rf;
+    pose.rotY = _rotY;
+    pose.rotX = wobble + (REST_X - wobble) * settle;
+  }
 
   useFractureStore.setState({ breakVal: _d.breakVal });
 
@@ -360,4 +495,12 @@ export function tickCrystalPose(
 
 export function getCrystalPose(): CrystalPose {
   return pose;
+}
+
+// Test hook (scripts/verify/crystal-arc.mjs): the live pose and segment
+if (typeof window !== "undefined") {
+  (window as unknown as { __crystalPose: () => CrystalPose & { u: number } }).__crystalPose = () => ({
+    ...pose,
+    u: _lastU,
+  });
 }
