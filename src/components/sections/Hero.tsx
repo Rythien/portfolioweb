@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { SITE_DATA } from "@/content/site";
+import { REVEAL } from "@/motion/language";
 
 export default function Hero() {
   const containerRef = useRef<HTMLElement | null>(null);
@@ -29,9 +30,7 @@ export default function Hero() {
         {
           opacity: 1,
           y: 0,
-          duration: 0.8,
-          stagger: 0.06,
-          ease: "expo.out",
+          ...REVEAL,
         }
       );
     }, containerRef);

@@ -35,7 +35,7 @@ export default function ModePill() {
       data-magnetic
       aria-pressed={mode === value}
       aria-label={`Switch to ${value} mode`}
-      className={`pressable text-label h-full flex items-center px-4 rounded-full transition-all duration-300 focus-visible:outline-offset-4 ${
+      className={`pressable mode-pill-seg text-label h-full flex items-center px-4 rounded-full focus-visible:outline-offset-4 ${
         mode === value
           ? "bg-ink text-surface font-semibold"
           : "text-ink/80 hover:text-ink"

@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { ENTRANCE } from "@/motion/language";
 import { projects, type Project } from "@/content/projects";
 import ProjectArt from "@/components/ui/ProjectArt";
 import WorkChip from "@/components/ui/WorkChip";
@@ -65,8 +66,7 @@ export default function Works() {
           {
             x: 0,
             opacity: 1,
-            duration: 0.8,
-            ease: "expo.out",
+            ...ENTRANCE,
             scrollTrigger: {
               trigger: panel,
               start: "top 80%",
@@ -102,8 +102,7 @@ export default function Works() {
           {
             y: 0,
             opacity: 1,
-            duration: 0.8,
-            ease: "expo.out",
+            ...ENTRANCE,
             scrollTrigger: {
               trigger: head,
               start: "top 80%",

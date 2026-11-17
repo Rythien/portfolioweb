@@ -1,7 +1,35 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { cubicBezier } from "./bezier.ts";
 import { stepSpring, zetaForOvershoot } from "./spring.ts";
+import { BEZIER, DURATION, ease } from "./language.ts";
+
+test("globals.css mirrors the motion language", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const prop = (name: string) => css.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
+  assert.equal(prop("--ease-out-expo"), `cubic-bezier(${BEZIER.entrance.join(", ")})`);
+  assert.equal(prop("--ease-in-out-cubic"), `cubic-bezier(${BEZIER.modeChange.join(", ")})`);
+  assert.equal(prop("--dur-entrance"), `${DURATION.entrance * 1000}ms`);
+  assert.equal(prop("--dur-mode-color"), `${DURATION.modeColor * 1000}ms`);
+  // The retired curves are gone
+  assert.ok(!/cubic-bezier\(0\.45, 0, 0\.55, 1\)/.test(css), "old mode-change curve still in globals.css");
+});
+
+test("the CSS beziers approximate the GSAP eases they stand for", () => {
+  const out = cubicBezier(...BEZIER.entrance);
+  const inOut = cubicBezier(...BEZIER.modeChange);
+  let worstOut = 0;
+  let worstInOut = 0;
+  for (let i = 0; i <= 100; i++) {
+    const t = i / 100;
+    worstOut = Math.max(worstOut, Math.abs(out(t) - ease.entrance(t)));
+    worstInOut = Math.max(worstInOut, Math.abs(inOut(t) - ease.modeChange(t)));
+  }
+  // expo.out has no exact cubic-bezier; this is the standard approximation
+  assert.ok(worstOut < 0.08, `expo.out bezier off by ${worstOut}`);
+  assert.ok(worstInOut < 0.03, `power2.inOut bezier off by ${worstInOut}`);
+});
 
 test("cubicBezier matches its endpoints and is monotonic for (0.16, 1, 0.3, 1)", () => {
   const e = cubicBezier(0.16, 1, 0.3, 1);

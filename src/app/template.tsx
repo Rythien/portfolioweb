@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { gsap } from "gsap";
+import { ENTRANCE } from "@/motion/language";
 
 export default function Template({ children }: { children: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -24,8 +25,7 @@ export default function Template({ children }: { children: React.ReactNode }) {
       { opacity: 0 },
       {
         opacity: 1,
-        duration: 0.35,
-        ease: "power2.out",
+        ...ENTRANCE,
         clearProps: "all",
       }
     );

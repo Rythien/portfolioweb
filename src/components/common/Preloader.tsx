@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { gsap } from "gsap";
+import { REVEAL } from "@/motion/language";
 import { setIntroBreak, crystalEvents } from "@/hooks/crystalState";
 
 interface PreloaderProps {
@@ -115,9 +116,7 @@ export default function Preloader({ onComplete }: PreloaderProps) {
         REVEAL_SELECTOR,
         {
           autoAlpha: 1,
-          duration: 0.8,
-          ease: "expo.out",
-          stagger: 0.08,
+          ...REVEAL,
         },
         1.8
       );

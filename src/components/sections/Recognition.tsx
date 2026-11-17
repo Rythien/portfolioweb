@@ -3,6 +3,7 @@
 import React, { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { REVEAL } from "@/motion/language";
 import { SITE_DATA } from "@/content/site";
 import Counter from "@/components/ui/Counter";
 
@@ -26,9 +27,7 @@ export default function Recognition() {
         {
           opacity: 1,
           y: 0,
-          duration: 0.8,
-          stagger: 0.06,
-          ease: "expo.out",
+          ...REVEAL,
           scrollTrigger: {
             trigger: rowsRef.current,
             start: "top 80%",

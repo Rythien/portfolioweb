@@ -43,8 +43,13 @@ html[data-mode="wake"] {
   --t-rule-hover: rgba(26, 26, 30, 0.25);
   --t-grid: rgba(26, 26, 30, 0.06);
 
+  /* Motion language (source of truth: src/motion/language.ts; motion.test
+     fails if these drift). expo.out for entrances, power2.inOut (cubic)
+     for the mode change. */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+  --ease-in-out-cubic: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-entrance: 800ms;
+  --dur-mode-color: 600ms;
 }
 
 html[data-mode="dream"] {
@@ -80,8 +85,8 @@ html[data-mode="dream"] {
     color: var(--t-ink);
     /* Mode change rides the power2.inOut family, like the flood */
     transition:
-      background-color 600ms cubic-bezier(0.45, 0, 0.55, 1),
-      color 600ms cubic-bezier(0.45, 0, 0.55, 1);
+      background-color var(--dur-mode-color) var(--ease-in-out-cubic),
+      color var(--dur-mode-color) var(--ease-in-out-cubic);
   }
 
   body {
@@ -356,7 +361,7 @@ textarea:focus-visible {
   opacity: 0;
   transition:
     opacity 300ms var(--ease-out-expo),
-    background-color 600ms cubic-bezier(0.45, 0, 0.55, 1);
+    background-color var(--dur-mode-color) var(--ease-in-out-cubic);
 }
 
 @media (min-width: 64rem) {
@@ -373,6 +378,16 @@ textarea:focus-visible {
 /* Tactile press feedback for button-like chrome */
 .pressable {
   transition: transform 120ms var(--ease-out-expo);
+}
+
+/* WAKE / DREAM pill segments: the press, plus their colours turning over
+   with the page on the mode-change curve (Tailwind's transition utilities
+   lose to the unlayered .pressable, so the segments used to snap) */
+.pressable.mode-pill-seg {
+  transition:
+    transform 120ms var(--ease-out-expo),
+    color var(--dur-mode-color) var(--ease-in-out-cubic),
+    background-color var(--dur-mode-color) var(--ease-in-out-cubic);
 }
 
 .pressable:active {
@@ -504,7 +519,7 @@ textarea:focus-visible {
 /* Reduced motion flips mode without a flood: crossfade instead of a snap */
 @media (prefers-reduced-motion: reduce) {
   .project-art-dream {
-    transition: opacity 0.4s ease;
+    transition: opacity var(--dur-mode-color) var(--ease-in-out-cubic);
   }
 }
 

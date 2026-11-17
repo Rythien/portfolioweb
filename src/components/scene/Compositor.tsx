@@ -11,14 +11,13 @@ import { useFractureStore } from "@/store/useFractureStore";
 import { getSectionProgress } from "@/store/useScrollStore";
 import { crystalEvents } from "@/hooks/useCrystalPose";
 import { guardScene, prewarmScene } from "./warm";
+import { DURATION, ease } from "@/motion/language";
 
 /* ── Brush tuning ─────────────────────────────────────────────── */
 
-const FLOOD_DURATION = 1100;   // ms, full wake↔dream flood (power2.inOut)
-
-function easeInOutQuad(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-}
+// Full wake <-> dream flood, on the motion language's mode-change curve
+// (power2.inOut: cubic; this was a quad, power1, under that name)
+const FLOOD_DURATION = DURATION.modeChange * 1000; // ms
 
 const BRUSH_RADIUS = 0.06;     // fraction of screen height, at rest
 const BRUSH_RADIUS_MAX = 0.09; // cap when cursor is moving fast
@@ -588,7 +587,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     if (f.active) {
       // Mode change easing: power2.inOut over FLOOD_DURATION
       const p = Math.min(1, (performance.now() - f.t0) / f.dur);
-      f.level = f.from + (f.target - f.from) * easeInOutQuad(p);
+      f.level = f.from + (f.target - f.from) * ease.modeChange(p);
 
       // Every DOM-side dream effect (grid, heading glow, glass, cursor)
       // rides the same flood value through the --dream custom property.
