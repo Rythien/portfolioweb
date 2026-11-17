@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    agentUpgrade: "security",
+  },
   images: {
     // Only the generated project artwork goes through the optimizer
     localPatterns: [{ pathname: "/projects/**", search: "" }],
