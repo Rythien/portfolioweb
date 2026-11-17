@@ -284,6 +284,20 @@ textarea:focus-visible {
       rgba(99, 102, 241, calc(var(--dream, 0) * 0.14));
 }
 
+/* ── Disciplines ──────────────────────────────────────────────── */
+
+/* Discipline headings hold single long words (CHOREOGRAPHY is ~8.3em
+   wide, ~8.6em with DREAM's open tracking) that cannot wrap. The heading
+   is capped to its own column so the word never runs into the
+   description beside it. */
+.discipline-head {
+  container-type: inline-size;
+}
+
+.discipline-title {
+  font-size: min(clamp(2rem, 1.5rem + 2.5vw, 3.5rem), 11cqi);
+}
+
 /* ── Header backdrop ──────────────────────────────────────────── */
 
 /* Once the page has scrolled, copy passes under the header through this:
