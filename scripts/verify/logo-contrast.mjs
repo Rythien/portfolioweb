@@ -113,7 +113,7 @@ for (const freeze of freezes) for (const mode of ["wake", "dream"]) {
   for (const logo of ["on", "matte"]) {
     const page = await ctx.newPage();
     const q = `nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}${logo === "matte" ? "&crystallogo=matte" : ""}`;
-    await page.goto(`${BASE}/?${q}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/?${q}${process.env.EXTRA_QUERY ? "&" + process.env.EXTRA_QUERY : ""}`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(9000);
     files[logo] = resolve(shots, `logo-contrast-${mode}-${freeze}-${logo}.png`);
     await page.screenshot({ path: files[logo], clip: CLIP });

@@ -90,3 +90,11 @@ projected through the scene camera) and its fade, or `null` when hidden.
 | `scripts/verify/crystal-clear.mjs` | The crystal never covers About / Disciplines copy, at 10 scroll positions per width and mode. |
 | `scripts/verify/disciplines.mjs` | Discipline headings never reach their description; rows never touch; linked rows clear the header. |
 | `scripts/verify/header-band.mjs` | Nothing but the header's own items shows through the nav band, anywhere down the page. |
+
+## Crystal look
+
+`scripts/shot/hero-pose.mjs <label>` shoots the hero at a frozen pose
+(`crystalfreeze`), full viewport and cropped to the crystal, for
+before/after comparisons of lighting and material. `glass-tone.mjs` and
+`logo-contrast.mjs` append `$EXTRA_QUERY` to their page URL, for trying
+a test-only switch without editing them.

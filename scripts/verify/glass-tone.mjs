@@ -51,7 +51,7 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 let fails = 0;
 for (const freeze of freezes) {
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/?nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}&crystallogo=0`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/?nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}&crystallogo=0${process.env.EXTRA_QUERY ? "&" + process.env.EXTRA_QUERY : ""}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(9000);
   const file = resolve(shots, `glass-tone-${mode}-${freeze}.png`);
   await page.screenshot({ path: file, clip: CLIP });

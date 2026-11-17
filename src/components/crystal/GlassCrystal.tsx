@@ -309,6 +309,25 @@ const SHARD_SAMPLE = 192;
 const INCLUSION_COUNT = CRYSTAL_MATERIAL.slivers;
 /** Ground glow sprite under the crystal: base opacity and its slow pulse. */
 const GLOW_OPACITY = 0.2;
+
+/**
+ * The rig's fourth light: a small bright point behind the crystal, just
+ * off-centre (up and right, toward the key's opposite), so light reads as
+ * coming THROUGH the body and the interior glows. The glass refracts its
+ * backdrop render, not the environment, so this is a sprite drawn only in
+ * the intact backdrop pass: it is never seen directly, only refracted.
+ * offset is in the crystal's unrotated frame (scaled with it), just past
+ * the back surface (bound radius ~1.4). Colours go above 1 on purpose.
+ */
+const BACKLIGHT = {
+  // Up and right, clear of the logo: centred behind it, the glow lifted
+  // the logo's surroundings and cost DREAM ~8 L* of edge contrast
+  offset: new THREE.Vector3(0.6, 0.5, -1.6),
+  size: 0.7,
+  wake: [1.7, 1.66, 1.57] as [number, number, number], // warm white, brighter than the page
+  dream: [0.82, 0.68, 1.2] as [number, number, number], // violet white
+};
+const _blInvQ = new THREE.Quaternion();
 const GLOW_PULSE = 0.053;
 
 /* ── Component ───────────────────────────────────────────────── */
@@ -526,6 +545,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     const intactCloudRef = useRef<THREE.Mesh>(null);
     const shardCloudRefs = useRef<(THREE.Group | null)[]>([]);
     const glowRef = useRef<THREE.Sprite>(null);
+    const backlightRef = useRef<THREE.Sprite>(null);
     const showShardsRef = useRef(false);
     const _invQ = useRef(new THREE.Quaternion());
     const _off = useRef(new THREE.Vector3());
@@ -572,6 +592,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (intactCloudRef.current) intactCloudRef.current.visible = false;
         for (const g of shardCloudRefs.current) if (g) g.visible = false;
         if (glowRef.current) glowRef.current.visible = false;
+        if (backlightRef.current) backlightRef.current.visible = false;
         for (let i = 0; i < shards.length; i++) {
           const m = shardMeshRefs.current[i];
           if (m) m.visible = false;
@@ -727,15 +748,27 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       };
       setShardLogos(false);
 
-      // Render refraction backdrop for merged mesh
+      // Render refraction backdrop for merged mesh, with the backlight
+      // behind it (the only pass that ever draws the backlight)
+      const bl = backlightRef.current;
       if (mergedRef.current?.visible) {
         mergedRef.current.visible = false;
+        if (bl) {
+          if (bl.parent) _blInvQ.copy(bl.parent.quaternion).invert();
+          else _blInvQ.identity();
+          bl.position.copy(BACKLIGHT.offset).applyQuaternion(_blInvQ);
+          (bl.material as THREE.SpriteMaterial).opacity = (assembled ? 1 : 1 - crossfade) * fade;
+          bl.visible = true;
+        }
         state.gl.setRenderTarget(mergedFbo);
         if (sceneBg) state.gl.setClearColor(sceneBg, 1);
         state.gl.clear();
         state.gl.render(portalScene, portalCamera);
         state.gl.setRenderTarget(null);
+        if (bl) bl.visible = false;
         mergedRef.current.visible = true;
+      } else if (bl) {
+        bl.visible = false;
       }
 
       // Render shared backdrop FBO for shard transmission, unless every
@@ -921,6 +954,17 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         {/* Radial glow sprite underneath */}
         <sprite ref={glowRef} position={[0, -1.1, 0]} scale={[4, 2, 1]}>
           <spriteMaterial map={glowTex} transparent opacity={GLOW_OPACITY} depthWrite={false} />
+        </sprite>
+
+        {/* Backlight: drawn only in the intact backdrop pass (see BACKLIGHT) */}
+        <sprite ref={backlightRef} visible={false} scale={[BACKLIGHT.size, BACKLIGHT.size, 1]}>
+          <spriteMaterial
+            map={glowTex}
+            color={BACKLIGHT[variant]}
+            transparent
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
         </sprite>
 
         {/* Inclusion slivers inside crystal volume */}
