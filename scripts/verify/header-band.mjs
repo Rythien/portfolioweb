@@ -55,7 +55,14 @@ for (const mode of modes) {
     let checked = 0;
     for (let y = 41; y <= max; y += Math.round(h * stepVh)) {
       await page.evaluate((y) => window.scrollTo(0, y), y);
-      await page.waitForTimeout(450);
+      await page.waitForTimeout(150);
+      // The backdrop fades in over 300ms once past 40px: wait it out, or
+      // the DREAM stars behind it show mid-fade at the first stop
+      await page.waitForFunction(
+        () => getComputedStyle(document.querySelector(".header-scrim")).opacity === "1",
+        null,
+        { timeout: 3000 },
+      );
       // The header's own items and the strip's label/line are allowed
       const holes = await page.evaluate((band) => {
         const sel = "header a, header button, header nav, header [aria-live], [data-rail-strip] > *";

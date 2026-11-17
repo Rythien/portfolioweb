@@ -46,7 +46,7 @@ for (const mode of ["wake", "dream"]) {
     const page = await ctx.newPage();
     const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
     await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
-    await page.mouse.move(w - 3, h / 2);
+    await page.mouse.move(w - 1, h - 1);
     await page.waitForTimeout(5000);
     for (const [name, sel, off] of STOPS) {
       if (only && !name.startsWith(only)) continue;
@@ -68,6 +68,8 @@ for (const mode of ["wake", "dream"]) {
         if (l) l.scrollTo(y, { immediate: true });
         else window.scrollTo(0, y);
       }, y);
+      // Nudge the mouse so the custom cursor follows it into the corner
+      await page.mouse.move(w - 1, h - 2, { steps: 2 });
       await page.waitForTimeout(1800);
       const file = resolve(outDir, `${label}-${mode}-${w}-${name}.png`);
       await page.screenshot({ path: file });
