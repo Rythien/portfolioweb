@@ -389,6 +389,28 @@ textarea:focus-visible {
   perspective: 1000px;
 }
 
+/* Project panel frame: a 1px rule around a mat (dream-glass gives it the
+   elevated surface in WAKE, frosted glass in DREAM), the art inset behind
+   a hairline and a faint top shade so it sits into the mat */
+.work-frame {
+  border: 1px solid var(--t-rule-hover);
+}
+
+.work-frame-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px var(--t-rule),
+    inset 0 1px 3px rgba(0, 0, 0, calc(0.1 * (1 - var(--dream, 0))));
+}
+
+/* WAKE art only: the DREAM variant above it already reads at distance */
+.project-art-panel > img:not(.project-art-dream) {
+  filter: url(#art-tone);
+}
+
 .work-chip {
   background: linear-gradient(
     135deg,

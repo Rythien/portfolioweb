@@ -14,6 +14,15 @@ gsap.registerPlugin(ScrollTrigger);
 
 const MAX_TILT = 6; // degrees
 
+/**
+ * Tone curve for the WAKE panel art, sampled at eighths (input 0, 0.125,
+ * ... 1). The covers sit almost entirely in 0.8-1.0, so the steep part is
+ * up there: paper ~0.95 -> ~0.88, the title watermark ~0.87 -> ~0.73 (title vs
+ * paper 20 -> ~35 levels at 1440),
+ * whites stay near white; shadows below 0.75 are compressed gently.
+ */
+const ART_TONE = "0 0.08 0.18 0.28 0.38 0.47 0.55 0.76 0.97";
+
 function TitleWithAccent({ project }: { project: Project }) {
   const { title, titleAccent } = project;
   if (!titleAccent) return <>{title}</>;
@@ -145,6 +154,19 @@ export default function Works() {
       aria-label="Selected Works"
       className="scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
     >
+      {/* Tone curve for the WAKE panel art (.project-art-panel): the
+          generated covers are light-key (mean ~220/255, sd ~15), so the
+          title watermark and glass read only at 1:1 (see ART_TONE).
+          CSS contrast() would blow the light title out to white. */}
+      <svg aria-hidden="true" width="0" height="0" className="absolute">
+        <filter id="art-tone" colorInterpolationFilters="sRGB">
+          <feComponentTransfer>
+            <feFuncR type="table" tableValues={ART_TONE} />
+            <feFuncG type="table" tableValues={ART_TONE} />
+            <feFuncB type="table" tableValues={ART_TONE} />
+          </feComponentTransfer>
+        </filter>
+      </svg>
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div className="flex flex-col gap-24 sm:gap-32">
           {projects.map((project, index) => (
@@ -213,13 +235,18 @@ export default function Works() {
                 onPointerLeave={handleTiltLeave}
               >
                 <div className="work-panel-tilt relative will-change-transform">
-                  <div className="dream-glass relative overflow-hidden border border-rule">
-                    <div className="work-art-drift scale-[1.07] will-change-transform">
-                      <ProjectArt
-                        image={project.cover}
-                        sizes="(min-width: 1280px) 1152px, (min-width: 1024px) calc(100vw - 128px), (min-width: 640px) calc(100vw - 80px), calc(100vw - 48px)"
-                        loading={index === 0 ? "eager" : "lazy"}
-                      />
+                  {/* Frame: a 1px rule around a mat of the elevated
+                      surface, the art inset in it behind a hairline */}
+                  <div className="work-frame dream-glass relative p-2 sm:p-3">
+                    <div className="work-frame-art relative overflow-hidden">
+                      <div className="work-art-drift scale-[1.07] will-change-transform">
+                        <ProjectArt
+                          image={project.cover}
+                          sizes="(min-width: 1280px) 1152px, (min-width: 1024px) calc(100vw - 128px), (min-width: 640px) calc(100vw - 80px), calc(100vw - 48px)"
+                          loading={index === 0 ? "eager" : "lazy"}
+                          className="project-art-panel"
+                        />
+                      </div>
                     </div>
                   </div>
                   <Link
