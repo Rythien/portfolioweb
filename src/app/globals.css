@@ -323,6 +323,17 @@ textarea:focus-visible {
   }
 }
 
+/* Contact runs straight into the footer, so it ends with the pill's
+   clearance plus a small step instead of the full section rhythm; the
+   footer ends with the clearance so its bottom bar is never under the pill */
+.contact-end {
+  padding-bottom: calc(var(--pill-clear) + 2rem);
+}
+
+.footer-end {
+  padding-bottom: calc(var(--pill-clear) + 1.5rem);
+}
+
 /* ── Header backdrop ──────────────────────────────────────────── */
 
 /* Once the page has scrolled, copy passes under the header through this:

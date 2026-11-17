@@ -57,7 +57,9 @@ export default function SectionRail() {
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            const match = SECTIONS.find((s) => s.id === entry.target.id);
+            // The footer closes the Contact block: it reads as Contact
+            const id = entry.target.tagName === "FOOTER" ? "contact" : entry.target.id;
+            const match = SECTIONS.find((s) => s.id === id);
             if (match) setActive(match.label);
           }
         }
@@ -68,6 +70,10 @@ export default function SectionRail() {
       const el = document.getElementById(s.id);
       if (el) observer.observe(el);
     }
+    // Without it, jumping to the bottom (End key) left the rail on the
+    // last section seen in the middle band
+    const footer = document.querySelector("footer");
+    if (footer) observer.observe(footer);
     return () => observer.disconnect();
   }, []);
 
