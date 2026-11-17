@@ -154,8 +154,7 @@ export const SITE_DATA = {
     headingAccent: "hello.",
     subtext:
       "Open for freelance commissions, full-time engineering roles, and collaborative creative direction worldwide.",
-    email: "seron.maharjan.5@gmail.com",
-    phone: "+977 9823372904",
+    // Email and phone: src/content/contactPoints.ts (kept out of the HTML)
     location: "Kathmandu, Nepal (UTC+05:45)",
     availability: "Available for Q1/Q2 Projects",
     socials: [

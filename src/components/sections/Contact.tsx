@@ -5,12 +5,15 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SITE_DATA } from "@/content/site";
 import { useMounted } from "@/utils/useMounted";
+import { useContactPoints } from "@/content/contactPoints";
 
 gsap.registerPlugin(ScrollTrigger);
 
 export default function Contact() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const mounted = useMounted();
+  // Email and phone exist only after hydration (null in the HTML)
+  const cp = useContactPoints();
   const [copied, setCopied] = useState(false);
   const [timeStr, setTimeStr] = useState("--:--");
 
@@ -35,7 +38,8 @@ export default function Contact() {
   }, []);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(SITE_DATA.contact.email);
+    if (!cp) return;
+    navigator.clipboard.writeText(cp.email);
     setCopied(true);
     setTimeout(() => setCopied(false), 2400);
   };
@@ -91,7 +95,7 @@ export default function Contact() {
 
           <div className="contact-reveal mt-10 sm:mt-12 flex flex-wrap items-center gap-3 sm:gap-4">
             <a
-              href={`mailto:${SITE_DATA.contact.email}`}
+              href={cp?.mailHref ?? "#contact"}
               data-magnetic
               data-cursor="Email"
               className="pressable px-8 py-5 bg-ink text-surface font-mono text-label font-semibold hover:opacity-90 border border-ink"
@@ -102,7 +106,7 @@ export default function Contact() {
               type="button"
               onClick={handleCopy}
               data-magnetic
-              aria-label={copied ? "Email copied" : `Copy email address ${SITE_DATA.contact.email}`}
+              aria-label={copied ? "Email copied" : cp ? `Copy email address ${cp.email}` : "Copy email address"}
               className="pressable px-6 py-5 border border-rule text-ink font-mono text-label hover:border-rule-hover"
             >
               {/* Phones: the short label, so the button stays one line */}
@@ -111,8 +115,8 @@ export default function Contact() {
                   "Copied ✓"
                 ) : (
                   <>
-                    <span className="sm:hidden">Copy email</span>
-                    <span className="max-sm:hidden">Copy: {SITE_DATA.contact.email}</span>
+                    <span className={cp ? "sm:hidden" : undefined}>Copy email</span>
+                    {cp && <span className="max-sm:hidden">Copy: {cp.email}</span>}
                   </>
                 )}
               </span>
@@ -150,13 +154,21 @@ export default function Contact() {
 
             <div className="flex flex-col gap-2">
               <span className="text-label text-ink/80">Phone</span>
-              <a
-                href={`tel:${SITE_DATA.contact.phone.replace(/\s+/g, "")}`}
-                data-magnetic
-                className="text-ink text-sm hover:underline underline-offset-4"
-              >
-                {SITE_DATA.contact.phone}
-              </a>
+              {cp ? (
+                <a
+                  href={cp.phoneHref}
+                  data-magnetic
+                  className="text-ink text-sm hover:underline underline-offset-4"
+                >
+                  {cp.phone}
+                </a>
+              ) : (
+                // Same character count in the mono face, so nothing shifts
+                // when the number arrives
+                <span aria-hidden="true" className="text-ink/40 text-sm">
+                  +··· ··········
+                </span>
+              )}
               <span className="text-sm text-ink/80">Telegram / WhatsApp</span>
             </div>
 

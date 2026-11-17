@@ -5,8 +5,10 @@ import Link from "next/link";
 import Header from "@/components/common/Header";
 import Footer from "@/components/sections/Footer";
 import LenisProvider from "@/components/common/LenisProvider";
+import { useContactPoints } from "@/content/contactPoints";
 
 export default function CVPage() {
+  const cp = useContactPoints();
   return (
     <LenisProvider>
       <div className="min-h-screen flex flex-col justify-between">
@@ -44,8 +46,9 @@ export default function CVPage() {
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-ink-muted">
               <span>Kathmandu, Nepal (UTC+5:45)</span>
               <span>·</span>
-              <a href="mailto:seron.maharjan.5@gmail.com" className="underline hover:text-ink">
-                seron.maharjan.5@gmail.com
+              {/* Assembled in the browser so scrapers don't find it */}
+              <a href={cp?.mailHref ?? "/#contact"} className="underline hover:text-ink">
+                {cp?.email ?? "Email"}
               </a>
               <span>·</span>
               <a

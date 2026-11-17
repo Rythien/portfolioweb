@@ -2,6 +2,7 @@
 
 import React from "react";
 import { SITE_DATA } from "@/content/site";
+import { useContactPoints } from "@/content/contactPoints";
 
 const TICKER_ITEMS = ["Available for work", "2026", "Kathmandu"];
 
@@ -25,6 +26,8 @@ function TickerRun() {
 }
 
 export default function Footer() {
+  // The address is assembled in the browser (see contactPoints.ts)
+  const cp = useContactPoints();
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -49,7 +52,7 @@ export default function Footer() {
           padding clears the fixed WAKE/DREAM pill */}
       <div className="footer-end max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full pt-14 sm:pt-20 flex flex-col gap-10 sm:gap-12">
         <a
-          href={`mailto:${SITE_DATA.contact.email}`}
+          href={cp?.mailHref ?? "#contact"}
           data-cursor="Email"
           className="font-[family-name:var(--font-sans)] text-display uppercase text-ink hover:opacity-90 transition-opacity w-fit"
         >
