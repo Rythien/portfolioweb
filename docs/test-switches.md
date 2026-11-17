@@ -78,3 +78,15 @@ scenario, time to visible content, frame-time percentiles and the longest
 main-thread block (a MessageChannel heartbeat, which only stalls when the
 main thread is busy). `--software` forces Firefox onto WARP (Microsoft
 Basic Render Driver).
+
+## Page layout checks
+
+`window.__crystalBox()` (`crystal/screenBox.ts`) returns the hero crystal's
+on-screen bounding box in CSS px (every vertex of the visible glass
+projected through the scene camera) and its fade, or `null` when hidden.
+
+| Script | Checks |
+| --- | --- |
+| `scripts/verify/crystal-clear.mjs` | The crystal never covers About / Disciplines copy, at 10 scroll positions per width and mode. |
+| `scripts/verify/disciplines.mjs` | Discipline headings never reach their description; rows never touch; linked rows clear the header. |
+| `scripts/verify/header-band.mjs` | Nothing but the header's own items shows through the nav band, anywhere down the page. |

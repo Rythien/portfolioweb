@@ -14,7 +14,14 @@ export function useCrystalPose(): CrystalPose {
     const fov = cam.fov ?? 50;
     const halfH = Math.tan((fov * Math.PI) / 360) * Math.abs(cam.position.z);
     const halfW = halfH * (st.size.width / Math.max(st.size.height, 1));
-    tickCrystalPose(st.clock.elapsedTime, dt, halfW, st.size.width);
+    tickCrystalPose(
+      st.clock.elapsedTime,
+      dt,
+      halfW,
+      st.size.width,
+      st.size.height,
+      Math.abs(cam.position.z),
+    );
   });
   return getCrystalPose();
 }

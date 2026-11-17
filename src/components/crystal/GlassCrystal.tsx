@@ -2,11 +2,12 @@
 
 import { forwardRef, use, useEffect, useMemo, useRef } from "react";
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
+import { setCrystalProbe } from "./screenBox";
 import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getCrystalPose } from "@/hooks/useCrystalPose";
-import { setCrystalTimeOverride } from "@/hooks/crystalState";
+import { setCrystalBoundRadius, setCrystalTimeOverride } from "@/hooks/crystalState";
 import { useCrystalSound } from "@/hooks/useCrystalSound";
 import { initAudioContext } from "@/hooks/crystalAudio";
 import { useSoundStore } from "@/store/useSoundStore";
@@ -437,6 +438,17 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       const d = intactGeo.boundingBox!.getSize(new THREE.Vector3());
       return HERO_LOGO_FILL * Math.min(d.x, d.y, d.z);
     }, [intactGeo]);
+    // The page clamp keeps the crystal off the copy using its real extent
+    // (furthest vertex from the centre), so a retuned mesh stays clear
+    useEffect(() => {
+      const pos = intactGeo.getAttribute("position");
+      let r2 = 0;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        r2 = Math.max(r2, x * x + y * y + z * z);
+      }
+      setCrystalBoundRadius(Math.sqrt(r2));
+    }, [intactGeo]);
     // Built in idle slices: empty for a moment, then the whole set
     const heroLogos = useHeroLogos(heroLogoSize, variant);
     const unitLogos = useUnitLogos(variant);
@@ -542,6 +554,16 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
     useFrame((state, rawDelta) => {
       const fade = getCrystalPose().fade;
+      // Test hook (window.__crystalBox): the live variant's glass meshes
+      if (active) {
+        setCrystalProbe({
+          meshes: [mergedRef.current, ...shardMeshRefs.current],
+          camera: portalCamera,
+          width: state.size.width,
+          height: state.size.height,
+          fade,
+        });
+      }
       if (!active || fade < 0.01) {
         if (mergedRef.current) mergedRef.current.visible = false;
         if (heroLogoRef.current) heroLogoRef.current.visible = false;

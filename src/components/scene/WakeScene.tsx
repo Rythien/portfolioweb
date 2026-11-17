@@ -181,7 +181,9 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
     // Fade out as crystal breaks
     const breakFade = Math.max(0, 1 - pose.breakVal * 3);
     const scrollFade = scrollP < 0.6 ? 1 : 1 - (scrollP - 0.6) / 0.4;
-    const targetOpacity = 0.45 * Math.min(breakFade, scrollFade) * pose.fade;
+    // The ring is 2x the crystal's radius, so it would cross the copy the
+    // crystal is being kept off: it leaves as the copy clamp takes hold
+    const targetOpacity = 0.45 * Math.min(breakFade, scrollFade) * pose.fade * (1 - pose.clamp);
     dampedOpacity.current = THREE.MathUtils.lerp(
       dampedOpacity.current,
       targetOpacity,

@@ -63,7 +63,7 @@ export default function Disciplines() {
               data-cursor="Discipline"
               className="discipline-row group scroll-mt-[108px] lg:scroll-mt-20 py-10 sm:py-12 grid grid-cols-1 md:grid-cols-12 gap-y-5 md:gap-x-8 lg:gap-x-12 items-start transition-colors duration-300 hover:bg-ink/[0.03] px-2 sm:px-4 -mx-2 sm:-mx-4"
             >
-              <div className="discipline-head md:col-span-7 lg:col-span-6 flex flex-col gap-4 min-w-0">
+              <div data-crystal-avoid className="discipline-head md:col-span-7 lg:col-span-6 flex flex-col gap-4 min-w-0">
                 <div className="font-mono text-label uppercase tracking-widest text-ink-muted group-hover:text-ink transition-colors tabular-nums">
                   ({item.number})
                 </div>

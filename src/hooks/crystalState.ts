@@ -26,6 +26,9 @@ export interface CrystalPose {
   /** Global crystal-system visibility: 1 over hero→Works, 0 past Works
    * (and during About/Disciplines on narrow viewports with no empty column). */
   fade: number;
+  /** 0..1: how far the copy clamp has pulled the crystal off its free
+   * pose. Ornaments that circle the crystal (the orbit ring) fade by it. */
+  clamp: number;
 }
 
 const pose: CrystalPose = {
@@ -37,6 +40,7 @@ const pose: CrystalPose = {
   mouseX: 0,
   mouseY: 0,
   fade: 1,
+  clamp: 0,
 };
 
 const _d = { s: 0, x: 0.6, y: 0, scale: 1.0, breakVal: 0, fade: 1 };
@@ -49,24 +53,131 @@ const MOBILE_HERO_Y = 0.55;
 const PARK_SCALE = 0.6;
 /** Below this the parked crystal is too small to bother: it fades out. */
 const PARK_SCALE_MIN = 0.4;
-/** Visible silhouette radius at scale 1 (the rock's R is 1.4 at its spikes). */
+/** Visible silhouette radius at scale 1, as tuned for the marquee veil
+ * (marqueeVeil.ts). The copy clamp does not use it: see _boundR. */
 export const CRYSTAL_VISIBLE_R = 1.25;
 /** Clearance from the copy column, and from the viewport edge. */
 const PARK_GAP_PX = 24;
 const PARK_EDGE_PX = 16;
+/** Copy this far (px) above or below the crystal, beyond the gap, starts
+ * easing it toward the clamp; within PARK_GAP_PX it is fully clamped. */
+const CLAMP_RAMP_PX = 160;
 const COPY_REMEASURE_S = 0.5;
+
+/** Furthest vertex of the intact mesh from its centre (world units at
+ * scale 1). GlassCrystal measures it from the geometry; 1.4 (the spike
+ * radius) until then. */
+let _boundR = 1.4;
+export function setCrystalBoundRadius(r: number) {
+  if (r > 0) _boundR = r;
+}
+
+/** Copy the crystal must not cover ([data-crystal-avoid]), as document
+ * rects: [left, right, top, bottom] with top/bottom in page coordinates. */
+let _copyRects: number[][] = [];
 let _copyRightPx = -1;
 let _copyMeasuredAt = -Infinity;
 let _copyPxW = 0;
 
-/** Right edge (px) of the copy the parked crystal must clear, or -1. */
-function measureCopyRight(): number {
-  if (typeof document === "undefined") return -1;
-  let right = -1;
+function measureCopy() {
+  _copyRects = [];
+  _copyRightPx = -1;
+  if (typeof document === "undefined") return;
+  const sy = window.scrollY;
   document.querySelectorAll("[data-crystal-avoid]").forEach((el) => {
-    right = Math.max(right, el.getBoundingClientRect().right);
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return;
+    _copyRects.push([r.left, r.right, r.top + sy, r.bottom + sy]);
+    _copyRightPx = Math.max(_copyRightPx, r.right);
   });
-  return right;
+}
+
+/** Perspective camera the crystal is drawn with, in screen terms. */
+interface View {
+  /** Camera distance to the z = 0 plane. */
+  d: number;
+  /** CSS px per world unit on the z = 0 plane. */
+  ppu: number;
+  pxW: number;
+  pxH: number;
+}
+
+/**
+ * Screen extents (CSS px) of the crystal's bounding sphere at world (x, y)
+ * and scale s: the tangent cone from the camera, so the perspective swell
+ * of the near side and of an off-axis position are included.
+ */
+function extentsPx(x: number, y: number, s: number, v: View) {
+  const rho = _boundR * s;
+  const a = Math.asin(Math.min(rho / Math.hypot(x, y, v.d), 0.99));
+  const tx = Math.atan2(x, v.d);
+  const ty = Math.atan2(y, v.d);
+  return {
+    left: v.pxW / 2 + v.d * Math.tan(tx - a) * v.ppu,
+    right: v.pxW / 2 + v.d * Math.tan(tx + a) * v.ppu,
+    top: v.pxH / 2 - v.d * Math.tan(ty + a) * v.ppu,
+    bottom: v.pxH / 2 - v.d * Math.tan(ty - a) * v.ppu,
+  };
+}
+
+/** Largest scale whose silhouette fits between screen x left..right at y. */
+function fitScalePx(left: number, right: number, y: number, v: View): number {
+  if (right <= left) return 0;
+  const tl = Math.atan(((left - v.pxW / 2) / v.ppu) / v.d);
+  const tr = Math.atan(((right - v.pxW / 2) / v.ppu) / v.d);
+  const xc = v.d * Math.tan((tl + tr) / 2);
+  return (Math.hypot(xc, y, v.d) * Math.sin((tr - tl) / 2)) / _boundR;
+}
+
+/** World x that puts the silhouette's left edge at screen x `left`. */
+function xForLeftPx(left: number, y: number, s: number, v: View): number {
+  const tl = Math.atan(((left - v.pxW / 2) / v.ppu) / v.d);
+  const rho = _boundR * s;
+  let x = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = Math.asin(Math.min(rho / Math.hypot(x, y, v.d), 0.99));
+    x = v.d * Math.tan(tl + a);
+  }
+  return x;
+}
+
+/**
+ * Keeps the crystal off the copy, from its CURRENT scale. Applied after
+ * damping, so it holds mid-transition and through the reassembly pulse.
+ *
+ * For each copy rect: within PARK_GAP_PX above or below the crystal's
+ * silhouette, the crystal is pushed right of the rect (left edge at
+ * rect.right + gap) and shrunk to fit before the viewport edge; if less
+ * than PARK_SCALE_MIN fits it shrinks away instead. Up to CLAMP_RAMP_PX
+ * further out it eases toward that, so nothing pops as copy scrolls in.
+ * The most restrictive rect wins (rightmost x, smallest scale). Vertical
+ * distance is measured from the unclamped silhouette, which is never
+ * smaller than the clamped one, so an eased crystal is always clear.
+ */
+function clampOffCopy(x: number, y: number, s: number, v: View) {
+  if (_copyRects.length === 0 || s <= 0) return { x, s, w: 0 };
+  const sy = typeof window === "undefined" ? 0 : window.scrollY;
+  const ext = extentsPx(x, y, s, v);
+  let outX = x;
+  let outS = s;
+  let w = 0;
+  for (const [, right, docTop, docBottom] of _copyRects) {
+    const top = docTop - sy;
+    const bottom = docBottom - sy;
+    const vd = Math.max(top - ext.bottom, ext.top - bottom, 0);
+    const k = 1 - smoothstep(PARK_GAP_PX, PARK_GAP_PX + CLAMP_RAMP_PX, vd);
+    if (k <= 0) continue;
+    const left = right + PARK_GAP_PX;
+    // Already clear of this rect horizontally: nothing to do
+    if (ext.left >= left) continue;
+    const fit = fitScalePx(left, v.pxW - PARK_EDGE_PX, y, v);
+    const sc = fit < PARK_SCALE_MIN ? 0 : Math.min(s, fit);
+    const xc = sc > 0 ? Math.max(x, xForLeftPx(left, y, sc, v)) : x;
+    outX = Math.max(outX, x + (xc - x) * k);
+    outS = Math.min(outS, s + (sc - s) * k);
+    w = Math.max(w, k);
+  }
+  return { x: outX, s: outS, w };
 }
 let _lastE = -1;
 let _prevBreak = 0;
@@ -117,9 +228,17 @@ if (typeof window !== "undefined") {
   );
 }
 
-export function tickCrystalPose(elapsed: number, delta: number, halfW: number, pxW: number) {
+export function tickCrystalPose(
+  elapsed: number,
+  delta: number,
+  halfW: number,
+  pxW: number,
+  pxH: number,
+  camZ: number,
+) {
   if (Math.abs(elapsed - _lastE) < 0.0001) return;
   _lastE = elapsed;
+  const view: View = { d: camZ, ppu: pxW / (2 * halfW), pxW, pxH };
 
   const rawS = getSectionProgress("works");
   const aboutP = getSectionProgress("about");
@@ -134,11 +253,10 @@ export function tickCrystalPose(elapsed: number, delta: number, halfW: number, p
   // Parked just right of the About body / Disciplines description columns
   // (measured), shrunk to fit the space left before the viewport edge
   if (elapsed - _copyMeasuredAt > COPY_REMEASURE_S || pxW !== _copyPxW) {
-    _copyRightPx = measureCopyRight();
+    measureCopy();
     _copyMeasuredAt = elapsed;
     _copyPxW = pxW;
   }
-  const pxPerUnit = pxW / (2 * halfW);
   let copyRightPx = _copyRightPx;
   if (copyRightPx < 0) {
     // Sections not mounted yet: text columns end at 10/12 of the grid
@@ -146,14 +264,13 @@ export function tickCrystalPose(elapsed: number, delta: number, halfW: number, p
     const pad = pxW >= 1024 ? 64 : pxW >= 640 ? 40 : 24;
     copyRightPx = (pxW - container) / 2 + pad + (container - 2 * pad) * (10 / 12);
   }
+  const PARK_Y = -0.5;
   const slotLeft = copyRightPx + PARK_GAP_PX;
   const slotRight = pxW - PARK_EDGE_PX;
-  const fitScale = (slotRight - slotLeft) / (2 * CRYSTAL_VISIBLE_R * pxPerUnit);
-  const parkScale = Math.min(PARK_SCALE, fitScale);
+  const parkScale = Math.min(PARK_SCALE, fitScalePx(slotLeft, slotRight, PARK_Y, view));
   // No usable column: sit out About/Disciplines like narrow viewports
   const noRoom = parkScale < PARK_SCALE_MIN;
-  const parkRadiusPx = CRYSTAL_VISIBLE_R * Math.max(parkScale, PARK_SCALE_MIN) * pxPerUnit;
-  const xPark = Math.max(0.6, (slotLeft + parkRadiusPx - pxW / 2) / pxPerUnit);
+  const xPark = Math.max(0.6, xForLeftPx(slotLeft, PARK_Y, Math.max(parkScale, PARK_SCALE_MIN), view));
   // Phones: centred just under the role label (MOBILE_HERO_Y), its lower
   // half crossing the marquee as on desktop; it sits out About onward
   const mobile = pxW < MOBILE_MAX_PX;
@@ -162,7 +279,7 @@ export function tickCrystalPose(elapsed: number, delta: number, halfW: number, p
   const heroScale = mobile ? 0.9 : 1.35;
   const tx = heroX + (xPark - heroX) * park;
   // Parked slightly below centre, in the pocket right of the body copy
-  const ty = heroY + (-0.5 - heroY) * park;
+  const ty = heroY + (PARK_Y - heroY) * park;
   const ts = heroScale + (Math.max(parkScale, PARK_SCALE_MIN) - heroScale) * park;
 
   // The crystal system leaves with Works; on narrow viewports there is
@@ -189,10 +306,8 @@ export function tickCrystalPose(elapsed: number, delta: number, halfW: number, p
   _d.breakVal += (tb - _d.breakVal) * l;
 
   const rf = 1.0 - smoothstep(0, 0.25, s) * 0.7;
-  pose.x = _d.x;
   // Clamped so the parked crystal never leaves the viewport vertically
-  pose.y = Math.max(-0.9, Math.min(0.9, _d.y));
-  pose.z = 0;
+  const y = Math.max(-0.9, Math.min(0.9, _d.y));
   let scaleBoost = 0;
   if (_reassembleStart >= 0) {
     const rt = elapsed - _reassembleStart;
@@ -202,7 +317,12 @@ export function tickCrystalPose(elapsed: number, delta: number, halfW: number, p
       _reassembleStart = -1;
     }
   }
-  pose.scale = _d.scale + scaleBoost;
+  const clamped = clampOffCopy(_d.x, y, _d.scale + scaleBoost, view);
+  pose.x = clamped.x;
+  pose.y = y;
+  pose.z = 0;
+  pose.scale = clamped.s;
+  pose.clamp = clamped.w;
   pose.breakVal = _d.breakVal;
   pose.fade = _d.fade;
   const rotT = _timeOverride ?? elapsed;
