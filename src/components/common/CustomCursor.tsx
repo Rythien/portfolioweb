@@ -23,11 +23,13 @@ const ENTER = { duration: HOVER.enter, ease: EASE.entrance } as const;
 const LEAVE = { duration: HOVER.leave, ease: EASE.entrance } as const;
 
 /**
- * The site cursor (fine pointers, motion allowed). Four states:
+ * The site cursor (fine pointers, motion allowed). Three states:
  *   default   a dot that follows the pointer
  *   BREAK     over the crystal      (scene: CrystalHover)
  *   ENTER     over the brush blob   (scene: Compositor)
- *   VIEW      over a project panel  (DOM: data-cursor="View")
+ * Project panels carry no label: they read as clickable on their own.
+ * A DOM element can still ask for one with data-cursor (the /journey
+ * globe's DRAG).
  * A labelled state opens a ring and the label rises in through a clip;
  * leaving runs at 60% of the enter. Links and buttons grow the dot.
  *

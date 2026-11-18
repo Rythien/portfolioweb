@@ -187,7 +187,8 @@ killed (`src/app/template.tsx`).
   from the edge, is capped at 8 px, and springs back (`EASE.spring`, the one overshoot outside the
   Archive).
 - **Cursor** (fine pointer, motion allowed): a dot by default; a ring with a label that rises in
-  for BREAK (crystal), ENTER (brush blob, only where a click enters) and VIEW (project panels).
+  for BREAK (crystal) and ENTER (brush blob, only where a click enters). Project panels carry no
+  label; they read as clickable on their own.
 - **Copy:** the label morphs to "Copied" with a drawn check, holds 1.6 s, then runs back at 60%.
 - **Focus:** keyboard only, never removed: a 2px ring, 4px offset, ink in WAKE and `#a894ff` in
   DREAM.

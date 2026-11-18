@@ -72,7 +72,6 @@ export default function ProjectsIndexPage() {
                 <div>
                   <Link
                     href={`/project/${project.slug}`}
-                    data-cursor="View"
                     className="block mb-6 overflow-hidden"
                   >
                     <figure className="flex flex-col gap-2">

@@ -344,7 +344,6 @@ export default function Works() {
                     href={`/project/${project.slug}`}
                     tabIndex={-1}
                     aria-hidden="true"
-                    data-cursor="View"
                     className="absolute inset-0 z-10"
                   />
                 </div>
