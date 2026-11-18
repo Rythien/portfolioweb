@@ -591,6 +591,14 @@ html.lenis, html.lenis body {
   --slide-w: min(80vw, 76rem, calc((100dvh - 14rem) * 2.5));
 }
 
+/* While Works pans, its content is centred in a full-height pinned view,
+   which already leaves room under the slides (and clears the pill): the
+   section's own bottom rhythm on top of that left about half a screen of
+   nothing before Recognition. Stacked Works keeps its padding. */
+#works:has(.work-pin[data-h]) {
+  padding-bottom: 0;
+}
+
 /* Project panel frame: a 1px rule around a mat (dream-glass gives it the
    elevated surface in WAKE, frosted glass in DREAM), the art inset behind
    a hairline and a faint top shade so it sits into the mat */
