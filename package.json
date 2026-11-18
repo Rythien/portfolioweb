@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint .",
     "gen:covers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen/covers.mjs",
     "gen:crystal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen/crystal.mjs",
     "gen:font": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen/font.mjs",
