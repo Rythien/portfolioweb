@@ -338,9 +338,12 @@ export default function Works() {
                       </div>
                     </div>
                   </div>
+                  {/* Same destination as the title: a click target only,
+                      not a second tab stop or a second link to hear */}
                   <Link
                     href={`/project/${project.slug}`}
-                    aria-label={`Open ${project.title} case study`}
+                    tabIndex={-1}
+                    aria-hidden="true"
                     data-cursor="View"
                     className="absolute inset-0 z-10"
                   />
@@ -352,8 +355,14 @@ export default function Works() {
               </p>
 
               <div className="flex items-center justify-between font-mono text-label text-ink/80 lg:col-start-9 lg:col-span-4 lg:row-start-2 lg:self-end">
+                {/* One tab stop per slide (the title link): this one and the
+                    panel duplicate it; the repo link is a different place,
+                    so screen readers keep it, and keyboard users reach it
+                    from the case study's Repository Link */}
                 <Link
                   href={`/project/${project.slug}`}
+                  tabIndex={-1}
+                  aria-hidden="true"
                   className="hit inline-flex items-center gap-3 text-ink underline underline-offset-4 decoration-ink/40"
                 >
                   <Swap>Case Study →</Swap>
@@ -364,6 +373,7 @@ export default function Works() {
                     href={project.repo}
                     target="_blank"
                     rel="noopener noreferrer"
+                    tabIndex={-1}
                     className="hit"
                   >
                     <Swap>Source Code ↗</Swap>
