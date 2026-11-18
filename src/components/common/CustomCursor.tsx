@@ -18,6 +18,8 @@ import { useFractureStore } from "@/store/useFractureStore";
 const SCENE_LABELS = new Set(["BREAK", "ENTER"]);
 /** The dot's size over a link or button, as a scale of its rest size. */
 const DOT_OVER_INTERACTIVE = 1.8;
+/** How close (px) the dot must render to the real pointer to count as working. */
+const DOT_PROOF_PX = 4;
 
 const ENTER = { duration: HOVER.enter, ease: EASE.entrance } as const;
 const LEAVE = { duration: HOVER.leave, ease: EASE.entrance } as const;
@@ -53,8 +55,25 @@ export default function CustomCursor() {
     const label = labelRef.current;
     if (!fine || reduced || !root || !dot || !ring || !label) return;
 
-    const ctx = gsap.context(() => {
-      document.body.classList.add("has-custom-cursor");
+    // Safeguard: the native pointer is only hidden (has-custom-cursor) once
+    // the dot has been seen rendering under the real pointer. An error in
+    // setup, or a dot that does not show up, leaves the native pointer on.
+    let ctx: gsap.Context | null = null;
+    let failed = false;
+    const giveUp = (why: unknown) => {
+      if (failed) return;
+      failed = true;
+      document.body.classList.remove("has-custom-cursor");
+      try {
+        ctx?.revert();
+      } catch {
+        // already torn down
+      }
+      gsap.set(root, { autoAlpha: 0 });
+      console.warn("Custom cursor disabled, native pointer restored:", why);
+    };
+
+    const setup = () => gsap.context(() => {
       gsap.set([dot, ring], { xPercent: -50, yPercent: -50, x: -100, y: -100 });
       gsap.set(ring, { scale: 0, autoAlpha: 0 });
       gsap.set(label, { yPercent: 100 });
@@ -175,11 +194,34 @@ export default function CustomCursor() {
       /* ── Pointer ─────────────────────────────────────────────── */
 
       let visible = false;
+      let proven = false;
+      // Two frames after the first move: is the dot really drawn where the
+      // pointer is? Only then is the native pointer hidden.
+      const prove = (x: number, y: number) => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            if (failed) return;
+            const r = dot.getBoundingClientRect();
+            const drawn =
+              getComputedStyle(root).display !== "none" &&
+              getComputedStyle(dot).display !== "none" &&
+              r.width > 0 &&
+              Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y) < DOT_PROOF_PX;
+            if (drawn) {
+              proven = true;
+              document.body.classList.add("has-custom-cursor");
+            } else {
+              giveUp("the dot did not render under the pointer");
+            }
+          })
+        );
+      };
       const onMove = (e: MouseEvent) => {
         if (!visible) {
           visible = true;
           gsap.set([dot, ring], { x: e.clientX, y: e.clientY });
           gsap.to(root, { autoAlpha: 1, ...ENTER });
+          if (!proven) prove(e.clientX, e.clientY);
         }
         xDot(e.clientX);
         yDot(e.clientY);
@@ -226,7 +268,16 @@ export default function CustomCursor() {
       };
     }, rootRef);
 
-    return () => ctx.revert();
+    try {
+      ctx = setup();
+    } catch (err) {
+      giveUp(err);
+    }
+
+    return () => {
+      ctx?.revert();
+      document.body.classList.remove("has-custom-cursor");
+    };
   }, []);
 
   return (
