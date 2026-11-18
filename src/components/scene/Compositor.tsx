@@ -19,6 +19,30 @@ import { MODE, ease } from "@/lib/motion";
 // (power2.inOut: cubic; this was a quad, power1, under that name)
 const FLOOD_DURATION = MODE.flood * 1000; // ms
 
+/** The WAKE <-> DREAM flood's mutable, per-frame state. */
+interface FloodState {
+  active: boolean;
+  level: number;
+  from: number;
+  target: number;
+  t0: number;
+  dur: number;
+  centerX: number;
+  centerY: number;
+  maxRadius: number;
+  dataMode: Mode;
+}
+
+/**
+ * The flood state lives in a ref and is advanced every frame. Effects and
+ * the frame loop reach it through this, so the React compiler treats it
+ * as the external mutable state it is, not as a value captured by an
+ * effect and then modified.
+ */
+function floodOf(ref: { current: FloodState }): FloodState {
+  return ref.current;
+}
+
 const BRUSH_RADIUS = 0.06;     // fraction of screen height, at rest
 const BRUSH_RADIUS_MAX = 0.09; // cap when cursor is moving fast
 const RIM_WIDTH = 0.012;       // glowing rim thickness (mask-space)
@@ -476,7 +500,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
   const compositeQuadRef = useRef<THREE.Mesh>(null);
 
   // Flood animation state — time-based power2.inOut level (0 wake, 1 dream)
-  const floodRef = useRef({
+  const floodRef = useRef<FloodState>({
     active: false,
     level: 0,
     from: 0,
@@ -496,7 +520,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
 
   useEffect(() => {
     if (!transitioning || !clickOrigin) return;
-    const f = floodRef.current;
+    const f = floodOf(floodRef);
 
     if (f.active) {
       // Mid-animation reversal: flip target, keep center for smooth retract
@@ -583,7 +607,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     brushRadiusRef.current = dynamicRadius;
 
     // ── Flood animation (spring toward target) ──────────────────
-    const f = floodRef.current;
+    const f = floodOf(floodRef);
     if (f.active) {
       // Mode change easing: power2.inOut over FLOOD_DURATION
       const p = Math.min(1, (performance.now() - f.t0) / f.dur);
@@ -632,7 +656,9 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
       }
 
       if (typeof window !== "undefined") {
-        (window as any).__modeDebug = { floodProgress: f.level };
+        (window as Window & { __modeDebug?: { floodProgress: number } }).__modeDebug = {
+          floodProgress: f.level,
+        };
       }
     }
 
