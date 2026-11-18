@@ -56,7 +56,7 @@ export default function ModePill() {
         role="group"
         aria-label="Site mode"
         data-magnetic
-        className="h-[var(--pill-h)] flex items-stretch gap-0 rounded-full border border-rule bg-surface/90 backdrop-blur-xl font-mono transition-colors hover:border-rule-hover"
+        className="mode-pill h-[var(--pill-h)] flex items-stretch gap-0 rounded-full border border-rule bg-surface/90 backdrop-blur-xl font-mono transition-colors hover:border-rule-hover"
       >
         {segment("wake", "Wake")}
         {segment("dream", "Dream")}

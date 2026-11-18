@@ -350,6 +350,20 @@ html.lenis, html.lenis body {
   }
 }
 
+/* ── Reduced transparency ─────────────────────────────────────── */
+
+/* The two pieces of glass chrome turn solid when people ask for less
+   transparency: same shape and border, the page colour behind the label,
+   no blur */
+@media (prefers-reduced-transparency: reduce) {
+  .mode-pill,
+  .cursor-reticle {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: var(--t-surface);
+  }
+}
+
 /* ── Copy button ──────────────────────────────────────────────── */
 
 /* The idle label and "Copied" share one clipped cell, so the button never
