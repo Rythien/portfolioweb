@@ -18,7 +18,13 @@ export default function Contact() {
   const mounted = useMounted();
   // Email and phone exist only after hydration (null in the HTML)
   const cp = useContactPoints();
-  const [copied, setCopied] = useState(false);
+  // idle -> copied, or idle -> manual (clipboard refused) -> copied
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">("idle");
+  const [copyKey, setCopyKey] = useState("Ctrl+C");
+  const copied = copyState === "copied";
+  // The address as selectable text, for the manual fallback
+  const emailRef = useRef<HTMLSpanElement | null>(null);
+  const manualCleanupRef = useRef<(() => void) | null>(null);
   const [timeStr, setTimeStr] = useState("--:--");
   // Copy button morph: the idle label and "Copied" share one clipped cell
   const idleRef = useRef<HTMLSpanElement | null>(null);
@@ -50,24 +56,77 @@ export default function Contact() {
   // "Copy" rises out, "Copied" rises in and its check draws itself; after
   // HOLD.confirm it runs back at 60% of that time. Reduced motion: it
   // swaps without moving.
-  const handleCopy = () => {
+  const back = () => {
+    morphRef.current?.timeScale(1 / HOVER.ratio).reverse();
+    setCopyState("idle");
+  };
+
+  const confirmCopied = () => {
     const tl = morphRef.current;
-    if (!cp || !tl) return;
-    navigator.clipboard
-      .writeText(cp.email)
-      .then(() => {
-        setCopied(true);
-        holdRef.current?.kill();
-        tl.timeScale(1).play();
-        holdRef.current = gsap.delayedCall(HOLD.confirm, () => {
-          tl.timeScale(1 / HOVER.ratio).reverse();
-          setCopied(false);
-        });
-      })
-      .catch(() => {
-        // No clipboard (permissions, insecure context): the mailto
-        // button beside it still works, so stay as we are
-      });
+    if (!tl) return;
+    setCopyState("copied");
+    holdRef.current?.kill();
+    if (tl.progress() === 1) {
+      // Already showing the manual hint: just draw the check
+      gsap.fromTo(
+        checkRef.current,
+        { strokeDashoffset: 1 },
+        { strokeDashoffset: 0, duration: prefersReducedMotion() ? 0 : HOVER.enter, ease: EASE.entrance }
+      );
+    } else {
+      tl.timeScale(1).play();
+    }
+    holdRef.current = gsap.delayedCall(HOLD.confirm, back);
+  };
+
+  // Never fail silently: when the browser refuses the clipboard
+  // (permissions, insecure context) the address is selected for the person
+  // and the label slot says which keys copy it. It stays until they copy
+  // (then "Copied") or the selection goes elsewhere (then it runs back).
+  const manualCopy = () => {
+    const tl = morphRef.current;
+    const node = emailRef.current;
+    const sel = window.getSelection();
+    if (!tl || !node || !sel) return;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ??
+      navigator.platform;
+    setCopyKey(/mac|iphone|ipad/i.test(platform) ? "⌘C" : "Ctrl+C");
+    setCopyState("manual");
+    holdRef.current?.kill();
+    tl.timeScale(1).play();
+
+    const onCopy = () => {
+      cleanup();
+      confirmCopied();
+    };
+    const onSelection = () => {
+      if (!sel.rangeCount || !sel.containsNode(node, true)) {
+        cleanup();
+        back();
+      }
+    };
+    const cleanup = () => {
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("selectionchange", onSelection);
+      manualCleanupRef.current = null;
+    };
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("selectionchange", onSelection);
+    manualCleanupRef.current = cleanup;
+  };
+
+  const handleCopy = () => {
+    if (!cp || !morphRef.current) return;
+    manualCleanupRef.current?.();
+    Promise.resolve()
+      .then(() => navigator.clipboard.writeText(cp.email))
+      .then(confirmCopied, manualCopy);
   };
 
   // The heading reveals word by word (MaskWords); the rest follow as blocks
@@ -84,7 +143,10 @@ export default function Contact() {
         .to(idleRef.current, { yPercent: -100, ...enter })
         .to(doneRef.current, { yPercent: 0, ...enter }, "<")
         .to(checkRef.current, { strokeDashoffset: 0, ...enter }, reduced ? "<" : `<${STAGGER.standard}`);
-      return () => holdRef.current?.kill();
+      return () => {
+        holdRef.current?.kill();
+        manualCleanupRef.current?.();
+      };
     },
     { scope: sectionRef }
   );
@@ -124,7 +186,15 @@ export default function Contact() {
               type="button"
               onClick={handleCopy}
               data-magnetic
-              aria-label={copied ? "Email copied" : cp ? `Copy email address ${cp.email}` : "Copy email address"}
+              aria-label={
+                copied
+                  ? "Email copied"
+                  : copyState === "manual"
+                    ? `Email address selected, press ${copyKey} to copy it`
+                    : cp
+                      ? `Copy email address ${cp.email}`
+                      : "Copy email address"
+              }
               className="pressable px-6 py-5 border border-rule text-ink font-mono text-label"
             >
               <span className="copy-morph">
@@ -144,16 +214,33 @@ export default function Contact() {
                   aria-hidden="true"
                   className="inline-flex items-center justify-center gap-2"
                 >
-                  Copied
-                  <svg viewBox="0 0 12 12" width="12" height="12" className="copy-check" aria-hidden="true">
+                  {copyState === "manual" ? `Press ${copyKey} to copy` : "Copied"}
+                  <svg
+                    viewBox="0 0 12 12"
+                    width="12"
+                    height="12"
+                    className={copyState === "manual" ? "copy-check hidden" : "copy-check"}
+                    aria-hidden="true"
+                  >
                     <path ref={checkRef} d="M1.5 6.5 4.5 9.5 10.5 2.5" pathLength={1} strokeDasharray="1" />
                   </svg>
                 </span>
               </span>
             </button>
-            {/* Announces the copy once; the button's own name says so too */}
+            {/* The address as text the fallback can select (clipped, not
+                display: none, so it can still be copied) */}
+            {cp && (
+              <span ref={emailRef} className="sr-only">
+                {cp.email}
+              </span>
+            )}
+            {/* Announces the result once; the button's own name says so too */}
             <span className="sr-only" aria-live="polite">
-              {copied ? "Email copied" : ""}
+              {copied
+                ? "Email copied"
+                : copyState === "manual"
+                  ? `Couldn’t copy automatically. The email address is selected: press ${copyKey} to copy it.`
+                  : ""}
             </span>
           </div>
 
