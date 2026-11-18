@@ -82,6 +82,13 @@ let _restTarget: number | null = null;
 /** Last segment progress, for the test hook. */
 let _lastU = 0;
 
+/** Test-only (crystalscale=<s>): hold the crystal at this scale, so the
+ * glass can be compared at parked size over the hero headline. */
+const SCALE_OVERRIDE: number | null =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).has("crystalscale")
+    ? Number(new URLSearchParams(window.location.search).get("crystalscale"))
+    : null;
+
 const _reducedMotion =
   typeof window !== "undefined" && typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-reduced-motion: reduce)")
@@ -443,7 +450,7 @@ export function tickCrystalPose(
   pose.x = clamped.x;
   pose.y = y;
   pose.z = 0;
-  pose.scale = clamped.s;
+  pose.scale = SCALE_OVERRIDE ?? clamped.s;
   pose.clamp = clamped.w;
   pose.breakVal = _d.breakVal;
   // Reduced motion: the hero -> parked swap happens inside a fade

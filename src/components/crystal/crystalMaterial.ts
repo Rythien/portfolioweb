@@ -57,6 +57,15 @@ export const CRYSTAL_MATERIAL = {
   rim: { color: "#ffffff", power: 4, intensity: 0.7 },
   /** Internal cloud: ice is never optically empty. */
   cloud: { scale: 0.82, opacity: 0.015 },
+  /**
+   * Glass that stays clear when the crystal is small on screen. Frost,
+   * cloud and blur are surface effects with a fixed footprint, so at the
+   * parked size (~130 px radius at 1440) they turned the crystal into
+   * opaque putty. At or under radiusPx they drop to these fractions of
+   * their base, easing back to full by fullPx. (Thickness needs no help:
+   * drei multiplies it by the mesh's model scale.)
+   */
+  small: { radiusPx: 180, fullPx: 260, frost: 0.4, cloud: 0.3, blur: 0.5 },
   /** Thin elongated inclusion slivers (intact count; shards share them). */
   slivers: 2,
   /** Backdrop FBO size (square). */

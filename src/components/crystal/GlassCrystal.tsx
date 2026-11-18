@@ -81,7 +81,9 @@ function playSwapTick() {
  * crystallogo=matte paints the logo and its contour flat magenta, so a
  * test can find the logo's exact (refracted) silhouette. A frozen pose
  * also stills the glass shimmer (temporalDistortion), so two loads of
- * the same pose match pixel for pixel.
+ * the same pose match pixel for pixel. crystalview=hidden draws no
+ * crystal at all (the "without" side of a through-the-glass comparison;
+ * crystalscale=<s> in crystalState sets the size it is compared at).
  */
 const DEBUG = (() => {
   if (typeof window === "undefined") return null;
@@ -90,6 +92,7 @@ const DEBUG = (() => {
   if (freeze !== null) setCrystalTimeOverride(freeze);
   return {
     assembled: q.get("crystalview") === "assembled",
+    hidden: q.get("crystalview") === "hidden",
     freeze,
     noLogo: q.get("crystallogo") === "0",
     matte: q.get("crystallogo") === "matte",
@@ -378,6 +381,11 @@ function buildInclusions(seed: number, count: number, maxR: number): InclusionDa
 
 const _inclusionGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 4, 1);
 const CLOUD = CRYSTAL_MATERIAL.cloud;
+const SMALL = CRYSTAL_MATERIAL.small;
+/** The intact crystal's radius in its own units (TARGET_SIZE is its largest side). */
+const SMALL_BASE_RADIUS = TARGET_SIZE / 2;
+const _glassC = new THREE.Vector3();
+const _glassE = new THREE.Vector3();
 const SLIVER_OPACITY = 0.5;
 
 /** Set every material under an internal-cloud group to its base opacity x k. */
@@ -584,7 +592,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
           fade,
         });
       }
-      if (!active || fade < 0.01) {
+      if (!active || fade < 0.01 || DEBUG?.hidden) {
         if (mergedRef.current) mergedRef.current.visible = false;
         if (heroLogoRef.current) heroLogoRef.current.visible = false;
         if (heroRimRef.current) heroRimRef.current.visible = false;
@@ -623,10 +631,37 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         if (iMat) iMat.opacity = SLIVER_OPACITY * (assembled ? 1 : 1 - crossfade) * fade;
       }
 
+      // Scale-aware glass: frost, cloud and blur follow the crystal's
+      // current on-screen radius (CRYSTAL_MATERIAL.small)
+      _glassC.set(pose.x, pose.y, pose.z).project(portalCamera);
+      _glassE.set(pose.x + SMALL_BASE_RADIUS * pose.scale, pose.y, pose.z).project(portalCamera);
+      const radiusPx = Math.abs(_glassE.x - _glassC.x) * 0.5 * state.size.width;
+      const big = smoothstep(SMALL.radiusPx, SMALL.fullPx, radiusPx);
+      const frostK = SMALL.frost + (1 - SMALL.frost) * big;
+      const cloudK = SMALL.cloud + (1 - SMALL.cloud) * big;
+      const blurK = SMALL.blur + (1 - SMALL.blur) * big;
+      const glassMat = mergedRef.current?.material as
+        | (THREE.MeshPhysicalMaterial & { anisotropicBlur: number })
+        | undefined;
+      if (glassMat) {
+        glassMat.normalScale.set(frostK, frostK);
+        // drei blurs by both: its anisotropic smear and the roughness
+        glassMat.anisotropicBlur = CRYSTAL_MATERIAL.anisotropicBlur * blurK;
+        glassMat.roughness = CRYSTAL_MATERIAL.roughness * blurK;
+      }
+      // Test hook (scripts/verify/crystal-glass.mjs)
+      (window as unknown as { __crystalGlass: object }).__crystalGlass = {
+        radiusPx: Math.round(radiusPx),
+        scale: pose.scale,
+        frost: frostK,
+        cloud: cloudK,
+        blur: blurK,
+      };
+
       const ic = intactCloudRef.current;
       if (ic) {
         ic.visible = !mergedHidden || assembled;
-        setCloudOpacity(ic, (assembled ? 1 : 1 - crossfade) * fade);
+        setCloudOpacity(ic, (assembled ? 1 : 1 - crossfade) * fade * cloudK);
       }
 
       if (glowRef.current) {
