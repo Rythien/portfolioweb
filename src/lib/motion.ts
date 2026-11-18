@@ -198,6 +198,8 @@ export const SCALE = {
   slideAway: 0.94,
   /** Contact: the statement before it arrives. */
   statementFrom: 0.92,
+  /** A pressed control (CSS .pressable mirrors it as scale: 0.97). */
+  press: 0.97,
 } as const;
 
 /**

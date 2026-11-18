@@ -25,7 +25,7 @@ export default function CVPage() {
             </Link>
             <button
               onClick={() => window.print()}
-              className="px-3 py-1.5 border border-rule text-ink rounded-sm font-mono text-label"
+              className="pressable px-3 py-1.5 border border-rule text-ink rounded-sm font-mono text-label"
             >
               <Swap>Print / Save PDF</Swap>
             </button>

@@ -523,9 +523,16 @@ html.lenis, html.lenis body {
   opacity: 1;
 }
 
-/* Tactile press feedback for button-like chrome */
+/* Tactile press feedback for button-like chrome. It uses the independent
+   `scale` property, not `transform`: magnetic controls carry GSAP's pull
+   as an inline transform, which would override (and, with a transition on
+   transform, lag behind) a transform-based press. */
 .pressable {
-  transition: transform var(--dur-press) var(--ease-entrance);
+  transition:
+    scale var(--dur-press) var(--ease-entrance),
+    color var(--dur-hover-out) var(--ease-entrance),
+    background-color var(--dur-hover-out) var(--ease-entrance),
+    border-color var(--dur-hover-out) var(--ease-entrance);
 }
 
 /* WAKE / DREAM pill segments: the press, plus their colours turning over
@@ -533,18 +540,18 @@ html.lenis, html.lenis body {
    lose to the unlayered .pressable, so the segments used to snap) */
 .pressable.mode-pill-seg {
   transition:
-    transform var(--dur-press) var(--ease-entrance),
+    scale var(--dur-press) var(--ease-entrance),
     color var(--dur-mode-color) var(--ease-state),
     background-color var(--dur-mode-color) var(--ease-state);
 }
 
 .pressable:active {
-  transform: scale(0.97);
+  scale: 0.97;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pressable:active {
-    transform: none;
+    scale: none;
   }
 }
 

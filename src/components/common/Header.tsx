@@ -88,7 +88,7 @@ export default function Header() {
             onClick={toggleSound}
             data-magnetic
             aria-pressed={soundOn}
-            className="flex items-center gap-2 py-2 font-mono text-[0.875rem] font-medium uppercase tracking-widest"
+            className="pressable flex items-center gap-2 py-2 font-mono text-[0.875rem] font-medium uppercase tracking-widest"
           >
             <span
               aria-hidden="true"
@@ -165,7 +165,7 @@ export default function Header() {
           <button
             onClick={toggleSound}
             aria-pressed={soundOn}
-            className="hit flex items-center gap-2 font-mono text-label uppercase tracking-widest text-left"
+            className="hit pressable flex items-center gap-2 font-mono text-label uppercase tracking-widest text-left"
           >
             <span
               aria-hidden="true"

@@ -8,6 +8,7 @@ import {
   FEEDBACK,
   HOVER,
   MAGNET,
+  SCALE,
   magnetRelease,
   magnetTo,
 } from "@/lib/motion";
@@ -155,6 +156,20 @@ export default function CustomCursor() {
         pulled.clear();
       };
 
+      // Press on magnetic controls: GSAP owns their transform (and writes
+      // an inline scale: none with it), so the CSS .pressable scale cannot
+      // reach them; press them here instead
+      const PRESS = { duration: FEEDBACK.press, ease: EASE.entrance } as const;
+      let pressed: HTMLElement | null = null;
+      const onDown = (e: PointerEvent) => {
+        pressed = (e.target as Element | null)?.closest<HTMLElement>("[data-magnetic].pressable") ?? null;
+        if (pressed) gsap.to(pressed, { scale: SCALE.press, ...PRESS });
+      };
+      const onUp = () => {
+        if (pressed) gsap.to(pressed, { scale: 1, ...PRESS });
+        pressed = null;
+      };
+
       /* ── Pointer ─────────────────────────────────────────────── */
 
       let visible = false;
@@ -194,12 +209,16 @@ export default function CustomCursor() {
       window.addEventListener("mousemove", onMove, { passive: true });
       document.addEventListener("mouseover", onOver, { passive: true });
       document.documentElement.addEventListener("mouseleave", onLeaveWindow);
+      document.addEventListener("pointerdown", onDown, { passive: true });
+      window.addEventListener("pointerup", onUp, { passive: true });
 
       return () => {
         unsubscribe();
         window.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseover", onOver);
         document.documentElement.removeEventListener("mouseleave", onLeaveWindow);
+        document.removeEventListener("pointerdown", onDown);
+        window.removeEventListener("pointerup", onUp);
         releaseAll();
         document.body.classList.remove("has-custom-cursor");
       };
