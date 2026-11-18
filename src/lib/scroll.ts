@@ -11,6 +11,8 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type Lenis from "lenis";
+import { DURATION } from "./motion";
+import { useIntroStore } from "@/store/useIntroStore";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -47,6 +49,38 @@ if (typeof window !== "undefined") {
     // Lenis moves the real document scroll, so pins stay position: fixed
     pinType: "fixed",
   });
+}
+
+/* ── Re-measuring ───────────────────────────────────────────────── */
+
+/**
+ * Trigger positions go stale whenever the layout moves under them: the
+ * webfonts swapping in, the preloader handing the page over, a resize.
+ * Each re-measures every ScrollTrigger (and reveals whose start is now
+ * behind the reader finish, see settle() in motion.ts). Runs with or
+ * without Lenis. Returns the teardown.
+ */
+export function installRefreshes() {
+  let alive = true;
+  const refresh = () => {
+    if (alive) ScrollTrigger.refresh();
+  };
+  document.fonts?.ready.then(refresh);
+  const unsubscribe = useIntroStore.subscribe((s, prev) => {
+    if (s.done && !prev.done) requestAnimationFrame(refresh);
+  });
+  let timer = 0;
+  const onResize = () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(refresh, DURATION.quick * 1000);
+  };
+  window.addEventListener("resize", onResize, { passive: true });
+  return () => {
+    alive = false;
+    unsubscribe();
+    window.clearTimeout(timer);
+    window.removeEventListener("resize", onResize);
+  };
 }
 
 /* ── Velocity ───────────────────────────────────────────────────── */

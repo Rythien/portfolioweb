@@ -135,7 +135,7 @@ own tier: `pointer` 0.08 / `press` 0.12 / `response` 0.24.
 
 | Motion | Ease | Duration | Implementation |
 |---|---|---|---|
-| Lines, rows | entrance | standard, stagger tight | `revealLines`: rise 24px + fade, `TRIGGER` (`top 75%`, reverse on leave-back) |
+| Lines, rows | entrance | standard, stagger tight | `revealLines`: rise 24px + fade, `TRIGGER` (`clamp(top 75%)`, plays once, `fastScrollEnd`; finished reveals are final) |
 | Blocks, panels | entrance | standard, stagger standard | `revealBlock`: rise 40px + fade |
 | Images | entrance | grand | `maskImage`: clip-path wipe top to bottom, on the art (never on a parent with overhangs) |
 | Numbers | entrance (state for the intro) | standard / grand | `counterTo`: writes the DOM, no React state per frame |

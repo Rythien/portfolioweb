@@ -72,7 +72,7 @@ export default function Hero() {
       >
         {/* Top Metadata */}
         <div data-hero-mask className="relative z-10 overflow-hidden pt-4">
-          <div data-hero-line className="flex items-center justify-between font-mono text-label text-ink/80">
+          <div data-hero-line data-reveal className="flex items-center justify-between font-mono text-label text-ink/80">
             <div className="flex items-center gap-3">
               <span className="w-1.5 h-1.5 rounded-full bg-ink" />
               <span>{SITE_DATA.brand.role}</span>
@@ -91,6 +91,7 @@ export default function Hero() {
           <div data-hero-mask className="mb-8 overflow-hidden">
             <div
               data-hero-line
+              data-reveal
               className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-label text-ink/80"
             >
               {SITE_DATA.hero.disciplines.map((item, idx) => (
@@ -109,6 +110,7 @@ export default function Hero() {
           <div data-hero-mask className="overflow-hidden">
             <div
               data-hero-line
+              data-reveal
               className="flex items-center justify-between border-t border-rule pt-6 font-mono text-label text-ink/80"
             >
               <div className="hidden sm:block">

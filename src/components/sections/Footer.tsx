@@ -18,6 +18,7 @@ import {
   VELOCITY,
   prefersReducedMotion,
   revealLines,
+  settleReveal,
 } from "@/lib/motion";
 import { getVelocity } from "@/lib/scroll";
 import Swap from "@/components/ui/Swap";
@@ -67,6 +68,7 @@ export default function Footer() {
       // arrives OFFSET.accent later. Reduced motion: it fades in.
       if (cta) {
         const tl = gsap.timeline({ scrollTrigger: { ...TRIGGER, trigger: cta } });
+        settleReveal(tl);
         if (reduced) {
           tl.fromTo(cta, { autoAlpha: 0 }, { autoAlpha: 1, ...QUICK });
         } else {
@@ -118,7 +120,7 @@ export default function Footer() {
   };
 
   return (
-    <footer ref={rootRef} data-reveal className="relative z-[1] border-t border-rule select-none">
+    <footer ref={rootRef} data-intro className="relative z-[1] border-t border-rule select-none">
       {/* Slow ticker */}
       <div
         className="ticker overflow-hidden border-b border-rule py-4 font-mono text-label text-ink/80"
@@ -139,6 +141,7 @@ export default function Footer() {
         <a
           href={cp?.mailHref ?? "#contact"}
           data-cta
+          data-reveal
           className="font-[family-name:var(--font-sans)] text-display uppercase text-ink w-fit"
         >
           <Swap>

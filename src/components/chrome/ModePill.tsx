@@ -47,7 +47,7 @@ export default function ModePill() {
 
   return (
     <div
-      data-reveal
+      data-intro
       className="fixed left-1/2 -translate-x-1/2 z-[100] bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))]"
     >
       {/* The whole pill is one magnet (its own wrapper keeps the centring

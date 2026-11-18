@@ -106,7 +106,7 @@ export default function SectionRail() {
       {/* Narrow screens: the rail collapses to a strip under the header */}
       <div
         aria-hidden="true"
-        data-reveal
+        data-intro
         data-rail-strip
         className="fixed left-0 right-0 top-20 z-40 lg:hidden h-7 px-6 sm:px-10 flex items-center gap-3 bg-surface border-b border-rule pointer-events-none select-none"
       >
@@ -127,7 +127,7 @@ export default function SectionRail() {
 
     <div
       aria-hidden="true"
-      data-reveal
+      data-intro
       className="fixed left-0 top-0 bottom-0 z-40 hidden lg:flex w-12 flex-col items-center gap-6 pt-28 pb-8 pointer-events-none select-none"
     >
       <div className="h-44 flex items-start justify-center overflow-hidden">

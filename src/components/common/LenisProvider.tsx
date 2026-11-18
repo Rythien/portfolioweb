@@ -8,7 +8,7 @@ import { useScrollStore, setSectionProgress } from "@/store/useScrollStore";
 import { useArchiveStore } from "@/store/useArchiveStore";
 import { DURATION, ease } from "@/lib/motion";
 // Importing registers the ScrollTrigger scrollerProxy before any trigger exists
-import { setLenis, startVelocity } from "@/lib/scroll";
+import { installRefreshes, setLenis, startVelocity } from "@/lib/scroll";
 import ScrollSkew from "@/components/chrome/ScrollSkew";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -32,6 +32,10 @@ export default function LenisProvider({
 }) {
   const [lenisInstance, setLenisInstance] = useState<Lenis | null>(null);
   const lenisRef = useRef<Lenis | null>(null);
+
+  // Fonts, preloader hand-over and resize re-measure every trigger,
+  // with or without Lenis (reduced motion has none)
+  useEffect(() => installRefreshes(), []);
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia(

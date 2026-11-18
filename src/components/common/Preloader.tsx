@@ -13,7 +13,8 @@ interface PreloaderProps {
   onComplete?: () => void;
 }
 
-const REVEAL_SELECTOR = "#main-content, [data-reveal]";
+/** What the preloader holds back and fades in once the crystal has gathered. */
+const REVEAL_SELECTOR = "#main-content, [data-intro]";
 
 /**
  * Intro: the crystal's shards gather into the intact crystal (introBreak

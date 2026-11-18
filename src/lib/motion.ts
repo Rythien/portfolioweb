@@ -218,10 +218,16 @@ export const VELOCITY = {
   chipDegPerPx: 0.05,
 } as const;
 
-/** Default ScrollTrigger for entrances. */
+/**
+ * Default ScrollTrigger for entrances. A reveal plays once and stays: it
+ * never reverses on the way back up. clamp() keeps the start reachable for
+ * content near the bottom of the page, and fastScrollEnd completes it at
+ * once when the reader scrolls past fast, so nothing is left mid-way.
+ */
 export const TRIGGER = {
-  start: "top 75%",
-  toggleActions: "play none none reverse",
+  start: "clamp(top 75%)",
+  toggleActions: "play none none none",
+  fastScrollEnd: true,
 } as const;
 
 /* ── Presets ────────────────────────────────────────────────────── */
@@ -255,12 +261,54 @@ export interface RevealOptions {
   paused?: boolean;
 }
 
+/** Jump a reveal to its end when its start is already behind the reader. */
+function finishIfPassed(st: ScrollTrigger) {
+  const a = st.animation;
+  if (a && st.scroll() >= st.start && a.progress() < 1) a.progress(1);
+}
+
+/**
+ * Every reveal's targets carry [data-reveal] (scripts/verify/reveals.mjs
+ * checks that they all finish visible), and every reveal has a terminal
+ * guarantee (also for hand-built reveals: call settleReveal on their
+ * timeline): if its trigger is already behind the reader when it is set
+ * up, or when the layout is re-measured, it jumps to its end state instead
+ * of waiting for an entry that will never come.
+ */
+export function settleReveal(tl: gsap.core.Timeline) {
+  // After the caller has added its tweens (same task)
+  queueMicrotask(() => {
+    if (typeof Element !== "undefined") {
+      for (const child of tl.getChildren(true, true, false)) {
+        for (const t of (child as gsap.core.Tween).targets()) {
+          if (t instanceof Element) t.setAttribute("data-reveal", "");
+        }
+      }
+    }
+    if (tl.scrollTrigger) finishIfPassed(tl.scrollTrigger);
+  });
+  // Done is done: once a reveal has finished, its trigger goes (leaving
+  // the element where it ended), so no later re-measure or scroll back
+  // can put it back to its starting state
+  tl.eventCallback("onComplete", () => {
+    tl.scrollTrigger?.kill(false);
+  });
+}
+
 function timelineFor(opts: RevealOptions): gsap.core.Timeline {
   const st =
     opts.trigger || opts.scrollTrigger
-      ? { ...TRIGGER, ...(opts.trigger ? { trigger: opts.trigger } : {}), ...opts.scrollTrigger }
+      ? {
+          ...TRIGGER,
+          // Re-measured (fonts, preloader, resize): finish if now passed
+          onRefresh: finishIfPassed,
+          ...(opts.trigger ? { trigger: opts.trigger } : {}),
+          ...opts.scrollTrigger,
+        }
       : undefined;
-  return gsap.timeline({ scrollTrigger: st, delay: opts.delay, paused: opts.paused });
+  const tl = gsap.timeline({ scrollTrigger: st, delay: opts.delay, paused: opts.paused });
+  settleReveal(tl);
+  return tl;
 }
 
 function rise(

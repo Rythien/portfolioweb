@@ -58,7 +58,7 @@ export default function Header() {
       data-on={scrolled ? "" : undefined}
       className="header-scrim fixed top-0 left-0 right-0 z-[39] pointer-events-none"
     />
-    <header data-reveal className="fixed top-0 left-0 right-0 z-50 pointer-events-none text-ink">
+    <header data-intro className="fixed top-0 left-0 right-0 z-50 pointer-events-none text-ink">
       {/* Below lg the header is solid so header + rail strip form one
           band; the scrim above adds the fade under it once scrolled */}
       <div aria-hidden="true" className="absolute inset-0 max-lg:bg-surface" />
