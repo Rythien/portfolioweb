@@ -145,7 +145,6 @@ export const HOLD = {
 
 /** Ambient loop periods, in seconds. */
 export const LOOP = {
-  chip: 26,
   ticker: 42,
   sound: 0.9,
 } as const;
@@ -214,8 +213,6 @@ export const VELOCITY = {
   /** Footer ticker: extra timeScale per px/s on top of 1 (never below 1). */
   tickerPerPx: 1 / 1200,
   tickerMax: 4,
-  /** Works chip: degrees of rotation per px scrolled. */
-  chipDegPerPx: 0.05,
 } as const;
 
 /**

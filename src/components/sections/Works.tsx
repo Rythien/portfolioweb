@@ -11,16 +11,15 @@ import {
   HOVER,
   SCALE,
   TILT,
-  VELOCITY,
   maskImage,
   prefersReducedMotion,
   revealBlock,
 } from "@/lib/motion";
-import { getLenis, getVelocity } from "@/lib/scroll";
+import { getLenis } from "@/lib/scroll";
 import Swap from "@/components/ui/Swap";
 import { projects, type Project } from "@/content/projects";
 import ProjectArt from "@/components/ui/ProjectArt";
-import WorkChip from "@/components/ui/WorkChip";
+import ToolLogos from "@/components/ui/ToolLogos";
 import { useThemeStore } from "@/store/useThemeStore";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
 
@@ -209,22 +208,8 @@ export default function Works() {
         };
       });
 
-      // The glass chips turn with scroll velocity (degrees per px scrolled,
-      // either direction), on top of their slow orbit
-      let stopSpin = () => {};
-      if (!reduced) {
-        const spins = q(".work-chip-spin").map((el) => gsap.quickSetter(el, "rotation", "deg"));
-        let angle = 0;
-        const tick = (_t: number, deltaMs: number) => {
-          angle += getVelocity() * (deltaMs / 1000) * VELOCITY.chipDegPerPx;
-          spins.forEach((set) => set(angle));
-        };
-        gsap.ticker.add(tick);
-        stopSpin = () => gsap.ticker.remove(tick);
-      }
       return () => {
         unbind.forEach((off) => off());
-        stopSpin();
         mm.revert();
       };
     },
@@ -307,6 +292,9 @@ export default function Works() {
                       ))}
                     </div>
 
+                    {/* The tools, as information beside the roles */}
+                    <ToolLogos project={project} />
+
                     <p
                       className={`font-[family-name:var(--font-sans)] text-body leading-relaxed max-w-[60ch] [text-wrap:pretty] ${
                         isDream ? "text-ink/70 italic" : "text-ink/70"
@@ -347,7 +335,6 @@ export default function Works() {
                     className="absolute inset-0 z-10"
                   />
                 </div>
-                <WorkChip project={project} />
               </div>
               <p className="-mt-4 sm:-mt-8 lg:mt-0 lg:col-span-8 lg:row-start-3 font-mono text-label text-ink/80">
                 {project.cover.caption}

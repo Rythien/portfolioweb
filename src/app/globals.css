@@ -48,7 +48,6 @@
   --dur-hover-in: 400ms;
   --dur-hover-out: 240ms;
   --dur-reduced: 10ms;
-  --loop-chip: 26s;
   --loop-sound: 900ms;
 }
 
@@ -578,7 +577,7 @@ html.lenis, html.lenis body {
       rgba(167, 139, 250, calc(var(--dream, 0) * 0.3));
 }
 
-/* ── Work panels & orbit chips ────────────────────────────────── */
+/* ── Work panels ──────────────────────────────────────────────── */
 
 .work-panel-wrap {
   perspective: 1000px;
@@ -619,80 +618,6 @@ html.lenis, html.lenis body {
 /* WAKE art only: the DREAM variant above it already reads at distance */
 .project-art-panel > img:not(.project-art-dream) {
   filter: url(#art-tone);
-}
-
-.work-chip {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.22),
-    rgba(255, 255, 255, 0.05)
-  );
-  border: 1px solid color-mix(in srgb, var(--t-ink) 18%, transparent);
-  -webkit-backdrop-filter: blur(10px) saturate(130%);
-  backdrop-filter: blur(10px) saturate(130%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 8px 32px rgba(26, 26, 30, 0.08);
-  transition:
-    transform var(--dur-hover-out) var(--ease-entrance),
-    backdrop-filter var(--dur-hover-out) var(--ease-entrance),
-    -webkit-backdrop-filter var(--dur-hover-out) var(--ease-entrance);
-  z-index: 2;
-}
-
-/* Hovering the panel deepens the chip's refraction */
-.work-panel-wrap:hover .work-chip {
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
-  backdrop-filter: blur(18px) saturate(180%);
-  transform: scale(1.06);
-  transition-duration: var(--dur-hover-in);
-}
-
-.work-chip-orbit {
-  animation: chip-orbit var(--loop-chip) var(--ease-linear) infinite;
-}
-
-.work-chip-item {
-  transform: rotate(var(--angle)) translateX(2.9rem);
-}
-
-.work-chip-logo {
-  display: block;
-  animation: chip-counter var(--loop-chip) var(--ease-linear) infinite;
-  transform: rotate(calc(-1 * var(--angle)));
-}
-
-@keyframes chip-orbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes chip-counter {
-  from {
-    transform: rotate(calc(-1 * var(--angle)));
-  }
-  to {
-    transform: rotate(calc(-1 * var(--angle) - 360deg));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .work-chip-orbit,
-  .work-chip-logo {
-    animation: none;
-  }
-}
-
-/* Offscreen chips neither animate nor blur */
-.chip-paused .work-chip-orbit,
-.chip-paused .work-chip-logo {
-  animation-play-state: paused;
-}
-
-.chip-paused {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 
 /* ── Project artwork: DREAM layer rides the flood ─────────────── */

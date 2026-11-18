@@ -63,7 +63,6 @@ test("globals.css mirrors the motion tokens", () => {
   assert.equal(prop("--dur-hover-out"), ms(HOVER.leave));
   // Bare Tailwind transitions rest on the leave timing
   assert.equal(prop("--default-transition-duration"), "var(--dur-hover-out)");
-  assert.equal(prop("--loop-chip"), `${LOOP.chip}s`);
   assert.equal(prop("--loop-sound"), ms(LOOP.sound));
   // Retired names are gone
   for (const old of ["--ease-out-expo", "--ease-in-out-cubic", "--dur-entrance"]) {

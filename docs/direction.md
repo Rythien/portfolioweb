@@ -171,7 +171,7 @@ killed (`src/app/template.tsx`).
 | 1 | Hero lines (meta row, WebGL marquee, disciplines, footer row) wipe up from their masks, 0.08 s apart, after the preloader; the marquee scrolls while hidden | `Hero.tsx`, `Marquee.tsx` |
 | 2 | Big statements reveal word by word on masks at 75% | `MaskWords.tsx` (About, Contact) |
 | 3 | Discipline rows wipe out of the list's left rule, numbers count up; hovering a row drops the others to 40% | `Disciplines.tsx`, `globals.css` |
-| 4 | Works pins at lg+ and pans the three slides sideways, each scaling 0.94 to 1 as it centres; chips turn with scroll velocity | `Works.tsx`, `WorkChip.tsx` |
+| 4 | Works pins at lg+ and pans the three slides sideways, each scaling 0.94 to 1 as it centres; each project's tools are flat logos beside its roles (information, not decoration) | `Works.tsx`, `ToolLogos.tsx` |
 | 5 | `[data-skew]` section content leans with velocity, ≤ 1.5°, easing back to 0 | `ScrollSkew.tsx` |
 | 6 | Recognition rows rise on 0.04 s with hairlines drawing left to right | `Recognition.tsx` |
 | 7 | "GET IN touch" scales from 0.92; the italic word follows 0.15 s later | `Footer.tsx` |
