@@ -67,7 +67,7 @@ export default function Header() {
         <div className="pointer-events-auto">
           <Link
             href="#top"
-            className="font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-ink py-2"
+            className="hit font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-ink"
           >
             <Swap>{SITE_DATA.brand.name}</Swap>
           </Link>
@@ -118,7 +118,7 @@ export default function Header() {
             aria-label="Toggle navigation menu"
             aria-expanded={isMobileMenuOpen}
             aria-controls="mobile-navigation"
-            className="pressable p-2 -mr-2 text-ink font-mono text-label"
+            className="hit pressable px-2 -mr-2 text-ink font-mono text-label"
           >
             <Swap>{isMobileMenuOpen ? "[Close]" : "[Menu]"}</Swap>
           </button>
@@ -136,35 +136,35 @@ export default function Header() {
           <a
             href="#works"
             onClick={() => setIsMobileMenuOpen(false)}
-            className="py-2 border-b border-rule"
+            className="hit border-b border-rule"
           >
             <Swap>Work</Swap>
           </a>
           <a
             href="#about"
             onClick={() => setIsMobileMenuOpen(false)}
-            className="py-2 border-b border-rule"
+            className="hit border-b border-rule"
           >
             <Swap>About</Swap>
           </a>
           <a
             href="#disciplines"
             onClick={() => setIsMobileMenuOpen(false)}
-            className="py-2 border-b border-rule"
+            className="hit border-b border-rule"
           >
             <Swap>Disciplines</Swap>
           </a>
           <a
             href="#contact"
             onClick={() => setIsMobileMenuOpen(false)}
-            className="py-2 border-b border-rule"
+            className="hit border-b border-rule"
           >
             <Swap>Contact</Swap>
           </a>
           <button
             onClick={toggleSound}
             aria-pressed={soundOn}
-            className="py-2 flex items-center gap-2 font-mono text-label uppercase tracking-widest text-left"
+            className="hit flex items-center gap-2 font-mono text-label uppercase tracking-widest text-left"
           >
             <span
               aria-hidden="true"

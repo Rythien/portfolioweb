@@ -354,7 +354,7 @@ export default function Works() {
               <div className="flex items-center justify-between font-mono text-label text-ink/80 lg:col-start-9 lg:col-span-4 lg:row-start-2 lg:self-end">
                 <Link
                   href={`/project/${project.slug}`}
-                  className="inline-flex items-center gap-3 text-ink underline underline-offset-4 decoration-ink/40 py-1"
+                  className="hit inline-flex items-center gap-3 text-ink underline underline-offset-4 decoration-ink/40"
                 >
                   <Swap>Case Study →</Swap>
                 </Link>
@@ -364,6 +364,7 @@ export default function Works() {
                     href={project.repo}
                     target="_blank"
                     rel="noopener noreferrer"
+                    className="hit"
                   >
                     <Swap>Source Code ↗</Swap>
                   </a>

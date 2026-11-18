@@ -19,7 +19,7 @@ export default function CVPage() {
           <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/"
-              className="flex items-center gap-2"
+              className="hit flex items-center gap-2"
             >
               <Swap>← Back to home</Swap>
             </Link>
@@ -41,11 +41,11 @@ export default function CVPage() {
             <p className="mt-4 font-[family-name:var(--font-sans)] text-lg sm:text-xl text-ink/80 font-normal leading-relaxed">
               Website and app designer and frontend developer in Kathmandu. I design interfaces and build them in code, from first sketch to launch. BICT graduate, Asia e University, 2025.
             </p>
-            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-ink-muted">
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-8 font-mono text-xs text-ink-muted">
               <span>Kathmandu, Nepal (UTC+5:45)</span>
               <span>·</span>
               {/* Assembled in the browser so scrapers don't find it */}
-              <a href={cp?.mailHref ?? "/#contact"} className="underline">
+              <a href={cp?.mailHref ?? "/#contact"} className="hit underline">
                 <Swap>{cp?.email ?? "Email"}</Swap>
               </a>
               <span>·</span>
@@ -53,7 +53,7 @@ export default function CVPage() {
                 href="https://github.com/rythien"
                 target="_blank"
                 rel="noreferrer"
-                className="underline"
+                className="hit underline"
               >
                 <Swap>github.com/rythien</Swap>
               </a>
@@ -62,7 +62,7 @@ export default function CVPage() {
                 href="https://linkedin.com/in/searon-maharjan"
                 target="_blank"
                 rel="noreferrer"
-                className="underline"
+                className="hit underline"
               >
                 <Swap>linkedin.com/in/searon-maharjan</Swap>
               </a>

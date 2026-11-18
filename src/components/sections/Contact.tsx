@@ -164,7 +164,7 @@ export default function Contact() {
                 href={s.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="py-1 underline underline-offset-4 decoration-ink/20"
+                className="hit underline underline-offset-4 decoration-ink/20"
               >
                 <Swap>{s.label} ↗</Swap>
               </a>
@@ -190,7 +190,7 @@ export default function Contact() {
               {cp ? (
                 <a
                   href={cp.phoneHref}
-                  className="text-ink text-sm"
+                  className="hit text-ink text-sm"
                 >
                   <Swap>{cp.phone}</Swap>
                 </a>

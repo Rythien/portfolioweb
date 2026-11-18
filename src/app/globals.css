@@ -331,6 +331,25 @@ html.lenis, html.lenis body {
   transform: translateY(0);
 }
 
+/* ── Hit area ─────────────────────────────────────────────────── */
+
+/* Standalone text links and text-only buttons: block padding that makes
+   the box at least 44px tall (Apple's default touch target; 28 is the
+   floor), cancelled by an equal negative margin so nothing around it
+   moves. 1lh is the element's own line height, so the padding is exactly
+   what the label is short of. Inline links become inline-block so the box
+   is measured from the line height (an inline box's padding hangs off the
+   font's shorter content area); in the components layer, so a flex or
+   inline-flex utility on the same element still wins. */
+@layer components {
+  .hit {
+    --hit-pad: max(0px, calc((44px - 1lh) / 2));
+    display: inline-block;
+    padding-block: var(--hit-pad);
+    margin-block: calc(var(--hit-pad) * -1);
+  }
+}
+
 /* ── Copy button ──────────────────────────────────────────────── */
 
 /* The idle label and "Copied" share one clipped cell, so the button never

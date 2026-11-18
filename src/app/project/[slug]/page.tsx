@@ -44,7 +44,7 @@ export default async function ProjectDetailPage({
           <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/projects"
-              className="flex items-center gap-2"
+              className="hit flex items-center gap-2"
             >
               <Swap>← All Projects</Swap>
             </Link>
@@ -134,7 +134,7 @@ export default async function ProjectDetailPage({
                     href={project.links.repo}
                     target="_blank"
                     rel="noreferrer"
-                    className="underline text-ink"
+                    className="hit underline text-ink"
                   >
                     <Swap>Repository Link →</Swap>
                   </a>
@@ -197,13 +197,13 @@ export default async function ProjectDetailPage({
           <div className="pt-12 border-t border-rule flex items-center justify-between font-mono text-xs uppercase tracking-widest">
             <Link
               href="/projects"
-              className="text-ink-muted"
+              className="hit text-ink-muted"
             >
               <Swap>← Back to all projects</Swap>
             </Link>
             <Link
               href={`/project/${nextProject.slug}`}
-              className="text-ink flex items-center gap-2"
+              className="hit text-ink flex items-center gap-2"
             >
               <Swap>Next: {nextProject.title} →</Swap>
             </Link>

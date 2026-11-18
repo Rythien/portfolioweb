@@ -150,7 +150,7 @@ export default function Footer() {
           <span>{SITE_DATA.footer.copyright}</span>
           <button
             onClick={scrollToTop}
-            className="pressable text-ink underline underline-offset-4 decoration-ink/20"
+            className="hit pressable text-ink underline underline-offset-4 decoration-ink/20"
           >
             <Swap>{SITE_DATA.footer.backToTop}</Swap>
           </button>

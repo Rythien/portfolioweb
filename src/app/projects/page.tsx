@@ -28,7 +28,7 @@ export default function ProjectsIndexPage() {
           <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/"
-              className="flex items-center gap-2"
+              className="hit flex items-center gap-2"
             >
               <Swap>← Back to home</Swap>
             </Link>
@@ -94,7 +94,7 @@ export default function ProjectsIndexPage() {
                   </div>
 
                   <h2 className="font-[family-name:var(--font-display)] text-2xl font-light text-ink">
-                    <Link href={`/project/${project.slug}`}>
+                    <Link href={`/project/${project.slug}`} className="hit">
                       <Swap>{project.title}</Swap>
                     </Link>
                   </h2>
@@ -107,7 +107,7 @@ export default function ProjectsIndexPage() {
                 <div className="mt-6 pt-4 border-t border-rule flex items-center justify-between font-mono text-xs uppercase tracking-widest text-ink/80">
                   <Link
                     href={`/project/${project.slug}`}
-                    className="inline-flex items-center gap-2"
+                    className="hit inline-flex items-center gap-2"
                   >
                     <Swap>Read study →</Swap>
                   </Link>

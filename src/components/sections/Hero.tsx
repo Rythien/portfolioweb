@@ -120,7 +120,7 @@ export default function Hero() {
                   href={SITE_DATA.hero.socialUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline underline-offset-4 decoration-ink/20"
+                  className="hit underline underline-offset-4 decoration-ink/20"
                 >
                   <Swap>{SITE_DATA.hero.socialLabel} ↗</Swap>
                 </a>
