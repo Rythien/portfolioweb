@@ -271,6 +271,20 @@ export function setCrystalTimeOverride(t: number | null) {
   _timeOverride = t;
 }
 
+/**
+ * Fragments (the crystal's shards and the Debris chips) belong to the
+ * hero: 1 while it is on screen, easing to 0 as it scrolls away (the same
+ * window Debris fades on). Nothing breaks outside it.
+ */
+export function heroGate(): number {
+  return 1 - smoothstep(0.62, 0.85, getSectionProgress("top"));
+}
+
+/** True while a hover may break the crystal (the hero is on screen). */
+export function fragmentsAllowed(): boolean {
+  return heroGate() > 0.5;
+}
+
 /** Preloader drives this 1 → 0 so the shards gather into the intact crystal. */
 export function setIntroBreak(v: number) {
   _introBreak = v;
@@ -383,17 +397,20 @@ export function tickCrystalPose(
   if (narrow || noRoom) fadeTarget = Math.min(fadeTarget, 1 - posP);
   _d.fade += (fadeTarget - _d.fade) * (1 - Math.exp(-6 * delta));
 
-  // Scroll-driven break: starts as Works enters, fully broken by 0.25
-  const scrollBreak = smoothstep(0.05, 0.25, s);
+  // No scroll-driven break: the crystal used to shatter as Works entered
+  // and its shards drifted across Works and Recognition. It now leaves
+  // intact (the fade above), and a hover breaks it only over the hero
+  const gate = heroGate();
 
   // Hover-driven break (damped spring)
-  const hoverTarget = useFractureStore.getState().hoverBreak ? 1 : 0;
+  const hoverTarget = useFractureStore.getState().hoverBreak && gate > 0.5 ? 1 : 0;
   const hoverRate = hoverTarget > 0.5 ? 5.0 : 3.0;
   _hoverBreakVal += (hoverTarget - _hoverBreakVal) * (1 - Math.exp(-hoverRate * delta));
   if (Math.abs(_hoverBreakVal - hoverTarget) < 0.002) _hoverBreakVal = hoverTarget;
 
-  // Whichever source is higher wins
-  const tb = Math.max(scrollBreak, _hoverBreakVal, _introBreak);
+  // Whichever source is higher wins; the hover break also fades with the
+  // hero, so shards never outlive it
+  const tb = Math.max(_hoverBreakVal * gate, _introBreak);
 
   // Springs follow the channel targets. First frame (under the
   // preloader) and reduced motion: placed, not travelled

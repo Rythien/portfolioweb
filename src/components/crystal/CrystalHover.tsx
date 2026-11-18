@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { getCrystalPose } from "@/hooks/useCrystalPose";
 import { useFractureStore } from "@/store/useFractureStore";
+import { fragmentsAllowed } from "@/hooks/crystalState";
 
 const HOVER_RADIUS = 1.6;
 const HYSTERESIS_IN = 0.85;
@@ -51,6 +52,16 @@ export default function CrystalHover() {
 
   useFrame(() => {
     if (isTouchRef.current) return;
+
+    // Breaking is a hero interaction: past the hero nothing breaks, so the
+    // cursor does not offer BREAK there either
+    if (!fragmentsAllowed()) {
+      if (hovering.current) {
+        hovering.current = false;
+        useFractureStore.setState({ hoverBreak: false, cursorLabel: "" });
+      }
+      return;
+    }
 
     const pose = getCrystalPose();
     _worldPos.set(pose.x, pose.y, pose.z);

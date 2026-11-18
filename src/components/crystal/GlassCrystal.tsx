@@ -599,6 +599,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         }
         for (const l of shardLogoRefs.current) if (l) l.visible = false;
         for (const r of shardRimRefs.current) if (r) r.visible = false;
+        // Test hook (scripts/verify/chips.mjs): shards visible this frame.
+        // Only the live variant writes it (WAKE and DREAM both mount)
+        if (active) (window as unknown as { __crystalShards: number }).__crystalShards = 0;
         return;
       }
       const breakVal = useFractureStore.getState().breakVal;
@@ -799,6 +802,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       const explosionFade = 1 - smoothstep(0.3, 0.8, breakVal);
       const driftFade = smoothstep(0.1, 0.5, breakVal);
       const spreadDist = breakVal * 2.0 * explosionFade;
+      // Test hook (scripts/verify/chips.mjs): shards visible this frame
+      (window as unknown as { __crystalShards: number }).__crystalShards =
+        showShards && !assembled && smoothstep(0.05, 0.15, breakVal) * fade > 0.01 ? shards.length : 0;
 
       for (let i = 0; i < shards.length; i++) {
         const mesh = shardMeshRefs.current[i];
