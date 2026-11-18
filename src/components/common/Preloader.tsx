@@ -23,7 +23,6 @@ const REVEAL_SELECTOR = "#main-content, [data-reveal]";
  */
 export default function Preloader({ onComplete }: PreloaderProps) {
   const [isDone, setIsDone] = useState(false);
-  const [transparent, setTransparent] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // counterTo writes the digits straight into this span (no state per frame)
   const countRef = useRef<HTMLSpanElement | null>(null);
@@ -75,7 +74,9 @@ export default function Preloader({ onComplete }: PreloaderProps) {
     // Hide the page content first, then let the canvas show through the
     // overlay so the gather is visible while the counter runs.
     gsap.set(REVEAL_SELECTOR, { autoAlpha: 0 });
-    setTransparent(true);
+    // The overlay starts opaque (server HTML); drop its fill directly
+    // rather than through state, which would re-render from the effect
+    gsap.set(containerRef.current, { backgroundColor: "transparent" });
 
     // Shards start fully broken and gather over the grand duration.
     setIntroBreak(1);
@@ -150,9 +151,7 @@ export default function Preloader({ onComplete }: PreloaderProps) {
   return (
     <div
       ref={containerRef}
-      className={`fixed inset-0 z-[1000] text-ink flex flex-col justify-end p-6 sm:p-10 lg:p-16 select-none overflow-hidden pointer-events-none ${
-        transparent ? "" : "bg-surface"
-      }`}
+      className={`fixed inset-0 z-[1000] text-ink flex flex-col justify-end p-6 sm:p-10 lg:p-16 select-none overflow-hidden pointer-events-none bg-surface`}
       aria-live="polite"
       aria-label="Loading portfolio"
     >
