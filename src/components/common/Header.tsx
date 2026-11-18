@@ -74,7 +74,8 @@ export default function Header() {
         </div>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-6 lg:gap-10 pointer-events-auto font-mono text-[0.875rem] font-medium uppercase tracking-widest text-ink/80">
+        {/* One magnet group: only the control nearest the pointer leans */}
+        <nav data-magnet-group className="hidden md:flex items-center gap-6 lg:gap-10 pointer-events-auto font-mono text-[0.875rem] font-medium uppercase tracking-widest text-ink/80">
           <a href="#works" data-magnetic className="py-2">
             <Swap>Work</Swap>
           </a>

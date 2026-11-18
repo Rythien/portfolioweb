@@ -32,7 +32,8 @@ const LEAVE = { duration: HOVER.leave, ease: EASE.entrance } as const;
  *
  * It also drives the magnetic field: every [data-magnetic] element within
  * MAGNET.radius px of the pointer leans toward it (max MAGNET.max px) and
- * springs home when the pointer moves away.
+ * springs home when the pointer moves away. Inside a [data-magnet-group]
+ * (the header nav) the fields overlap, so only the nearest member leans.
  */
 export default function CustomCursor() {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -111,9 +112,9 @@ export default function CustomCursor() {
 
       const pulled = new Set<HTMLElement>();
       const field = (mx: number, my: number) => {
-        const els = document.querySelectorAll<HTMLElement>("[data-magnetic]");
-        for (const el of els) {
-          // Measure the box at rest (minus the pull already applied)
+        // Measure every magnet at rest (minus the pull already applied)
+        const hits: { el: HTMLElement; edge: number; dx: number; dy: number; group: Element | null }[] = [];
+        for (const el of document.querySelectorAll<HTMLElement>("[data-magnetic]")) {
           const r = el.getBoundingClientRect();
           const ox = Number(gsap.getProperty(el, "x")) || 0;
           const oy = Number(gsap.getProperty(el, "y")) || 0;
@@ -123,13 +124,29 @@ export default function CustomCursor() {
           const bottom = top + r.height;
           const ex = Math.max(left - mx, 0, mx - right);
           const ey = Math.max(top - my, 0, my - bottom);
-          const edge = Math.hypot(ex, ey);
-          if (edge < MAGNET.radius) {
-            magnetTo(el, mx - (left + right) / 2, my - (top + bottom) / 2, edge);
-            pulled.add(el);
-          } else if (pulled.has(el)) {
-            magnetRelease(el);
-            pulled.delete(el);
+          hits.push({
+            el,
+            edge: Math.hypot(ex, ey),
+            dx: mx - (left + right) / 2,
+            dy: my - (top + bottom) / 2,
+            group: el.closest("[data-magnet-group]"),
+          });
+        }
+        // Inside a group (the nav), fields overlap: only the nearest leans
+        const nearest = new Map<Element, (typeof hits)[number]>();
+        for (const h of hits) {
+          if (!h.group) continue;
+          const best = nearest.get(h.group);
+          if (!best || h.edge < best.edge) nearest.set(h.group, h);
+        }
+        for (const h of hits) {
+          const active = h.edge < MAGNET.radius && (!h.group || nearest.get(h.group) === h);
+          if (active) {
+            magnetTo(h.el, h.dx, h.dy, h.edge);
+            pulled.add(h.el);
+          } else if (pulled.has(h.el)) {
+            magnetRelease(h.el);
+            pulled.delete(h.el);
           }
         }
       };
