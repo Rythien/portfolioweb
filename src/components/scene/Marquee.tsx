@@ -8,6 +8,7 @@ import { damp } from "maath/easing";
 import { SITE_DATA } from "@/content/site";
 import { getSectionProgress, useScrollStore } from "@/store/useScrollStore";
 import { patchVeilMaterial, updateVeil } from "./marqueeVeil";
+import { introReveal } from "@/store/useIntroStore";
 
 const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("crystalfreeze");
 
@@ -21,6 +22,10 @@ const TEXT_Z = -3;
 const CAM_TO_TEXT = FBO_CAM_Z - TEXT_Z;
 // Phones: headline sits just below the crystal (~66px under centre at 844 tall)
 const MOBILE_TEXT_Y = -0.66;
+/** Half the headline's line box, in font sizes (anchorY middle). */
+const LINE_HALF = 0.6;
+/** The entrance clip window, reused every frame: [x0, y0, x1, y1]. */
+const clipBox = [-1e5, 0, 1e5, 0];
 
 interface MarqueeProps {
   color: string;
@@ -95,8 +100,24 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
       return;
     }
 
-    const fade = 1 - heroScroll / 0.5;
-    groupRef.current.visible = true;
+    // Hero entrance (moment 1): reduced motion fades the line in; otherwise
+    // it rises from behind a fixed mask line at the bottom of its line box
+    const reveal = introReveal.marquee;
+    const fade = (1 - heroScroll / 0.5) * (reducedMotion ? reveal : 1);
+    // Hidden tiles skip drawing, but the offset below still advances, so
+    // the line is already moving when it appears
+    groupRef.current.visible = reducedMotion || reveal > 0;
+
+    // troika clipRect is in each tile's own space: drop the tile by `rise`
+    // and raise its clip window by the same amount, so the window stays put
+    const half = fontSize * LINE_HALF;
+    const rise = reducedMotion ? 0 : 2 * half * (1 - reveal);
+    let clip: number[] | null = null;
+    if (reveal < 1 && !reducedMotion) {
+      clipBox[1] = -half + rise;
+      clipBox[3] = half + rise;
+      clip = clipBox;
+    }
 
     // troika Text ignores material.opacity — must use fillOpacity
     const children = groupRef.current.children;
@@ -104,9 +125,12 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
       const tile = children[i] as THREE.Mesh & {
         fillOpacity?: number;
         outlineOpacity?: number;
+        clipRect?: number[] | null;
       };
       tile.fillOpacity = fade;
       if (tile.outlineOpacity !== undefined) tile.outlineOpacity = fade;
+      tile.position.y = -rise;
+      tile.clipRect = clip;
     }
 
     if (reducedMotion) return;
@@ -140,7 +164,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
 
   if (reducedMotion) {
     return (
-      <group position={[0, textY, TEXT_Z]}>
+      <group ref={groupRef} position={[0, textY, TEXT_Z]}>
         <Text
           font={FONT_URL}
           fontSize={fontSize}

@@ -5,7 +5,6 @@ import { Canvas } from "@react-three/fiber";
 import type { RootState } from "@react-three/fiber";
 import * as THREE from "three";
 import Compositor from "./Compositor";
-import CrystalCursor from "@/components/crystal/CrystalCursor";
 import { SITE_DATA } from "@/content/site";
 import { TimerClock, muteClockDeprecationUntilSwapped } from "./timerClock";
 import { exposePrograms } from "./programHook";
@@ -129,7 +128,6 @@ export default function SceneRoot() {
       className="fixed inset-0 z-0 pointer-events-none"
       style={archiveOpen ? { visibility: "hidden" } : undefined}
     >
-      <CrystalCursor />
       <Canvas
         dpr={[1, 1.5]}
         orthographic

@@ -80,6 +80,8 @@ export default function WorkChip({ project }: { project: Project }) {
         inView ? "" : "chip-paused"
       }`}
     >
+      {/* Turned by scroll velocity (Works.tsx); the orbit runs inside it */}
+      <div className="work-chip-spin absolute inset-0">
       <div className="work-chip-orbit absolute inset-0">
         {icons.map((icon, i) => (
           <span
@@ -100,6 +102,7 @@ export default function WorkChip({ project }: { project: Project }) {
             </svg>
           </span>
         ))}
+      </div>
       </div>
     </div>
   );

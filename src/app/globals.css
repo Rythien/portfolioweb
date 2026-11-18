@@ -12,6 +12,11 @@
   --color-ink-faint: var(--t-ink-faint);
   --color-rule: var(--t-rule);
   --color-rule-hover: var(--t-rule-hover);
+
+  /* Bare transition utilities (transition-colors etc.) rest on the hover
+     LEAVE timing; the hover rule below swaps in the ENTER timing */
+  --default-transition-duration: var(--dur-hover-out);
+  --default-transition-timing-function: var(--ease-entrance);
 }
 
 /* ── Theme tokens ─────────────────────────────────────────────── */
@@ -26,6 +31,25 @@
      scrolled clear of the pill */
   --pill-h: 44px;
   --pill-clear: calc(var(--pill-h) + 32px);
+
+  /* Motion tokens. Source of truth: src/lib/motion.ts; src/lib/motion.test.ts
+     fails if these drift or if a raw duration or ease appears anywhere. */
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-state: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-scroll: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-linear: linear;
+  --dur-quick: 400ms;
+  --dur-standard: 800ms;
+  --dur-grand: 1200ms;
+  --dur-mode-color: 600ms;
+  --dur-pointer: 80ms;
+  --dur-press: 120ms;
+  --dur-response: 240ms;
+  --dur-hover-in: 400ms;
+  --dur-hover-out: 240ms;
+  --dur-reduced: 10ms;
+  --loop-chip: 26s;
+  --loop-sound: 900ms;
 }
 
 html[data-mode="dream"] {
@@ -42,14 +66,8 @@ html[data-mode="wake"] {
   --t-rule: rgba(26, 26, 30, 0.1);
   --t-rule-hover: rgba(26, 26, 30, 0.25);
   --t-grid: rgba(26, 26, 30, 0.06);
-
-  /* Motion language (source of truth: src/motion/language.ts; motion.test
-     fails if these drift). expo.out for entrances, power2.inOut (cubic)
-     for the mode change. */
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out-cubic: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-entrance: 800ms;
-  --dur-mode-color: 600ms;
+  /* Keyboard focus: ink on paper (14:1) */
+  --t-focus: var(--t-ink);
 }
 
 html[data-mode="dream"] {
@@ -61,6 +79,8 @@ html[data-mode="dream"] {
   --t-rule: rgba(242, 239, 233, 0.08);
   --t-rule-hover: rgba(242, 239, 233, 0.2);
   --t-grid: rgba(242, 239, 233, 0.06);
+  /* Keyboard focus: the DREAM accent (7.8:1 on night) */
+  --t-focus: #a894ff;
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -85,8 +105,8 @@ html[data-mode="dream"] {
     color: var(--t-ink);
     /* Mode change rides the power2.inOut family, like the flood */
     transition:
-      background-color var(--dur-mode-color) var(--ease-in-out-cubic),
-      color var(--dur-mode-color) var(--ease-in-out-cubic);
+      background-color var(--dur-mode-color) var(--ease-state),
+      color var(--dur-mode-color) var(--ease-state);
   }
 
   body {
@@ -234,12 +254,103 @@ html.lenis, html.lenis body {
 
 /* ── Focus states ─────────────────────────────────────────────── */
 
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 1.5px solid var(--t-ink);
+/* Keyboard only (focus-visible), never removed: every focusable thing gets
+   the same 2px ring in the mode's focus colour, 4px clear of its edge.
+   Rounded controls (the pill) carry the ring around their own radius. */
+:where(a, button, input, textarea, select, summary, [tabindex], [role="button"]):focus-visible {
+  outline: 2px solid var(--t-focus);
   outline-offset: 4px;
+}
+
+:where(a, button, input, textarea, select, summary, [tabindex], [role="button"]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Hover timing ─────────────────────────────────────────────── */
+
+/* Every hover has a leave at 60% of its enter (src/lib/motion.ts HOVER).
+   Tailwind transitions rest on --dur-hover-out; while hovered (or focused
+   from the keyboard, or under a hovered .group) they take --dur-hover-in.
+   --tw-duration does not inherit, so this touches only the matched box. */
+@media (hover: hover) {
+  :where(:hover, :focus-visible, .group:hover *) {
+    --tw-duration: var(--dur-hover-in);
+  }
+}
+
+/* ── Swap label ───────────────────────────────────────────────── */
+
+/* Buttons and links: two copies of the label stacked in one cell; on
+   hover or keyboard focus the first rises out through the clip and the
+   second rises in behind it. No colour change. The label's underline (if
+   the link has one) rides with each copy, inside the clip. */
+.swap {
+  /* inline-grid + overflow: clip (not a scroll container) keeps the text
+     baseline, so a swapped label sits on the line like plain text */
+  display: inline-grid;
+  overflow: clip;
+  margin-bottom: -0.25em;
+}
+
+.swap,
+.swap > span {
+  text-decoration-line: inherit;
+  text-decoration-color: inherit;
+  text-decoration-thickness: inherit;
+}
+
+.swap > span {
+  grid-area: 1 / 1;
+  padding-bottom: 0.25em;
+  transition: transform var(--dur-hover-out) var(--ease-entrance);
+}
+
+.swap > span + span {
+  transform: translateY(100%);
+}
+
+@media (hover: hover) {
+  :is(a, button):hover .swap > span {
+    transition-duration: var(--dur-hover-in);
+  }
+  :is(a, button):hover .swap > span:first-child {
+    transform: translateY(-100%);
+  }
+  :is(a, button):hover .swap > span + span {
+    transform: translateY(0);
+  }
+}
+
+:is(a, button):focus-visible .swap > span {
+  transition-duration: var(--dur-hover-in);
+}
+:is(a, button):focus-visible .swap > span:first-child {
+  transform: translateY(-100%);
+}
+:is(a, button):focus-visible .swap > span + span {
+  transform: translateY(0);
+}
+
+/* ── Copy button ──────────────────────────────────────────────── */
+
+/* The idle label and "Copied" share one clipped cell, so the button never
+   changes size; GSAP moves them (Contact.tsx) */
+.copy-morph {
+  display: inline-grid;
+  overflow: clip;
+  vertical-align: bottom;
+}
+
+.copy-morph > * {
+  grid-area: 1 / 1;
+}
+
+.copy-check path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
 }
 
 /* ── View transitions ─────────────────────────────────────────── */
@@ -267,9 +378,9 @@ textarea:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
-    animation-duration: 0.01s !important;
+    animation-duration: var(--dur-reduced) !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01s !important;
+    transition-duration: var(--dur-reduced) !important;
     scroll-behavior: auto !important;
   }
 }
@@ -306,6 +417,24 @@ textarea:focus-visible {
 
 .discipline-title {
   font-size: min(clamp(2rem, 1.5rem + 2.5vw, 3.5rem), 11cqi);
+}
+
+/* Moment 3: the row under the pointer holds, the others drop to 40%.
+   Applied to each row's children, never the row itself: GSAP owns the
+   row's own inline styles during its entrance. */
+.discipline-row > * {
+  transition:
+    opacity var(--dur-hover-out) var(--ease-entrance),
+    color var(--dur-hover-out) var(--ease-entrance);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .discipline-list:has(> .discipline-row:hover) > .discipline-row > * {
+    transition-duration: var(--dur-hover-in);
+  }
+  .discipline-list:has(> .discipline-row:hover) > .discipline-row:not(:hover) > * {
+    opacity: 0.4;
+  }
 }
 
 /* ── Section rhythm ───────────────────────────────────────────── */
@@ -360,8 +489,8 @@ textarea:focus-visible {
   mask-image: linear-gradient(to bottom, #000 var(--scrim-solid), transparent 100%);
   opacity: 0;
   transition:
-    opacity 300ms var(--ease-out-expo),
-    background-color var(--dur-mode-color) var(--ease-in-out-cubic);
+    opacity var(--dur-quick) var(--ease-entrance),
+    background-color var(--dur-mode-color) var(--ease-state);
 }
 
 @media (min-width: 64rem) {
@@ -377,7 +506,7 @@ textarea:focus-visible {
 
 /* Tactile press feedback for button-like chrome */
 .pressable {
-  transition: transform 120ms var(--ease-out-expo);
+  transition: transform var(--dur-press) var(--ease-entrance);
 }
 
 /* WAKE / DREAM pill segments: the press, plus their colours turning over
@@ -385,9 +514,9 @@ textarea:focus-visible {
    lose to the unlayered .pressable, so the segments used to snap) */
 .pressable.mode-pill-seg {
   transition:
-    transform 120ms var(--ease-out-expo),
-    color var(--dur-mode-color) var(--ease-in-out-cubic),
-    background-color var(--dur-mode-color) var(--ease-in-out-cubic);
+    transform var(--dur-press) var(--ease-entrance),
+    color var(--dur-mode-color) var(--ease-state),
+    background-color var(--dur-mode-color) var(--ease-state);
 }
 
 .pressable:active {
@@ -413,6 +542,13 @@ textarea:focus-visible {
 
 .work-panel-wrap {
   perspective: 1000px;
+}
+
+/* Moment 4: one slide of the horizontal pan. As wide as the viewport
+   allows while the panel (8 of 12 columns, 16:10) still fits the pinned
+   height under the header with room for its caption */
+.work-pin {
+  --slide-w: min(80vw, 76rem, calc((100dvh - 14rem) * 2.5));
 }
 
 /* Project panel frame: a 1px rule around a mat (dream-glass gives it the
@@ -450,9 +586,9 @@ textarea:focus-visible {
     inset 0 1px 0 rgba(255, 255, 255, 0.3),
     0 8px 32px rgba(26, 26, 30, 0.08);
   transition:
-    transform 0.3s var(--ease-out-expo),
-    backdrop-filter 0.3s var(--ease-out-expo),
-    -webkit-backdrop-filter 0.3s var(--ease-out-expo);
+    transform var(--dur-hover-out) var(--ease-entrance),
+    backdrop-filter var(--dur-hover-out) var(--ease-entrance),
+    -webkit-backdrop-filter var(--dur-hover-out) var(--ease-entrance);
   z-index: 2;
 }
 
@@ -461,10 +597,11 @@ textarea:focus-visible {
   -webkit-backdrop-filter: blur(18px) saturate(180%);
   backdrop-filter: blur(18px) saturate(180%);
   transform: scale(1.06);
+  transition-duration: var(--dur-hover-in);
 }
 
 .work-chip-orbit {
-  animation: chip-orbit 26s linear infinite;
+  animation: chip-orbit var(--loop-chip) var(--ease-linear) infinite;
 }
 
 .work-chip-item {
@@ -473,7 +610,7 @@ textarea:focus-visible {
 
 .work-chip-logo {
   display: block;
-  animation: chip-counter 26s linear infinite;
+  animation: chip-counter var(--loop-chip) var(--ease-linear) infinite;
   transform: rotate(calc(-1 * var(--angle)));
 }
 
@@ -519,7 +656,7 @@ textarea:focus-visible {
 /* Reduced motion flips mode without a flood: crossfade instead of a snap */
 @media (prefers-reduced-motion: reduce) {
   .project-art-dream {
-    transition: opacity var(--dur-mode-color) var(--ease-in-out-cubic);
+    transition: opacity var(--dur-mode-color) var(--ease-state);
   }
 }
 
@@ -547,10 +684,10 @@ textarea:focus-visible {
 
 /* Playing: the bars breathe */
 .sound-wave.is-on span {
-  animation: sound-bar 0.9s ease-in-out infinite;
+  animation: sound-bar var(--loop-sound) var(--ease-state) infinite;
 }
-.sound-wave.is-on span:nth-child(2) { animation-delay: 0.15s; }
-.sound-wave.is-on span:nth-child(3) { animation-delay: 0.3s; }
+.sound-wave.is-on span:nth-child(2) { animation-delay: calc(var(--loop-sound) / 6); }
+.sound-wave.is-on span:nth-child(3) { animation-delay: calc(var(--loop-sound) / 3); }
 
 @keyframes sound-bar {
   0%, 100% { transform: scaleY(0.3); }
@@ -564,23 +701,7 @@ textarea:focus-visible {
   }
 }
 
-/* ── Footer ticker ────────────────────────────────────────────── */
-
-.ticker-track {
-  animation: ticker-scroll 42s linear infinite;
-}
-
-@keyframes ticker-scroll {
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ticker-track {
-    animation: none;
-  }
-}
+/* Footer ticker: driven by GSAP (Footer.tsx), its speed tied to scroll */
 
 /* ── Section rail ─────────────────────────────────────────────── */
 
@@ -596,7 +717,7 @@ textarea:focus-visible {
 }
 
 .rail-label-in {
-  animation: rail-label-in 0.4s var(--ease-out-expo) both;
+  animation: rail-label-in var(--dur-quick) var(--ease-entrance) both;
 }
 
 /* Horizontal strip variant: same entrance, no vertical-text flip */
@@ -612,7 +733,7 @@ textarea:focus-visible {
 }
 
 .strip-label-in {
-  animation: strip-label-in 0.4s var(--ease-out-expo) both;
+  animation: strip-label-in var(--dur-quick) var(--ease-entrance) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -677,7 +798,7 @@ html.archive-open body.has-custom-cursor .archive-root canvas {
 /* THE ARCHIVE: the HUD steps aside for the ending, and the chrome turns
    dark ink on the lifted, pale violet fog */
 .archive-root .archive-hud-item {
-  transition: opacity 600ms ease-out;
+  transition: opacity var(--dur-standard) var(--ease-entrance);
 }
 .archive-root[data-ending="1"] .archive-hud-item {
   opacity: 0 !important;
@@ -686,5 +807,8 @@ html.archive-open body.has-custom-cursor .archive-root canvas {
   color: #1d0f45;
   border-color: rgb(29 15 69 / 0.35);
   background-color: rgb(255 255 255 / 0.25);
-  transition: color 1.2s ease-out, border-color 1.2s ease-out, background-color 1.2s ease-out;
+  transition:
+    color var(--dur-grand) var(--ease-entrance),
+    border-color var(--dur-grand) var(--ease-entrance),
+    background-color var(--dur-grand) var(--ease-entrance);
 }

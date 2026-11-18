@@ -2,8 +2,12 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { gsap } from "gsap";
-import { REVEAL } from "@/motion/language";
+import { DURATION, EASE, STAGGER, counterTo } from "@/lib/motion";
 import { setIntroBreak, crystalEvents } from "@/hooks/crystalState";
+import { markIntroDone } from "@/store/useIntroStore";
+
+/** Counter digits: 000 -> 100. */
+const PAD = 3;
 
 interface PreloaderProps {
   onComplete?: () => void;
@@ -18,10 +22,11 @@ const REVEAL_SELECTOR = "#main-content, [data-reveal]";
  * sections reveal once assembled. Reduced motion: a plain fade.
  */
 export default function Preloader({ onComplete }: PreloaderProps) {
-  const [count, setCount] = useState(0);
   const [isDone, setIsDone] = useState(false);
   const [transparent, setTransparent] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // counterTo writes the digits straight into this span (no state per frame)
+  const countRef = useRef<HTMLSpanElement | null>(null);
 
   useEffect(() => {
     try {
@@ -30,6 +35,7 @@ export default function Preloader({ onComplete }: PreloaderProps) {
       if (alreadySeen || urlParams.get("nopreload") === "1") {
         queueMicrotask(() => {
           setIsDone(true);
+          markIntroDone();
           onComplete?.();
         });
         return;
@@ -43,6 +49,7 @@ export default function Preloader({ onComplete }: PreloaderProps) {
         sessionStorage.setItem("searon_preloader_seen", "1");
       } catch {}
       setIsDone(true);
+      markIntroDone();
       onComplete?.();
     };
 
@@ -52,12 +59,12 @@ export default function Preloader({ onComplete }: PreloaderProps) {
 
     if (prefersReducedMotion) {
       // Simple fade: opaque surface overlay out, no gather.
-      setCount(100);
+      if (countRef.current) countRef.current.textContent = "100";
       const tween = gsap.to(containerRef.current, {
         autoAlpha: 0,
-        duration: 0.6,
-        delay: 0.4,
-        ease: "power2.out",
+        duration: DURATION.quick,
+        delay: DURATION.quick,
+        ease: EASE.state,
         onComplete: finish,
       });
       return () => {
@@ -70,10 +77,9 @@ export default function Preloader({ onComplete }: PreloaderProps) {
     gsap.set(REVEAL_SELECTOR, { autoAlpha: 0 });
     setTransparent(true);
 
-    // Shards start fully broken and gather over ~1.6s.
+    // Shards start fully broken and gather over the grand duration.
     setIntroBreak(1);
     const gatherObj = { v: 1 };
-    const counterObj = { v: 0 };
 
     const tl = gsap.timeline({ paused: true, onComplete: finish });
 
@@ -90,35 +96,45 @@ export default function Preloader({ onComplete }: PreloaderProps) {
     };
     rafId = requestAnimationFrame(waitForScene);
 
-    tl.to(
-      counterObj,
-      {
-        v: 100,
-        duration: 1.5,
-        ease: "power1.inOut",
-        onUpdate: () => setCount(Math.round(counterObj.v)),
-      },
-      0
-    )
+    // Counter and gather run together as one state change (broken ->
+    // whole); then the counter slot leaves and the page arrives around the
+    // settled crystal, crossfading
+    tl.addLabel("gather", 0)
+      .add(
+        counterTo(countRef.current, 100, {
+          pad: PAD,
+          duration: DURATION.grand,
+          ease: EASE.state,
+        }),
+        "gather"
+      )
       .to(
         gatherObj,
         {
           v: 0,
-          duration: 1.6,
-          ease: "power3.inOut",
+          duration: DURATION.grand,
+          ease: EASE.state,
           onUpdate: () => setIntroBreak(gatherObj.v),
         },
-        0
+        "gather"
       )
-      // Counter slot out, then the page reveals around the settled crystal
-      .to(containerRef.current, { autoAlpha: 0, duration: 0.4, ease: "power2.out" }, 1.7)
+      .addLabel("settled")
+      // The hero entrance starts as the counter slot leaves
+      .call(markIntroDone, undefined, "settled")
+      .to(
+        containerRef.current,
+        { autoAlpha: 0, duration: DURATION.quick, ease: EASE.state },
+        "settled"
+      )
       .to(
         REVEAL_SELECTOR,
         {
           autoAlpha: 1,
-          ...REVEAL,
+          duration: DURATION.standard,
+          ease: EASE.entrance,
+          stagger: STAGGER.standard,
         },
-        1.8
+        "settled"
       );
 
     return () => {
@@ -141,8 +157,8 @@ export default function Preloader({ onComplete }: PreloaderProps) {
       aria-label="Loading portfolio"
     >
       <div className="flex items-end justify-between font-mono text-label text-ink/80">
-        <span className="tabular-nums text-2xl sm:text-3xl font-medium">
-          {count.toString().padStart(3, "0")}
+        <span ref={countRef} className="tabular-nums text-2xl sm:text-3xl font-medium">
+          {"0".repeat(PAD)}
         </span>
         <span>Assembling</span>
       </div>

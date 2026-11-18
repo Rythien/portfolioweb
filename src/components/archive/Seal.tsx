@@ -9,6 +9,7 @@ import { ENDING, FREE, type SealTarget, type V3 } from "./game";
 import type { Project } from "@/content/projects";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
 import { timed } from "@/components/scene/costs";
+import { OVERSHOOT, ease } from "@/lib/motion";
 import { playMote } from "./archiveAudio";
 
 /** Test hook (archivefreeze=1): seals hold still, for repeatable hit shots. */
@@ -255,12 +256,9 @@ function makeFragments(seed: number): Fragment[] {
 
 /** 0 at the moment of freeing, easing to 1 as the burst slows to a drift. */
 const flyK = (age: number) => (age <= 0 ? 0 : 1 - Math.exp(-age / FREE.flyTau));
-const easeInOut = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
-const easeOutBack = (x: number) => {
-  const c = 1.4;
-  const u = Math.min(1, Math.max(0, x)) - 1;
-  return 1 + (c + 1) * u * u * u + c * u * u;
-};
+const easeInOut = ease.smooth;
+/** Game feedback: a freed panel blooms with a small overshoot. */
+const easeOutBack = ease.backOut(OVERSHOOT.seal);
 
 /* ── The freed project's panel: cover, then title, roles and year ── */
 

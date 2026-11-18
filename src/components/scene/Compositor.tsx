@@ -11,13 +11,13 @@ import { useFractureStore } from "@/store/useFractureStore";
 import { getSectionProgress } from "@/store/useScrollStore";
 import { crystalEvents } from "@/hooks/useCrystalPose";
 import { guardScene, prewarmScene } from "./warm";
-import { DURATION, ease } from "@/motion/language";
+import { MODE, ease } from "@/lib/motion";
 
 /* ── Brush tuning ─────────────────────────────────────────────── */
 
 // Full wake <-> dream flood, on the motion language's mode-change curve
 // (power2.inOut: cubic; this was a quad, power1, under that name)
-const FLOOD_DURATION = DURATION.modeChange * 1000; // ms
+const FLOOD_DURATION = MODE.flood * 1000; // ms
 
 const BRUSH_RADIUS = 0.06;     // fraction of screen height, at rest
 const BRUSH_RADIUS_MAX = 0.09; // cap when cursor is moving fast
@@ -587,7 +587,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     if (f.active) {
       // Mode change easing: power2.inOut over FLOOD_DURATION
       const p = Math.min(1, (performance.now() - f.t0) / f.dur);
-      f.level = f.from + (f.target - f.from) * ease.modeChange(p);
+      f.level = f.from + (f.target - f.from) * ease.state(p);
 
       // Every DOM-side dream effect (grid, heading glow, glass, cursor)
       // rides the same flood value through the --dream custom property.
@@ -737,12 +737,15 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
     }
     blobFieldAtCursor.current = Math.min(field, 1);
 
-    // Update cursor label: blob beats default, crystal beats blob
+    // Update cursor label: blob beats default, crystal beats blob. ENTER
+    // only where a click would actually enter (the hero, same mapping as
+    // onClick); the cursor itself drops it over links and buttons
     const { cursorLabel, hoverBreak } = useFractureStore.getState();
+    const heroInView = Math.max(0, (getSectionProgress("top") - 0.5) / 0.5) < 0.5;
     if (!hoverBreak && cursorLabel !== "BREAK") {
-      if (field > 0.3) {
-        useFractureStore.setState({ cursorLabel: "ENTER THE DREAM" });
-      } else if (cursorLabel === "ENTER THE DREAM") {
+      if (field > 0.5 && heroInView) {
+        useFractureStore.setState({ cursorLabel: "ENTER" });
+      } else if (cursorLabel === "ENTER") {
         useFractureStore.setState({ cursorLabel: "" });
       }
     }

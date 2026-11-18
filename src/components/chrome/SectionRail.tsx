@@ -5,6 +5,7 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SITE_DATA } from "@/content/site";
 import { useMounted } from "@/utils/useMounted";
+import { EASE } from "@/lib/motion";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -82,9 +83,9 @@ export default function SectionRail() {
   useEffect(() => {
     const tweens = [
       fillRef.current &&
-        gsap.fromTo(fillRef.current, { scaleY: 0 }, { scaleY: 1, ease: "none" }),
+        gsap.fromTo(fillRef.current, { scaleY: 0 }, { scaleY: 1, ease: EASE.linear }),
       stripFillRef.current &&
-        gsap.fromTo(stripFillRef.current, { scaleX: 0 }, { scaleX: 1, ease: "none" }),
+        gsap.fromTo(stripFillRef.current, { scaleX: 0 }, { scaleX: 1, ease: EASE.linear }),
     ].filter(Boolean) as gsap.core.Tween[];
     const trigger = ScrollTrigger.create({
       trigger: document.documentElement,

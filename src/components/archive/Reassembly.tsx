@@ -9,6 +9,7 @@ import { UNUSED_FBO, applyCrystalShader, crystalGlassProps, thicknessFor } from 
 import { ENDING } from "./game";
 import { timed } from "@/components/scene/costs";
 import type { ArchiveState } from "./archiveState";
+import { OVERSHOOT, ease } from "@/lib/motion";
 
 /**
  * The ending: every shard has converged (Seal.tsx moves them) and the
@@ -23,11 +24,8 @@ const arrayBuffer = (loader: THREE.Loader) => (loader as THREE.FileLoader).setRe
 /** On-screen size at ENDING.distance: about a third of the view. */
 const SCALE = 1.5;
 
-const easeOutBack = (x: number) => {
-  const c = 1.5;
-  const u = Math.min(1, Math.max(0, x)) - 1;
-  return 1 + (c + 1) * u * u * u + c * u * u;
-};
+/** Game feedback: the reassembled crystal lands with a small overshoot. */
+const easeOutBack = ease.backOut(OVERSHOOT.reassemble);
 
 interface Props {
   game: React.RefObject<ArchiveState>;

@@ -1,44 +1,30 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { REVEAL } from "@/motion/language";
+import { useGSAP } from "@gsap/react";
+import { drawRules, revealLines } from "@/lib/motion";
 import { SITE_DATA } from "@/content/site";
 import Counter from "@/components/ui/Counter";
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 export default function Recognition() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const rowsRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (prefersReducedMotion || !sectionRef.current) return;
-
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".recognition-row",
-        { opacity: 0, y: 20 },
-        {
-          opacity: 1,
-          y: 0,
-          ...REVEAL,
-          scrollTrigger: {
-            trigger: rowsRef.current,
-            start: "top 80%",
-            toggleActions: "play none none reverse",
-          },
-        }
-      );
-    }, sectionRef);
-
-    return () => ctx.revert();
-  }, []);
+  // Moment 6: rows rise on a 0.04 stagger while each row's hairline draws
+  // left to right on the same beat. Reduced motion: rows fade, rules show.
+  useGSAP(
+    () => {
+      const root = sectionRef.current;
+      const trigger = rowsRef.current;
+      revealLines(gsap.utils.toArray(".recognition-row", root), { trigger });
+      drawRules(gsap.utils.toArray(".recognition-rule", root), { trigger });
+    },
+    { scope: sectionRef }
+  );
 
   return (
     <section
@@ -47,7 +33,7 @@ export default function Recognition() {
       aria-label="Awards and Recognition"
       className="scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
     >
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
+      <div data-skew className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div className="mb-12 sm:mb-16 flex flex-col sm:flex-row items-baseline gap-6 sm:gap-12">
           <div className="font-mono text-display sm:text-8xl font-medium text-ink tabular-nums tracking-tighter">
             <Counter value={parseInt(SITE_DATA.recognition.totalAccolades, 10)} padDigits={2} />
@@ -57,15 +43,13 @@ export default function Recognition() {
           </div>
         </div>
 
-        <div
-          ref={rowsRef}
-          className="divide-y divide-rule border-b border-rule"
-        >
+        {/* Each row carries its own bottom hairline (it draws in), in place
+            of the list's divide-y and border-b */}
+        <div ref={rowsRef}>
           {SITE_DATA.recognition.items.map((item, idx) => (
             <div
               key={idx}
-              data-cursor="Honors"
-              className="recognition-row group py-6 sm:py-8 grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-6 items-baseline transition-all duration-300 hover:bg-ink/[0.03] px-2 sm:px-4 -mx-2 sm:-mx-4"
+              className="recognition-row group relative py-6 sm:py-8 grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-6 items-baseline transition-colors hover:bg-ink/[0.03] px-2 sm:px-4 -mx-2 sm:-mx-4"
             >
               <div className="md:col-span-2 font-mono text-label uppercase tracking-wider text-ink-muted group-hover:text-ink transition-colors tabular-nums">
                 {item.year}
@@ -82,6 +66,10 @@ export default function Recognition() {
               <div className="md:col-span-2 md:text-right font-mono text-label uppercase tracking-widest text-ink-muted group-hover:text-ink transition-colors">
                 {item.result}
               </div>
+              <span
+                aria-hidden="true"
+                className="recognition-rule pointer-events-none absolute inset-x-0 bottom-0 h-px bg-rule"
+              />
             </div>
           ))}
         </div>

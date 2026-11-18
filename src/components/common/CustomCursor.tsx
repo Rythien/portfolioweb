@@ -1,171 +1,216 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { gsap } from "gsap";
+import {
+  DURATION,
+  EASE,
+  FEEDBACK,
+  HOVER,
+  MAGNET,
+  magnetRelease,
+  magnetTo,
+} from "@/lib/motion";
+import { useFractureStore } from "@/store/useFractureStore";
 
-function getInkColor(): string {
-  if (typeof window === "undefined") return "#1a1a1e";
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue("--t-ink")
-    .trim() || "#1a1a1e";
-}
+/** Scene labels the WebGL layer reports through the fracture store. */
+const SCENE_LABELS = new Set(["BREAK", "ENTER"]);
+/** The dot's size over a link or button, as a scale of its rest size. */
+const DOT_OVER_INTERACTIVE = 1.8;
 
+const ENTER = { duration: HOVER.enter, ease: EASE.entrance } as const;
+const LEAVE = { duration: HOVER.leave, ease: EASE.entrance } as const;
+
+/**
+ * The site cursor (fine pointers, motion allowed). Four states:
+ *   default   a dot that follows the pointer
+ *   BREAK     over the crystal      (scene: CrystalHover)
+ *   ENTER     over the brush blob   (scene: Compositor)
+ *   VIEW      over a project panel  (DOM: data-cursor="View")
+ * A labelled state opens a ring and the label rises in through a clip;
+ * leaving runs at 60% of the enter. Links and buttons grow the dot.
+ *
+ * It also drives the magnetic field: every [data-magnetic] element within
+ * MAGNET.radius px of the pointer leans toward it (max MAGNET.max px) and
+ * springs home when the pointer moves away.
+ */
 export default function CustomCursor() {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const dotRef = useRef<HTMLDivElement | null>(null);
-  const reticleRef = useRef<HTMLDivElement | null>(null);
+  const ringRef = useRef<HTMLDivElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
-  const [cursorLabel, setCursorLabel] = useState<string>("");
-  const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
-    const isFinePointer = window.matchMedia("(pointer: fine)").matches;
-    const isReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (!isFinePointer || isReducedMotion) return;
-
+    const fine = window.matchMedia("(pointer: fine)").matches;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const root = rootRef.current;
     const dot = dotRef.current;
-    const reticle = reticleRef.current;
-    if (!dot || !reticle) return;
+    const ring = ringRef.current;
+    const label = labelRef.current;
+    if (!fine || reduced || !root || !dot || !ring || !label) return;
 
-    document.body.classList.add("has-custom-cursor");
-    setIsActive(true);
+    const ctx = gsap.context(() => {
+      document.body.classList.add("has-custom-cursor");
+      gsap.set([dot, ring], { xPercent: -50, yPercent: -50, x: -100, y: -100 });
+      gsap.set(ring, { scale: 0, autoAlpha: 0 });
+      gsap.set(label, { yPercent: 100 });
+      gsap.set(root, { autoAlpha: 0 });
 
-    gsap.set([dot, reticle], { xPercent: -50, yPercent: -50, x: -100, y: -100 });
+      // The dot is glued to the pointer; the ring trails it a little
+      const dotFollow = { duration: FEEDBACK.pointer, ease: EASE.entrance };
+      const ringFollow = { duration: DURATION.quick, ease: EASE.entrance };
+      const xDot = gsap.quickTo(dot, "x", dotFollow);
+      const yDot = gsap.quickTo(dot, "y", dotFollow);
+      const xRing = gsap.quickTo(ring, "x", ringFollow);
+      const yRing = gsap.quickTo(ring, "y", ringFollow);
 
-    const xDot = gsap.quickTo(dot, "x", { duration: 0.08, ease: "power3.out" });
-    const yDot = gsap.quickTo(dot, "y", { duration: 0.08, ease: "power3.out" });
-    const xReticle = gsap.quickTo(reticle, "x", { duration: 0.38, ease: "power3.out" });
-    const yReticle = gsap.quickTo(reticle, "y", { duration: 0.38, ease: "power3.out" });
+      /* ── Labels ──────────────────────────────────────────────── */
 
-    let currentMagneticEl: HTMLElement | null = null;
+      let shown = "";
+      let domLabel = "";
+      let overInteractive = false;
+      let labelTl: gsap.core.Timeline | null = null;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const { clientX: mx, clientY: my } = e;
-      xDot(mx);
-      yDot(my);
-      xReticle(mx);
-      yReticle(my);
+      const show = (next: string) => {
+        if (next === shown) return;
+        const prev = shown;
+        shown = next;
+        labelTl?.kill();
+        labelTl = gsap.timeline();
+        if (prev) {
+          // The old label leaves upward through the clip
+          labelTl.to(label, { yPercent: -100, ...LEAVE });
+        }
+        if (next) {
+          labelTl
+            .call(() => {
+              label.textContent = next;
+            })
+            .set(label, { yPercent: 100 })
+            .to(ring, { scale: 1, autoAlpha: 1, ...ENTER }, prev ? ">" : 0)
+            .to(dot, { scale: 0, ...ENTER }, "<")
+            .to(label, { yPercent: 0, ...ENTER }, "<");
+        } else {
+          labelTl
+            .to(ring, { scale: 0, autoAlpha: 0, ...LEAVE }, 0)
+            .to(dot, { scale: overInteractive ? DOT_OVER_INTERACTIVE : 1, ...LEAVE }, 0);
+        }
+      };
 
-      if (currentMagneticEl) {
-        const rect = currentMagneticEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        const deltaX = (mx - centerX) * 0.32;
-        const deltaY = (my - centerY) * 0.32;
+      // DOM labels win; the scene's only show where no control is under the pointer
+      const resolve = () => {
+        const scene = useFractureStore.getState().cursorLabel;
+        show(domLabel || (!overInteractive && SCENE_LABELS.has(scene) ? scene : ""));
+      };
 
-        gsap.to(currentMagneticEl, {
-          x: deltaX,
-          y: deltaY,
-          duration: 0.25,
-          ease: "power2.out",
-          overwrite: "auto",
-        });
-      }
-    };
+      const unsubscribe = useFractureStore.subscribe((s, p) => {
+        if (s.cursorLabel !== p.cursorLabel) resolve();
+      });
 
-    const handleMouseOver = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
+      /* ── Magnetic field ──────────────────────────────────────── */
 
-      const ink = getInkColor();
-      const magneticTarget = target.closest("[data-magnetic]") as HTMLElement | null;
-      if (magneticTarget) currentMagneticEl = magneticTarget;
+      const pulled = new Set<HTMLElement>();
+      const field = (mx: number, my: number) => {
+        const els = document.querySelectorAll<HTMLElement>("[data-magnetic]");
+        for (const el of els) {
+          // Measure the box at rest (minus the pull already applied)
+          const r = el.getBoundingClientRect();
+          const ox = Number(gsap.getProperty(el, "x")) || 0;
+          const oy = Number(gsap.getProperty(el, "y")) || 0;
+          const left = r.left - ox;
+          const top = r.top - oy;
+          const right = left + r.width;
+          const bottom = top + r.height;
+          const ex = Math.max(left - mx, 0, mx - right);
+          const ey = Math.max(top - my, 0, my - bottom);
+          const edge = Math.hypot(ex, ey);
+          if (edge < MAGNET.radius) {
+            magnetTo(el, mx - (left + right) / 2, my - (top + bottom) / 2, edge);
+            pulled.add(el);
+          } else if (pulled.has(el)) {
+            magnetRelease(el);
+            pulled.delete(el);
+          }
+        }
+      };
+      const releaseAll = () => {
+        pulled.forEach((el) => magnetRelease(el));
+        pulled.clear();
+      };
 
-      const cursorTarget = target.closest("[data-cursor]") as HTMLElement | null;
-      const interactiveTarget = target.closest("a, button, [role='button']");
+      /* ── Pointer ─────────────────────────────────────────────── */
 
-      if (cursorTarget) {
-        const label = cursorTarget.getAttribute("data-cursor") || "";
-        setCursorLabel(label);
-        gsap.to(reticle, {
-          width: 76,
-          height: 76,
-          backgroundColor: `color-mix(in srgb, ${ink} 12%, transparent)`,
-          borderColor: `color-mix(in srgb, ${ink} 60%, transparent)`,
-          duration: 0.3,
-          ease: "power2.out",
-        });
-        gsap.to(dot, { opacity: 0, scale: 0, duration: 0.2 });
-      } else if (interactiveTarget) {
-        setCursorLabel("");
-        gsap.to(reticle, {
-          width: 48,
-          height: 48,
-          backgroundColor: `color-mix(in srgb, ${ink} 8%, transparent)`,
-          borderColor: `color-mix(in srgb, ${ink} 45%, transparent)`,
-          duration: 0.25,
-          ease: "power2.out",
-        });
-        gsap.to(dot, { scale: 1.4, duration: 0.2 });
-      } else {
-        setCursorLabel("");
-        gsap.to(reticle, {
-          width: 34,
-          height: 34,
-          backgroundColor: "transparent",
-          borderColor: `color-mix(in srgb, ${ink} 25%, transparent)`,
-          duration: 0.3,
-          ease: "power2.out",
-        });
-        gsap.to(dot, { opacity: 1, scale: 1, duration: 0.2 });
-      }
-    };
+      let visible = false;
+      const onMove = (e: MouseEvent) => {
+        if (!visible) {
+          visible = true;
+          gsap.set([dot, ring], { x: e.clientX, y: e.clientY });
+          gsap.to(root, { autoAlpha: 1, ...ENTER });
+        }
+        xDot(e.clientX);
+        yDot(e.clientY);
+        xRing(e.clientX);
+        yRing(e.clientY);
+        field(e.clientX, e.clientY);
+      };
 
-    const handleMouseOut = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
+      const onOver = (e: MouseEvent) => {
+        const t = e.target as HTMLElement | null;
+        if (!t) return;
+        domLabel = t.closest<HTMLElement>("[data-cursor]")?.dataset.cursor?.toUpperCase() ?? "";
+        const interactive = !!t.closest("a, button, [role='button'], label, summary");
+        if (interactive !== overInteractive) {
+          overInteractive = interactive;
+          if (!shown) {
+            gsap.to(dot, { scale: interactive ? DOT_OVER_INTERACTIVE : 1, ...(interactive ? ENTER : LEAVE) });
+          }
+        }
+        resolve();
+      };
 
-      const magneticTarget = target.closest("[data-magnetic]") as HTMLElement | null;
-      if (magneticTarget && magneticTarget === currentMagneticEl) {
-        gsap.to(magneticTarget, {
-          x: 0,
-          y: 0,
-          duration: 0.6,
-          ease: "elastic.out(1, 0.4)",
-          overwrite: "auto",
-        });
-        currentMagneticEl = null;
-      }
-    };
+      const onLeaveWindow = () => {
+        visible = false;
+        gsap.to(root, { autoAlpha: 0, ...LEAVE });
+        releaseAll();
+      };
 
-    window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    document.addEventListener("mouseover", handleMouseOver, { passive: true });
-    document.addEventListener("mouseout", handleMouseOut, { passive: true });
+      window.addEventListener("mousemove", onMove, { passive: true });
+      document.addEventListener("mouseover", onOver, { passive: true });
+      document.documentElement.addEventListener("mouseleave", onLeaveWindow);
 
-    return () => {
-      document.body.classList.remove("has-custom-cursor");
-      window.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseover", handleMouseOver);
-      document.removeEventListener("mouseout", handleMouseOut);
-      if (currentMagneticEl) gsap.killTweensOf(currentMagneticEl);
-    };
+      return () => {
+        unsubscribe();
+        window.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseover", onOver);
+        document.documentElement.removeEventListener("mouseleave", onLeaveWindow);
+        releaseAll();
+        document.body.classList.remove("has-custom-cursor");
+      };
+    }, rootRef);
+
+    return () => ctx.revert();
   }, []);
-
-  if (!isActive) return null;
 
   return (
     <div
+      ref={rootRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden"
+      className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden invisible"
     >
       <div
         ref={dotRef}
-        className="fixed top-0 left-0 w-1.5 h-1.5 rounded-full bg-ink -translate-x-1/2 -translate-y-1/2"
+        className="fixed top-0 left-0 size-1.5 rounded-full bg-ink"
       />
       <div
-        ref={reticleRef}
-        className="cursor-reticle fixed top-0 left-0 w-8 h-8 rounded-full border border-ink/25 flex items-center justify-center -translate-x-1/2 -translate-y-1/2 transition-colors duration-200 pointer-events-none"
+        ref={ringRef}
+        className="cursor-reticle fixed top-0 left-0 size-[76px] rounded-full border border-ink/60 bg-surface/70 backdrop-blur-sm grid place-items-center"
       >
-        {cursorLabel && (
+        <span className="block overflow-clip">
           <span
             ref={labelRef}
-            className="font-mono text-label uppercase tracking-widest text-ink select-none text-center px-1 font-semibold leading-tight"
-          >
-            {cursorLabel}
-          </span>
-        )}
+            className="block font-mono text-label font-semibold text-ink leading-none py-0.5"
+          />
+        </span>
       </div>
     </div>
   );

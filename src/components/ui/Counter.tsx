@@ -1,9 +1,15 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { DURATION, counterTo } from "@/lib/motion";
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface CounterProps {
   value: number;
+  /** A duration token; defaults to grand (a count is a theatrical build). */
   duration?: number;
   padDigits?: number;
   prefix?: string;
@@ -11,81 +17,39 @@ interface CounterProps {
   className?: string;
 }
 
+/**
+ * Counts up once when it scrolls into view. counterTo writes the digits
+ * straight into the span, so nothing re-renders per frame.
+ */
 export default function Counter({
   value,
-  duration = 1.6,
+  duration = DURATION.grand,
   padDigits = 2,
   prefix = "",
   suffix = "",
   className = "",
 }: CounterProps) {
-  const [displayValue, setDisplayValue] = useState<number>(0);
-  const containerRef = useRef<HTMLSpanElement | null>(null);
-  const hasAnimated = useRef(false);
+  const numberRef = useRef<HTMLSpanElement | null>(null);
 
   useEffect(() => {
-    const el = containerRef.current;
+    const el = numberRef.current;
     if (!el) return;
-
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (prefersReducedMotion) {
-      queueMicrotask(() => {
-        setDisplayValue(value);
-      });
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (entry.isIntersecting && !hasAnimated.current) {
-          hasAnimated.current = true;
-
-          const startTime = performance.now();
-          const totalDuration = duration * 1000;
-
-          const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / totalDuration, 1);
-            // Cubic out easing curve
-            const easedProgress = 1 - Math.pow(1 - progress, 3);
-            const current = Math.floor(easedProgress * value);
-
-            setDisplayValue(current);
-
-            if (progress < 1) {
-              requestAnimationFrame(animate);
-            } else {
-              setDisplayValue(value);
-            }
-          };
-
-          requestAnimationFrame(animate);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.2 }
-    );
-
-    observer.observe(el);
-
+    const tl = counterTo(el, value, {
+      pad: padDigits,
+      duration,
+      trigger: el,
+      scrollTrigger: { once: true, toggleActions: "play none none none" },
+    });
     return () => {
-      observer.disconnect();
+      tl.scrollTrigger?.kill();
+      tl.kill();
     };
-  }, [value, duration]);
-
-  const formattedNumber = displayValue.toString().padStart(padDigits, "0");
+  }, [value, duration, padDigits]);
 
   return (
-    <span
-      ref={containerRef}
-      className={`font-mono tabular-nums select-none ${className}`}
-    >
+    <span className={`font-mono tabular-nums select-none ${className}`}>
       {prefix}
-      {formattedNumber}
+      <span ref={numberRef}>{"0".repeat(padDigits)}</span>
       {suffix}
     </span>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Swap from "@/components/ui/Swap";
 import { Canvas, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import ArchiveScene from "./ArchiveScene";
@@ -218,7 +219,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         role="application"
         aria-roledescription="game"
         aria-label="The Archive. Free float through a violet void. Hold the pointer to drift toward it, or use W A S D to move, arrow keys to look, Q and E for down and up. Fly through light motes to charge; with three, tap or press Space or F to release a pulse at a seal's lit facet. Escape returns to the awake page."
-        className="archive-stage absolute inset-0 outline-none"
+        className="archive-stage absolute inset-0 focus-visible:outline-offset-[-6px]"
         style={{ touchAction: "none" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -256,7 +257,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
           three segments fill with charge */}
       <div aria-hidden="true" className="archive-hud pointer-events-none absolute inset-0 grid place-items-center">
         <svg viewBox="-100 -100 200 200" className="absolute size-[min(62vmin,32rem)] overflow-visible">
-          <g ref={(el) => { hudRef.current.compass = el; }} style={{ transition: "opacity 400ms ease-out" }}>
+          <g ref={(el) => { hudRef.current.compass = el; }} style={{ transition: "opacity var(--dur-quick) var(--ease-entrance)" }}>
             <path d={arc(88, -13, 13)} stroke="#f4efff" strokeWidth="1.4" strokeLinecap="round" fill="none" />
             <path d="M 92 0 L 86.5 -3.4 L 86.5 3.4 Z" fill="#f4efff" />
           </g>
@@ -274,7 +275,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
             fill="none"
             stroke="#ffe2a0"
             strokeWidth="0.8"
-            style={{ opacity: 0, transition: "opacity 250ms ease-out", filter: "drop-shadow(0 0 3px #ffd98a)" }}
+            style={{ opacity: 0, transition: "opacity var(--dur-response) var(--ease-entrance)", filter: "drop-shadow(0 0 3px #ffd98a)" }}
           />
         </svg>
       </div>
@@ -304,14 +305,14 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
               strokeLinejoin="round"
               fill="#fff3c4"
               fillOpacity="0"
-              style={{ transition: "fill-opacity 200ms ease-out" }}
+              style={{ transition: "fill-opacity var(--dur-response) var(--ease-entrance)" }}
             />
           ))}
         </svg>
         <span
           ref={(el) => { hudRef.current.readyLabel = el; }}
           className="text-[#ffe2a0]"
-          style={{ opacity: 0, transition: "opacity 250ms ease-out", textShadow: "0 0 8px rgba(255,217,138,0.6)" }}
+          style={{ opacity: 0, transition: "opacity var(--dur-response) var(--ease-entrance)", textShadow: "0 0 8px rgba(255,217,138,0.6)" }}
         >
           Pulse ready
         </span>
@@ -322,9 +323,9 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         type="button"
         onClick={wakeFromButton}
         aria-label="Wake: return to the portfolio"
-        className="archive-chrome pressable absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] min-h-11 rounded-full border border-white/25 bg-white/5 px-4 font-mono text-label uppercase tracking-[0.16em] text-white/85 backdrop-blur-md transition-colors hover:border-white/60 hover:text-white focus-visible:outline-offset-4"
+        className="archive-chrome pressable absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] min-h-11 rounded-full border border-white/25 bg-white/5 px-4 font-mono text-label uppercase tracking-[0.16em] text-white/85 backdrop-blur-md focus-visible:outline-offset-4"
       >
-        Wake
+        <Swap>Wake</Swap>
       </button>
 
       {/* The ending's one line, over the pale fog */}
@@ -333,7 +334,7 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
         data-on="0"
         data-text="The archive is yours."
         aria-live="polite"
-        className="archive-end pointer-events-none absolute inset-x-0 top-[72%] text-center font-[family-name:var(--font-display)] text-[clamp(2rem,4.2vw,3.75rem)] italic leading-tight text-[#1d0f45] opacity-0 transition-opacity duration-[1600ms] ease-out data-[on=1]:opacity-100"
+        className="archive-end pointer-events-none absolute inset-x-0 top-[72%] text-center font-[family-name:var(--font-display)] text-[clamp(2rem,4.2vw,3.75rem)] italic leading-tight text-[#1d0f45] opacity-0 transition-opacity duration-(--dur-grand) ease-(--ease-entrance) data-[on=1]:opacity-100"
       />
 
       {hint && (
@@ -377,9 +378,9 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
           aria-expanded={help}
           aria-controls="archive-controls"
           aria-label={help ? "Hide controls" : "Show controls"}
-          className="archive-chrome pressable grid size-11 place-items-center rounded-full border border-white/25 bg-white/5 font-mono text-label text-white/85 backdrop-blur-md transition-colors hover:border-white/60 hover:text-white focus-visible:outline-offset-4"
+          className="archive-chrome pressable grid size-11 place-items-center rounded-full border border-white/25 bg-white/5 font-mono text-label text-white/85 backdrop-blur-md focus-visible:outline-offset-4"
         >
-          ?
+          <Swap>?</Swap>
         </button>
       </div>
     </div>,

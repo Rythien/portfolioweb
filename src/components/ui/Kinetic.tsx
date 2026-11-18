@@ -3,8 +3,15 @@
 import React, { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { DURATION, revealLines } from "@/lib/motion";
 
 gsap.registerPlugin(ScrollTrigger);
+
+/**
+ * Characters share one quick spread instead of a per-character step, so a
+ * long heading still lands inside the 0.5 s stagger budget.
+ */
+const CHAR_STAGGER = { amount: DURATION.quick } as const;
 
 interface KineticHeadingProps {
   children: string;
@@ -13,7 +20,7 @@ interface KineticHeadingProps {
   minWeight?: number;
   maxWeight?: number;
   radius?: number;
-  stagger?: number;
+  stagger?: gsap.TweenVars["stagger"];
 }
 
 export function useProximityWeight(
@@ -121,7 +128,7 @@ export default function KineticHeading({
   minWeight = 300,
   maxWeight = 700,
   radius = 180,
-  stagger = 0.02,
+  stagger = CHAR_STAGGER,
 }: KineticHeadingProps) {
   const containerRef = useRef<HTMLElement | null>(null);
 
@@ -134,27 +141,11 @@ export default function KineticHeading({
     const chars = el.querySelectorAll<HTMLElement>("[data-kinetic-char]");
     if (!chars.length) return;
 
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (prefersReducedMotion) {
-      gsap.set(chars, { opacity: 1, y: 0 });
-      return;
-    }
-
     const ctx = gsap.context(() => {
-      // Hide only after GSAP is ready to animate
-      gsap.set(chars, { opacity: 0, y: 14 });
-
-      gsap.to(chars, {
-        opacity: 1,
-        y: 0,
-        duration: 0.65,
+      revealLines(chars, {
+        trigger: el,
         stagger,
-        ease: "power2.out",
         scrollTrigger: {
-          trigger: el,
           start: "top 90%",
           toggleActions: "play none none none",
           once: true,
@@ -184,7 +175,7 @@ export default function KineticHeading({
               <span key={cIdx} className="inline-block overflow-visible">
                 <span
                   data-kinetic-char
-                  className="inline-block transition-[font-variation-settings] duration-75 will-change-transform will-change-opacity"
+                  className="inline-block transition-[font-variation-settings] duration-(--dur-pointer) will-change-transform will-change-opacity"
                   style={{ fontVariationSettings: `'wght' ${minWeight}` }}
                 >
                   {char}

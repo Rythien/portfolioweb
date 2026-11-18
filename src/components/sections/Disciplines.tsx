@@ -1,43 +1,40 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { REVEAL } from "@/motion/language";
+import { useGSAP } from "@gsap/react";
+import { STAGGER, counterTo, wipeFromLeft } from "@/lib/motion";
 import { SITE_DATA } from "@/content/site";
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, useGSAP);
 
+/** Row numbers are two digits: 01, 02 ... */
+const NUMBER_PAD = 2;
+
+/**
+ * Moment 3: the rows come out of the list's left rule one after another,
+ * each number counting up as its row enters. Hovering a row drops the
+ * others to 40% (CSS: .discipline-list in globals.css). Reduced motion:
+ * the rows fade in and the numbers simply show.
+ */
 export default function Disciplines() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const rowsRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (prefersReducedMotion || !sectionRef.current) return;
-
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".discipline-row",
-        { opacity: 0, y: 25 },
-        {
-          opacity: 1,
-          y: 0,
-          ...REVEAL,
-          scrollTrigger: {
-            trigger: rowsRef.current,
-            start: "top 80%",
-            toggleActions: "play none none reverse",
-          },
-        }
-      );
-    }, sectionRef);
-
-    return () => ctx.revert();
-  }, []);
+  useGSAP(
+    () => {
+      const rows = gsap.utils.toArray<HTMLElement>(".discipline-row", sectionRef.current);
+      const tl = wipeFromLeft(rows, { trigger: rowsRef.current });
+      rows.forEach((row, i) => {
+        const num = row.querySelector<HTMLElement>("[data-count]");
+        if (!num) return;
+        // Each count starts as its own row starts to appear
+        tl.add(counterTo(num, Number(num.dataset.count), { pad: NUMBER_PAD }), i * STAGGER.tight);
+      });
+    },
+    { scope: sectionRef }
+  );
 
   return (
     <section
@@ -46,10 +43,10 @@ export default function Disciplines() {
       aria-label="Disciplines and Expertise"
       className="scroll-mt-[108px] lg:scroll-mt-20 pt-32 section-end border-t border-rule"
     >
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
+      <div data-skew className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div
           ref={rowsRef}
-          className="divide-y divide-rule border-b border-rule"
+          className="discipline-list divide-y divide-rule border-b border-l border-rule"
         >
           {/* Heading and description sit in their own columns with a real
               gutter; cols 11-12 stay empty at lg for the parked crystal.
@@ -59,14 +56,13 @@ export default function Disciplines() {
             <div
               key={item.number}
               id={`discipline-${item.number}`}
-              data-cursor="Discipline"
-              className="discipline-row group scroll-mt-[108px] lg:scroll-mt-20 py-10 sm:py-12 grid grid-cols-1 md:grid-cols-12 gap-y-5 md:gap-x-8 lg:gap-x-12 items-start transition-colors duration-300 hover:bg-ink/[0.03] px-2 sm:px-4 -mx-2 sm:-mx-4"
+              className="discipline-row group scroll-mt-[108px] lg:scroll-mt-20 py-10 sm:py-12 pl-6 sm:pl-8 grid grid-cols-1 md:grid-cols-12 gap-y-5 md:gap-x-8 lg:gap-x-12 items-start"
             >
               <div data-crystal-avoid className="discipline-head md:col-span-7 lg:col-span-6 flex flex-col gap-4 min-w-0">
                 <div className="font-mono text-label uppercase tracking-widest text-ink-muted group-hover:text-ink transition-colors tabular-nums">
-                  ({item.number})
+                  (<span data-count={Number(item.number)}>{item.number}</span>)
                 </div>
-                <div className="discipline-title font-[family-name:var(--font-sans)] text-h2 uppercase text-ink/90 group-hover:text-ink transition-all duration-300 group-hover:translate-x-2">
+                <div className="discipline-title font-[family-name:var(--font-sans)] text-h2 uppercase text-ink/90 group-hover:text-ink transition-[color,transform] group-hover:translate-x-2">
                   {item.title}
                 </div>
               </div>

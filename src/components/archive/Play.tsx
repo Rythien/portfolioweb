@@ -18,6 +18,7 @@ import type { InputState } from "./input";
 import type { SealRegistry } from "./Seal";
 import { timed } from "@/components/scene/costs";
 import { SEAL, SEALS } from "./layout";
+import { CSS_EASE, FEEDBACK } from "@/lib/motion";
 
 /**
  * The play loop: motes drift (denser near seals) and are collected by
@@ -130,8 +131,9 @@ function maybeStartEnding(g: ArchiveState, cam: THREE.Camera) {
 /** Dry fire: the reticle and the empty diamonds shake once. */
 function nudgeReticle(h: HudEls) {
   const shake = [{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }];
-  h.reticle?.animate(shake, { duration: 220, easing: "ease-out" });
-  h.motes?.animate(shake, { duration: 220, easing: "ease-out" });
+  const timing = { duration: FEEDBACK.response * 1000, easing: CSS_EASE.entrance };
+  h.reticle?.animate(shake, timing);
+  h.motes?.animate(shake, timing);
 }
 
 /** True once per release request; clears it. */

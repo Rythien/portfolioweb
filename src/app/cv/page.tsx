@@ -6,6 +6,7 @@ import Header from "@/components/common/Header";
 import Footer from "@/components/sections/Footer";
 import LenisProvider from "@/components/common/LenisProvider";
 import { useContactPoints } from "@/content/contactPoints";
+import Swap from "@/components/ui/Swap";
 
 export default function CVPage() {
   const cp = useContactPoints();
@@ -18,18 +19,15 @@ export default function CVPage() {
           <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/"
-              data-magnetic
-              className="hover:text-ink flex items-center gap-2"
+              className="flex items-center gap-2"
             >
-              <span>←</span>
-              <span>Back to home</span>
+              <Swap>← Back to home</Swap>
             </Link>
             <button
               onClick={() => window.print()}
-              data-magnetic
-              className="px-3 py-1.5 border border-rule hover:border-rule-hover text-ink rounded-sm transition-colors font-mono text-label"
+              className="px-3 py-1.5 border border-rule text-ink rounded-sm font-mono text-label"
             >
-              Print / Save PDF
+              <Swap>Print / Save PDF</Swap>
             </button>
           </div>
 
@@ -47,26 +45,26 @@ export default function CVPage() {
               <span>Kathmandu, Nepal (UTC+5:45)</span>
               <span>·</span>
               {/* Assembled in the browser so scrapers don't find it */}
-              <a href={cp?.mailHref ?? "/#contact"} className="underline hover:text-ink">
-                {cp?.email ?? "Email"}
+              <a href={cp?.mailHref ?? "/#contact"} className="underline">
+                <Swap>{cp?.email ?? "Email"}</Swap>
               </a>
               <span>·</span>
               <a
                 href="https://github.com/rythien"
                 target="_blank"
                 rel="noreferrer"
-                className="underline hover:text-ink"
+                className="underline"
               >
-                github.com/rythien
+                <Swap>github.com/rythien</Swap>
               </a>
               <span>·</span>
               <a
                 href="https://linkedin.com/in/searon-maharjan"
                 target="_blank"
                 rel="noreferrer"
-                className="underline hover:text-ink"
+                className="underline"
               >
-                linkedin.com/in/searon-maharjan
+                <Swap>linkedin.com/in/searon-maharjan</Swap>
               </a>
             </div>
           </header>

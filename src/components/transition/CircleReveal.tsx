@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useThemeStore, type Mode } from "@/store/useThemeStore";
+import { MODE, ease } from "@/lib/motion";
 
 const SURFACE: Record<Mode, string> = {
   wake: "#E9E7E2",
   dream: "#07062B",
 };
 
-const DURATION = 1400;
-const MIDPOINT = 0.45;
+/** The no-WebGL flood runs on the same clock and curve as the real one. */
+const DURATION_MS = MODE.flood * 1000;
+const MIDPOINT = 0.5;
 
 function subscribeWebGL(cb: () => void) {
   window.addEventListener("webglcontextlost", cb);
@@ -43,7 +45,7 @@ export default function CircleReveal() {
   useEffect(() => {
     animateRef.current = (now: number) => {
       const elapsed = now - startTimeRef.current;
-      const t = Math.min(elapsed / DURATION, 1);
+      const t = Math.min(elapsed / DURATION_MS, 1);
 
       if (!themeSwitchedRef.current && t >= MIDPOINT) {
         themeSwitchedRef.current = true;
@@ -55,7 +57,7 @@ export default function CircleReveal() {
           Math.max(clickOrigin.x, window.innerWidth - clickOrigin.x),
           Math.max(clickOrigin.y, window.innerHeight - clickOrigin.y)
         );
-        const eased = 1 - Math.pow(1 - t, 3);
+        const eased = ease.state(t);
         const r = eased * maxR * 1.15;
 
         overlayRef.current.style.clipPath = `circle(${r}px at ${clickOrigin.x}px ${clickOrigin.y}px)`;

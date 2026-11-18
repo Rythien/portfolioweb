@@ -6,17 +6,19 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useScrollStore, setSectionProgress } from "@/store/useScrollStore";
 import { useArchiveStore } from "@/store/useArchiveStore";
+import { DURATION, ease } from "@/lib/motion";
+// Importing registers the ScrollTrigger scrollerProxy before any trigger exists
+import { setLenis, startVelocity } from "@/lib/scroll";
+import ScrollSkew from "@/components/chrome/ScrollSkew";
 
 gsap.registerPlugin(ScrollTrigger);
 
 interface LenisContextValue {
   lenis: Lenis | null;
-  velocity: number;
 }
 
 const LenisContext = createContext<LenisContextValue>({
   lenis: null,
-  velocity: 0,
 });
 
 export const useLenis = () => useContext(LenisContext);
@@ -29,7 +31,6 @@ export default function LenisProvider({
   children: React.ReactNode;
 }) {
   const [lenisInstance, setLenisInstance] = useState<Lenis | null>(null);
-  const [velocity, setVelocity] = useState(0);
   const lenisRef = useRef<Lenis | null>(null);
 
   useEffect(() => {
@@ -43,8 +44,9 @@ export default function LenisProvider({
 
     try {
       const lenis = new Lenis({
-        duration: 1.15,
-        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        // Wheel glide: the grand duration on the entrance curve (expo.out)
+        duration: DURATION.grand,
+        easing: ease.entrance,
         orientation: "vertical",
         gestureOrientation: "vertical",
         smoothWheel: true,
@@ -52,15 +54,16 @@ export default function LenisProvider({
       });
 
       lenisRef.current = lenis;
+      setLenis(lenis);
       queueMicrotask(() => {
         setLenisInstance(lenis);
       });
 
+      // Lenis moved: ScrollTrigger reads it back through the proxy
       lenis.on(
         "scroll",
         (e: { velocity: number; progress: number; direction: number }) => {
           ScrollTrigger.update();
-          setVelocity(e.velocity || 0);
           useScrollStore.setState({
             progress: e.progress ?? 0,
             velocity: e.velocity ?? 0,
@@ -88,12 +91,18 @@ export default function LenisProvider({
         lenis.raf(time * 1000);
       };
 
+      // One loop: Lenis steps on GSAP's ticker, then velocity is read
       gsap.ticker.add(updateTicker);
       gsap.ticker.lagSmoothing(0);
+      const stopVelocity = startVelocity();
+      // Re-measure now that ScrollTrigger reads Lenis
+      ScrollTrigger.refresh();
 
       return () => {
         window.removeEventListener("load", handleWindowLoad);
+        stopVelocity();
         gsap.ticker.remove(updateTicker);
+        setLenis(null);
         lenis.destroy();
         lenisRef.current = null;
         setLenisInstance(null);
@@ -143,8 +152,10 @@ export default function LenisProvider({
   }, [lenisInstance]);
 
   return (
-    <LenisContext.Provider value={{ lenis: lenisInstance, velocity }}>
+    <LenisContext.Provider value={{ lenis: lenisInstance }}>
       {children}
+      {/* After the children, so the [data-skew] content exists when it mounts */}
+      <ScrollSkew />
     </LenisContext.Provider>
   );
 }

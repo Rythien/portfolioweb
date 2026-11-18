@@ -2,6 +2,7 @@
 
 import { useThemeStore, type Mode } from "@/store/useThemeStore";
 import { crystalEvents } from "@/hooks/crystalState";
+import Swap from "@/components/ui/Swap";
 
 export default function ModePill() {
   const mode = useThemeStore((s) => s.mode);
@@ -32,16 +33,15 @@ export default function ModePill() {
   const segment = (value: Mode, label: string) => (
     <button
       onClick={select(value)}
-      data-magnetic
       aria-pressed={mode === value}
       aria-label={`Switch to ${value} mode`}
       className={`pressable mode-pill-seg text-label h-full flex items-center px-4 rounded-full focus-visible:outline-offset-4 ${
         mode === value
           ? "bg-ink text-surface font-semibold"
-          : "text-ink/80 hover:text-ink"
+          : "text-ink/80"
       }`}
     >
-      {label}
+      <Swap>{label}</Swap>
     </button>
   );
 
@@ -50,9 +50,12 @@ export default function ModePill() {
       data-reveal
       className="fixed left-1/2 -translate-x-1/2 z-[100] bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))]"
     >
+      {/* The whole pill is one magnet (its own wrapper keeps the centring
+          transform out of GSAP's way) */}
       <div
         role="group"
         aria-label="Site mode"
+        data-magnetic
         className="h-[var(--pill-h)] flex items-stretch gap-0 rounded-full border border-rule bg-surface/90 backdrop-blur-xl font-mono transition-colors hover:border-rule-hover"
       >
         {segment("wake", "Wake")}

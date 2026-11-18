@@ -7,6 +7,7 @@ import Footer from "@/components/sections/Footer";
 import LenisProvider from "@/components/common/LenisProvider";
 import ProjectArt from "@/components/ui/ProjectArt";
 import { projects } from "@/content/projects";
+import Swap from "@/components/ui/Swap";
 
 const TYPES = ["All", "Web design", "App design", "3D / Blender"];
 
@@ -27,11 +28,9 @@ export default function ProjectsIndexPage() {
           <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/"
-              data-magnetic
-              className="hover:text-ink flex items-center gap-2"
+              className="flex items-center gap-2"
             >
-              <span>←</span>
-              <span>Back to home</span>
+              <Swap>← Back to home</Swap>
             </Link>
             <span>
               {projects.length.toString().padStart(2, "0")} Projects
@@ -56,10 +55,10 @@ export default function ProjectsIndexPage() {
                 className={`px-3 py-1.5 rounded-sm transition-colors ${
                   selectedType === type
                     ? "bg-ink text-surface font-semibold"
-                    : "text-ink-muted hover:text-ink border border-rule"
+                    : "text-ink-muted border border-rule"
                 }`}
               >
-                {type}
+                <Swap>{type}</Swap>
               </button>
             ))}
           </div>
@@ -68,12 +67,12 @@ export default function ProjectsIndexPage() {
             {filtered.map((project, idx) => (
               <article
                 key={project.slug}
-                className="border border-rule bg-ink/[0.02] p-6 rounded-sm flex flex-col justify-between hover:border-rule-hover transition-colors group"
+                className="border border-rule bg-ink/[0.02] p-6 rounded-sm flex flex-col justify-between"
               >
                 <div>
                   <Link
                     href={`/project/${project.slug}`}
-                    data-cursor="Open"
+                    data-cursor="View"
                     className="block mb-6 overflow-hidden"
                   >
                     <figure className="flex flex-col gap-2">
@@ -94,9 +93,9 @@ export default function ProjectsIndexPage() {
                     <span>{project.year}</span>
                   </div>
 
-                  <h2 className="font-[family-name:var(--font-display)] text-2xl font-light text-ink group-hover:text-ink transition-colors">
+                  <h2 className="font-[family-name:var(--font-display)] text-2xl font-light text-ink">
                     <Link href={`/project/${project.slug}`}>
-                      {project.title}
+                      <Swap>{project.title}</Swap>
                     </Link>
                   </h2>
 
@@ -108,11 +107,9 @@ export default function ProjectsIndexPage() {
                 <div className="mt-6 pt-4 border-t border-rule flex items-center justify-between font-mono text-xs uppercase tracking-widest text-ink/80">
                   <Link
                     href={`/project/${project.slug}`}
-                    data-magnetic
-                    className="inline-flex items-center gap-2 hover:underline underline-offset-4"
+                    className="inline-flex items-center gap-2"
                   >
-                    <span>Read study</span>
-                    <span>→</span>
+                    <Swap>Read study →</Swap>
                   </Link>
                   {project.placeholder && (
                     <span className="text-label text-ink-muted">

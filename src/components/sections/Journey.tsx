@@ -6,6 +6,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import KineticHeading from "@/components/ui/Kinetic";
 import RealAsciiGlobe from "@/components/webgl/RealAsciiGlobe";
 import { places, KATHMANDU, haversineDistanceKm } from "@/content/globe";
+import { DURATION } from "@/lib/motion";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -44,7 +45,7 @@ export default function Journey() {
         start: "top top",
         end: "+=220%",
         pin: true,
-        scrub: 0.6,
+        scrub: DURATION.quick,
         invalidateOnRefresh: true,
         fastScrollEnd: true,
         onUpdate: (self) => {

@@ -6,6 +6,7 @@ import Footer from "@/components/sections/Footer";
 import LenisProvider from "@/components/common/LenisProvider";
 import ProjectArt from "@/components/ui/ProjectArt";
 import { projects, getProjectBySlug } from "@/content/projects";
+import Swap from "@/components/ui/Swap";
 
 // main is max-w-5xl (1024px) with px-6 / sm:px-10 gutters
 const CASE_STUDY_FULL =
@@ -43,11 +44,9 @@ export default async function ProjectDetailPage({
           <div className="flex items-center justify-between border-b border-rule pb-6 mb-12 font-mono text-xs uppercase tracking-widest text-ink-muted">
             <Link
               href="/projects"
-              data-magnetic
-              className="hover:text-ink flex items-center gap-2"
+              className="flex items-center gap-2"
             >
-              <span>←</span>
-              <span>All Projects</span>
+              <Swap>← All Projects</Swap>
             </Link>
             <span>
               {project.type} · {project.year}
@@ -135,9 +134,9 @@ export default async function ProjectDetailPage({
                     href={project.links.repo}
                     target="_blank"
                     rel="noreferrer"
-                    className="underline text-ink hover:text-ink"
+                    className="underline text-ink"
                   >
-                    Repository Link →
+                    <Swap>Repository Link →</Swap>
                   </a>
                 </div>
               )}
@@ -198,18 +197,15 @@ export default async function ProjectDetailPage({
           <div className="pt-12 border-t border-rule flex items-center justify-between font-mono text-xs uppercase tracking-widest">
             <Link
               href="/projects"
-              data-magnetic
-              className="text-ink-muted hover:text-ink"
+              className="text-ink-muted"
             >
-              ← Back to all projects
+              <Swap>← Back to all projects</Swap>
             </Link>
             <Link
               href={`/project/${nextProject.slug}`}
-              data-magnetic
-              className="text-ink hover:text-ink flex items-center gap-2"
+              className="text-ink flex items-center gap-2"
             >
-              <span>Next: {nextProject.title}</span>
-              <span>→</span>
+              <Swap>Next: {nextProject.title} →</Swap>
             </Link>
           </div>
         </main>

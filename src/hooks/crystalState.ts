@@ -7,8 +7,7 @@
  */
 import { getSectionProgress } from "@/store/useScrollStore";
 import { useFractureStore } from "@/store/useFractureStore";
-import { cubicBezier } from "@/motion/bezier";
-import { BEZIER } from "@/motion/language";
+import { ease } from "@/lib/motion";
 import { stepSpring, zetaForOvershoot, type Spring } from "@/motion/spring";
 
 function smoothstep(a: number, b: number, x: number): number {
@@ -46,8 +45,8 @@ const SEGMENT_VH = 1.6;
  * scroll, and the copy clamp must have it clear by then: a curve that
  * starts gently leaves the clamp to yank it out of the way.
  */
-// The motion language's entrance curve (expo.out as cubic-bezier(0.16, 1, 0.3, 1))
-const SEGMENT_EASE = cubicBezier(...BEZIER.entrance);
+// The scroll-linked curve from src/lib/motion.ts: cubic-bezier(0.16, 1, 0.3, 1)
+const SEGMENT_EASE = ease.scroll;
 const POS_WINDOW: [number, number] = [0, 0.8];
 const SCALE_WINDOW: [number, number] = [0.12, 1];
 const ROT_WINDOW: [number, number] = [0.25, 1];

@@ -6,6 +6,7 @@ import { SITE_DATA } from "@/content/site";
 import { useMounted } from "@/utils/useMounted";
 import { useSoundStore } from "@/store/useSoundStore";
 import { initAudioContext, playTick } from "@/hooks/crystalAudio";
+import Swap from "@/components/ui/Swap";
 
 export default function Header() {
   const mounted = useMounted();
@@ -66,34 +67,27 @@ export default function Header() {
         <div className="pointer-events-auto">
           <Link
             href="#top"
-            data-magnetic
-            className="font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-ink hover:opacity-75 transition-opacity py-2"
+            className="font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-ink py-2"
           >
-            {SITE_DATA.brand.name}
+            <Swap>{SITE_DATA.brand.name}</Swap>
           </Link>
         </div>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6 lg:gap-10 pointer-events-auto font-mono text-[0.875rem] font-medium uppercase tracking-widest text-ink/80">
-          <a
-            href="#works"
-            data-magnetic
-            className="hover:opacity-70 transition-opacity py-2"
-          >
-            Work
+          <a href="#works" data-magnetic className="py-2">
+            <Swap>Work</Swap>
           </a>
-          <a
-            href="#about"
-            data-magnetic
-            className="hover:opacity-70 transition-opacity py-2"
-          >
-            About
+          <a href="#about" data-magnetic className="py-2">
+            <Swap>About</Swap>
           </a>
 
           {/* Sound Toggle */}
           <button
             onClick={toggleSound}
-            className="flex items-center gap-2 hover:opacity-70 transition-opacity py-2 font-mono text-[0.875rem] font-medium uppercase tracking-widest"
+            data-magnetic
+            aria-pressed={soundOn}
+            className="flex items-center gap-2 py-2 font-mono text-[0.875rem] font-medium uppercase tracking-widest"
           >
             <span
               aria-hidden="true"
@@ -103,15 +97,11 @@ export default function Header() {
               <span />
               <span />
             </span>
-            <span>Sound {soundOn ? "On" : "Off"}</span>
+            <Swap>Sound {soundOn ? "On" : "Off"}</Swap>
           </button>
 
-          <a
-            href="#contact"
-            data-magnetic
-            className="hover:opacity-70 transition-opacity py-2"
-          >
-            Contact
+          <a href="#contact" data-magnetic className="py-2">
+            <Swap>Contact</Swap>
           </a>
         </nav>
 
@@ -126,9 +116,11 @@ export default function Header() {
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle navigation menu"
-            className="pressable p-2 -mr-2 text-ink font-mono text-label focus:outline-none"
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="mobile-navigation"
+            className="pressable p-2 -mr-2 text-ink font-mono text-label"
           >
-            {isMobileMenuOpen ? "[Close]" : "[Menu]"}
+            <Swap>{isMobileMenuOpen ? "[Close]" : "[Menu]"}</Swap>
           </button>
         </div>
       </div>
@@ -136,6 +128,7 @@ export default function Header() {
       {/* Mobile Drawer */}
       {isMobileMenuOpen && (
         <nav
+          id="mobile-navigation"
           aria-label="Mobile Navigation"
           className="md:hidden pointer-events-auto bg-surface text-ink border-b border-rule px-6 py-8 flex flex-col gap-6 font-mono text-label"
           style={{ mixBlendMode: "normal" }}
@@ -145,31 +138,32 @@ export default function Header() {
             onClick={() => setIsMobileMenuOpen(false)}
             className="py-2 border-b border-rule"
           >
-            Work
+            <Swap>Work</Swap>
           </a>
           <a
             href="#about"
             onClick={() => setIsMobileMenuOpen(false)}
             className="py-2 border-b border-rule"
           >
-            About
+            <Swap>About</Swap>
           </a>
           <a
             href="#disciplines"
             onClick={() => setIsMobileMenuOpen(false)}
             className="py-2 border-b border-rule"
           >
-            Disciplines
+            <Swap>Disciplines</Swap>
           </a>
           <a
             href="#contact"
             onClick={() => setIsMobileMenuOpen(false)}
             className="py-2 border-b border-rule"
           >
-            Contact
+            <Swap>Contact</Swap>
           </a>
           <button
             onClick={toggleSound}
+            aria-pressed={soundOn}
             className="py-2 flex items-center gap-2 font-mono text-label uppercase tracking-widest text-left"
           >
             <span
@@ -180,7 +174,7 @@ export default function Header() {
               <span />
               <span />
             </span>
-            <span>Sound {soundOn ? "On" : "Off"}</span>
+            <Swap>Sound {soundOn ? "On" : "Off"}</Swap>
           </button>
         </nav>
       )}
