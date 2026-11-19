@@ -131,7 +131,7 @@ export default function Header() {
         <nav
           id="mobile-navigation"
           aria-label="Mobile Navigation"
-          className="md:hidden pointer-events-auto bg-surface text-ink border-b border-rule px-6 py-8 flex flex-col gap-6 font-mono text-label"
+          className="md:hidden relative pointer-events-auto bg-surface text-ink border-b border-rule px-6 py-8 flex flex-col gap-6 font-mono text-label"
           style={{ mixBlendMode: "normal" }}
         >
           <a
