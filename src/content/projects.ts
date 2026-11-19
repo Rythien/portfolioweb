@@ -7,6 +7,32 @@
   caption?: string;
 }
 
+/** A decision made on the project, and why. */
+export interface CaseDecision {
+  title: string;
+  /** Paragraphs: what was chosen, the alternative, the reasoning. */
+  body: string[];
+}
+
+/**
+ * The written case study (600-900 words). Every field is the author's own
+ * account; nothing here is filled in by guesswork. A project without one
+ * falls back to its overview, features and challenges.
+ */
+export interface CaseStudy {
+  /** Paragraphs. */
+  problem: string[];
+  /** Who did what: team, the author's part, timeline. */
+  role: string[];
+  approach: string[];
+  /** Two or three. */
+  decisions: CaseDecision[];
+  /** What the author would do differently now. */
+  differently: string[];
+  /** Optional outcome: results, reception, where it is used. */
+  outcome?: string[];
+}
+
 export interface Project {
   slug: string;
   counter: string;
@@ -24,6 +50,7 @@ export interface Project {
   overview?: string;
   mainFeatures?: string[];
   technicalChallenges?: string[];
+  caseStudy?: CaseStudy;
   placeholder?: boolean;
   link: string;
   links?: { live?: string; repo?: string };
@@ -48,6 +75,9 @@ export interface Project {
  */
 const CONCEPT = "Concept artwork";
 
+/** "Concept artwork: <what it shows>." */
+const caption = (shows: string) => `${CONCEPT}: ${shows}.`;
+
 function conceptArt(slug: string, title: string, tools: string) {
   const file = (name: string) => ({
     src: `/projects/${slug}/${name}.webp`,
@@ -57,23 +87,23 @@ function conceptArt(slug: string, title: string, tools: string) {
     cover: {
       ...file("cover"),
       alt: `Concept artwork for ${title}: ice chips refracting the title`,
-      caption: CONCEPT,
+      caption: caption(`ice chips refracting the ${title} title`),
     },
     images: [
       {
         ...file("detail-1"),
         alt: `Concept artwork for ${title}: a single ice chip refracting the title, shallow depth of field`,
-        caption: CONCEPT,
+        caption: caption("one chip, close up, the title bent through it at a shallow depth of field"),
       },
       {
         ...file("detail-2"),
         alt: `Concept artwork for ${title}: ${tools} embossed beneath a row of glass chips`,
-        caption: CONCEPT,
+        caption: caption(`${tools} embossed beneath a row of glass chips`),
       },
       {
         ...file("detail-3"),
         alt: `Concept artwork for ${title}: the title smeared along a light trail through fog`,
-        caption: CONCEPT,
+        caption: caption("the title smeared along a light trail through fog"),
       },
     ],
   };

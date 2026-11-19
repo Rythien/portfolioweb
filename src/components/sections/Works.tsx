@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
 import Link from "next/link";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -21,7 +21,7 @@ import { projects, type Project } from "@/content/projects";
 import ProjectArt from "@/components/ui/ProjectArt";
 import ToolLogos from "@/components/ui/ToolLogos";
 import { useThemeStore } from "@/store/useThemeStore";
-import { useArchiveProgress } from "@/store/useArchiveProgress";
+import RecoveredMark from "@/components/ui/RecoveredMark";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
@@ -57,12 +57,6 @@ export default function Works() {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const mode = useThemeStore((s) => s.mode);
   const isDream = mode === "dream";
-  // Projects recovered in THE ARCHIVE carry a mark (saved across visits)
-  const recovered = useArchiveProgress((s) => s.recovered);
-  useEffect(() => {
-    useArchiveProgress.getState().hydrate();
-  }, []);
-
   useGSAP(
     (_ctx, contextSafe) => {
       const root = sectionRef.current;
@@ -258,14 +252,8 @@ export default function Works() {
                     <span>{project.category}</span>
                   </div>
                   <div className="flex items-baseline gap-4">
-                    {recovered.includes(project.slug) && (
-                      <span className="inline-flex items-center gap-2 uppercase tracking-[0.12em] text-ink">
-                        <svg aria-hidden="true" viewBox="0 0 10 10" className="size-2.5 shrink-0">
-                          <path d="M5 0.5 9.5 5 5 9.5 0.5 5Z" fill="currentColor" />
-                        </svg>
-                        Recovered from the dream
-                      </span>
-                    )}
+                    {/* Projects recovered in THE ARCHIVE (saved across visits) */}
+                    <RecoveredMark slug={project.slug} />
                     <span className="tabular-nums">{project.year}</span>
                   </div>
                 </div>
