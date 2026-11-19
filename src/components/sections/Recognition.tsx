@@ -31,7 +31,7 @@ export default function Recognition() {
       ref={sectionRef}
       id="recognition"
       aria-label="Awards and Recognition"
-      className="scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
+      className="scroll-mt-[108px] lg:scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
     >
       <div data-skew className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div className="mb-12 sm:mb-16 flex flex-col sm:flex-row items-baseline gap-6 sm:gap-12">

@@ -513,11 +513,15 @@ html.lenis, html.lenis body {
 
 /* Once the page has scrolled, copy passes under the header through this:
    solid page colour behind the nav (and the section strip below lg), then
-   a 72px fade to transparent. The mask fades the colour and the blur
-   together, so the blur has no hard bottom edge. */
+   a fade to transparent. The mask fades the colour and the blur together,
+   so the blur has no hard bottom edge.
+   Below lg the fade is short (24px): on a phone a 72px fade was a fifth
+   of the screen, and a section's first line, landing at 147-161px after a
+   nav jump, sat in it half-faded at rest. Section anchors land under the
+   108px band below lg (scroll-mt-[108px]) for the same reason. */
 .header-scrim {
   --scrim-solid: 108px; /* header 80 + section strip 28 */
-  --scrim-fade: 72px;
+  --scrim-fade: 24px;
   height: calc(var(--scrim-solid) + var(--scrim-fade));
   background-color: var(--t-surface);
   -webkit-backdrop-filter: blur(6px);
@@ -538,6 +542,7 @@ html.lenis, html.lenis body {
   .header-scrim {
     /* No strip on the desktop rail layout: solid only behind the nav row */
     --scrim-solid: 64px;
+    --scrim-fade: 72px;
   }
 }
 

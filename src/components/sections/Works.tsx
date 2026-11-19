@@ -222,7 +222,7 @@ export default function Works() {
       ref={sectionRef}
       id="works"
       aria-label="Selected Works"
-      className="scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
+      className="scroll-mt-[108px] lg:scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
     >
       {/* Tone curve for the WAKE panel art (.project-art-panel): the
           generated covers are light-key (mean ~220/255, sd ~15), so the

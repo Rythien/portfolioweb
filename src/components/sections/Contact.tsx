@@ -156,7 +156,7 @@ export default function Contact() {
       ref={sectionRef}
       id="contact"
       aria-label="Contact Searon Maharjan"
-      className="scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 contact-end border-t border-rule relative"
+      className="scroll-mt-[108px] lg:scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 contact-end border-t border-rule relative"
     >
       <div data-skew className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         {/* One block: heading, line, the email actions with the socials
