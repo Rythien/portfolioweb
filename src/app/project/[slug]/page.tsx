@@ -1,4 +1,5 @@
 import React from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/common/Header";
@@ -8,6 +9,7 @@ import ProjectArt from "@/components/ui/ProjectArt";
 import RecoveredMark from "@/components/ui/RecoveredMark";
 import { projects, getProjectBySlug, type Project } from "@/content/projects";
 import Swap from "@/components/ui/Swap";
+import { pageMeta } from "@/lib/meta";
 
 // main is max-w-5xl (1024px) with px-6 / sm:px-10 gutters
 const CASE_STUDY_FULL =
@@ -19,6 +21,22 @@ export function generateStaticParams() {
   return projects.map((p) => ({
     slug: p.slug,
   }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const project = getProjectBySlug(slug);
+  if (!project) return { title: "Case study not found" };
+  return pageMeta({
+    title: `${project.title}: case study`,
+    description: project.summary ?? project.description,
+    path: `/project/${project.slug}`,
+    type: "article",
+  });
 }
 
 /** A labelled block of the case study: mono label, then the prose. */

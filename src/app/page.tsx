@@ -16,6 +16,9 @@ import Recognition from "@/components/sections/Recognition";
 import Contact from "@/components/sections/Contact";
 import Footer from "@/components/sections/Footer";
 
+// Title, description and card come from the root layout
+export const metadata = { alternates: { canonical: "/" } };
+
 export default function Home() {
   return (
     <LenisProvider>

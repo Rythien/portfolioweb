@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "gen:covers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen/covers.mjs",
     "gen:crystal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen/crystal.mjs",
+    "gen:og": "node scripts/gen/og.mjs",
     "gen:font": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen/font.mjs",
     "test:archive": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/archive/flight.test.ts src/components/archive/game.test.ts",
     "test:crystal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/crystal/crystalGen.test.ts",

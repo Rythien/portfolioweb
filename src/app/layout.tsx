@@ -6,6 +6,7 @@ import ThemeSync from "@/components/chrome/ThemeSync";
 import GridOverlay from "@/components/chrome/GridOverlay";
 import DeferredDisplayFont from "@/components/chrome/DeferredDisplayFont";
 import { SITE_DATA } from "@/content/site";
+import { SITE_URL } from "@/lib/siteUrl";
 
 const newsreader = Newsreader({
   variable: "--font-display",
@@ -42,15 +43,19 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://searonmaharjan.com"),
-  title: `${SITE_DATA.brand.name} — ${SITE_DATA.brand.role}`,
+  metadataBase: new URL(SITE_URL),
+  // Routes set their own title; the template adds the name
+  title: {
+    default: `${SITE_DATA.brand.name} — ${SITE_DATA.brand.role}`,
+    template: `%s · ${SITE_DATA.brand.name}`,
+  },
   description: `${SITE_DATA.brand.tagline} Portfolio of ${SITE_DATA.brand.name}, based in ${SITE_DATA.brand.city}, ${SITE_DATA.brand.country}.`,
   authors: [{ name: SITE_DATA.brand.name }],
   creator: SITE_DATA.brand.name,
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://searonmaharjan.com",
+    url: "/",
     title: `${SITE_DATA.brand.name} — ${SITE_DATA.brand.role}`,
     description: `${SITE_DATA.brand.tagline} Portfolio of ${SITE_DATA.brand.name}, based in ${SITE_DATA.brand.city}, ${SITE_DATA.brand.country}.`,
     siteName: `${SITE_DATA.brand.name} Portfolio`,
@@ -77,7 +82,7 @@ const personStructuredData = {
     "@type": "EducationalOrganization",
     name: "Asia e University",
   },
-  url: "https://searonmaharjan.com",
+  url: SITE_URL,
   sameAs: [
     "https://github.com/rythien",
     "https://linkedin.com/in/searon-maharjan",
