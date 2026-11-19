@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  CHARGE_FULL, ENDING, HITS_TO_FREE, MOTES, PULSE, SHARD_HIT, WALL, bodyRotForGap, createMotes, endingDue, nextFacet, releasePulse,
-  resolveFacetHit, stepMotes, stepPulse, wallShardOffset, wallSlotOpen, wallSlots,
+  CHARGE_FULL, ENDING, HITS_TO_FREE, MOTES, PULSE, SHARD_HIT, WALL, bodyRot, createMotes, endingDue, facetAzimuth, gapAzimuth, nextFacet,
+  releasePulse, resolveFacetHit, stepMotes, stepPulse, wallShardOffset, wallSlotOpen, wallSlots,
   type SealTarget, type V3,
 } from "./game.ts";
 
@@ -129,13 +129,16 @@ const RADII: V3 = [2.94, 3.59, 2.94];
 /** An equatorial facet in body space, as on the real seals. */
 const EQ_FACET: V3 = [2.9, 0.05, 0.4];
 
-/** A walled seal at the origin with its window looking along gapAz. */
-function walled(gapAz: number, phase = 0): SealTarget {
+/** Body rotation that turns EQ_FACET to look along world azimuth az. */
+const rotFor = (az: number) => Math.atan2(EQ_FACET[2], EQ_FACET[0]) - az;
+
+/** A walled seal at the origin, window along gapAz, facet along facetAz. */
+function walled(gapAz: number, phase = 0, facetAz = gapAz): SealTarget {
   const ph = WALL.phases[phase];
   const shards = wallSlots()
     .filter((s) => !wallSlotOpen(s, ph))
     .map((s) => ({ p: wallShardOffset(s, gapAz, [0, 0, 0]), r: WALL.shardScale * SHARD_HIT }));
-  return { center: [0, 0, 0], rotY: bodyRotForGap(EQ_FACET, gapAz), radii: RADII, facet: EQ_FACET, shards, freed: false };
+  return { center: [0, 0, 0], rotY: rotFor(facetAz), radii: RADII, facet: EQ_FACET, shards, freed: false };
 }
 
 /** The facet's world position on a walled seal (body turns about Y). */
@@ -151,12 +154,28 @@ test("the pulse is a projectile: about 18 units/s, so a long shot takes time", (
   assert.ok(Math.abs(p.travelled - PULSE.speed * 0.5) < 0.3);
 });
 
-test("the body turns so the lit facet looks out through the window", () => {
-  for (const gap of [0, 1, 2.5, -2]) {
-    const f = facetWorld(walled(gap));
-    const az = Math.atan2(f[2], f[0]);
-    assert.ok(Math.abs(Math.atan2(Math.sin(az - gap), Math.cos(az - gap))) < 1e-6, `gap ${gap}: facet at ${az}`);
+test("the seal turns on its own clock: its facet is in the window only part of the time", () => {
+  const ph = WALL.phases[0];
+  let inside = 0;
+  const N = 2000;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * 130; // the 10 s and 23 s periods do not line up inside this
+    const d = facetAzimuth(EQ_FACET, bodyRot(ph, t)) - gapAzimuth(ph, t);
+    if (Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) < ph.halfAz) inside++;
   }
+  const share = inside / N;
+  // About the window's share of a turn (36 / 360), never always, never never
+  assert.ok(share > 0.05 && share < 0.2, `facet in the window ${(share * 100).toFixed(1)}% of the time`);
+});
+
+test("the cage is about 90 shards", () => {
+  const closed = wallSlots().filter((s) => !wallSlotOpen(s, WALL.phases[0])).length;
+  assert.ok(closed >= 80 && closed <= 100, `${closed} shards`);
+});
+
+test("a fight's motes lie outside its firing ring, so rearming means leaving it", () => {
+  const ms = createMotes([[0, 0, 0]], 3, [true]).slice(MOTES.free);
+  for (const m of ms) assert.ok(Math.hypot(m.home[0], m.home[2]) >= 22, `mote at ${Math.hypot(m.home[0], m.home[2]).toFixed(1)}`);
 });
 
 test("a pulse through the window cracks the facet", () => {
@@ -209,11 +228,11 @@ test("the cage is closed: a shot that crosses it outside the window never reache
 
 });
 
-test("when the window has turned away, a shot at the facet's old place hits the wall", () => {
-  const before = walled(0);
-  const f = facetWorld(before);
+test("when the window has turned away from the facet, a shot at the facet hits the wall", () => {
   const out: V3 = [16, 0.4, 0];
-  const after = walled(1.4);
+  // Facet still facing the shooter, window turned 70 deg away
+  const after = walled(1.2, 0, 0);
+  const f = facetWorld(after);
   const h = fly(out, [f[0] - out[0], f[1] - out[1], f[2] - out[2]], [after]);
   assert.equal(h?.kind, "shard");
 });

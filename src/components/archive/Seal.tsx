@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { SEAL, type SealSpot } from "./layout";
 import { sealProgress, sealSlug, type ArchiveState, type SealState } from "./archiveState";
 import {
-  ENDING, FREE, SHARD_HIT, WALL, bodyRotForGap, gapAzimuth, wallShardOffset, wallSlotOpen, wallSlots,
+  ENDING, FREE, WALL, bodyRot, gapAzimuth, wallShardOffset, wallSlotOpen, wallSlots, SHARD_HIT,
   type SealTarget, type V3, type WallSlot,
 } from "./game";
 import type { Project } from "@/content/projects";
@@ -113,6 +113,42 @@ function facetGeometry(seal: THREE.BufferGeometry, facet: number): { geo: THREE.
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(out, 3));
   return { geo, center, normal };
+}
+
+/**
+ * The lit facet's edge: a flat band just outside its pentagon, lying on the
+ * facet, so the target has its own bright outline (not the seal's core
+ * glow) that reads from across the void.
+ */
+function facetRimGeometry(seal: THREE.BufferGeometry, facet: number, width = 0.26): THREE.BufferGeometry {
+  const pos = seal.getAttribute("position") as THREE.BufferAttribute;
+  const pts: THREE.Vector3[] = [];
+  for (let k = 0; k < 9; k++) {
+    const p = new THREE.Vector3().fromBufferAttribute(pos, facet * 9 + k);
+    if (!pts.some((q) => q.distanceToSquared(p) < 1e-6)) pts.push(p);
+  }
+  const c = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(pts.length);
+  const n = new THREE.Vector3().subVectors(pts[1], pts[0]).cross(new THREE.Vector3().subVectors(pts[2], pts[0])).normalize();
+  if (n.dot(c) < 0) n.negate();
+  // Outline order: by angle about the centre, in the facet's plane
+  const u = new THREE.Vector3().subVectors(pts[0], c).normalize();
+  const v = new THREE.Vector3().crossVectors(n, u);
+  pts.sort((a, b) => {
+    const da = a.clone().sub(c), db = b.clone().sub(c);
+    return Math.atan2(da.dot(v), da.dot(u)) - Math.atan2(db.dot(v), db.dot(u));
+  });
+  const lift = n.clone().multiplyScalar(0.05);
+  const out: number[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const ao = a.clone().add(a.clone().sub(c).setLength(width)).add(lift);
+    const bo = b.clone().add(b.clone().sub(c).setLength(width)).add(lift);
+    const ai = a.clone().add(lift), bi = b.clone().add(lift);
+    out.push(ai.x, ai.y, ai.z, bi.x, bi.y, bi.z, bo.x, bo.y, bo.z, ai.x, ai.y, ai.z, bo.x, bo.y, bo.z, ao.x, ao.y, ao.z);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(out, 3));
+  return g;
 }
 
 /** A small irregular shard: an octahedron with its corners pulled about. */
@@ -418,6 +454,10 @@ function unregisterSeal(r: SealRegistry, index: number, hide: THREE.Object3D[]) 
 function wearMaterial(o: THREE.Mesh | null, m: THREE.Material) {
   if (o && o.material !== m) o.material = m;
 }
+function exposeGap(index: number, gapAz: number, phase: (typeof WALL.phases)[number]) {
+  const w = window as unknown as { __archiveGap?: Record<number, { az: number; phase: typeof phase }> };
+  (w.__archiveGap ??= {})[index] = { az: gapAz, phase };
+}
 function writeTarget(r: SealRegistry, index: number, t: SealTarget) {
   r.targets[index] = t;
 }
@@ -431,7 +471,6 @@ const _w = new THREE.Vector3();
 const _end = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _wo: V3 = [0, 0, 0];
-const _fv: V3 = [0, 0, 0];
 
 /** A brighter rim than the hero's: it has to separate a seal from violet fog at any distance. */
 export const SEAL_RIM = { intensity: 1.1, power: 2.6 };
@@ -444,6 +483,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
   const coverRef = useRef<THREE.Mesh>(null);
   const facetMesh = useRef<THREE.Mesh>(null);
   const facetMat = useRef<THREE.ShaderMaterial>(null);
+  const facetRim = useRef<THREE.Mesh>(null);
   const swarm = useRef<THREE.InstancedMesh>(null);
   const glass = useRef<THREE.Mesh>(null);
   const edges = useRef<THREE.LineSegments>(null);
@@ -479,6 +519,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
   const geo = useMemo(() => timed("seal: geometry", () => sealGeometry(101 + index * 37)), [index]);
   // Every facet's overlay, built once: the lit one moves after each hit
   const facets = useMemo(() => timed("seal: facets", () => Array.from({ length: 12 }, (_, f) => facetGeometry(geo, f))), [geo]);
+  const facetRims = useMemo(() => timed("seal: facet rims", () => Array.from({ length: 12 }, (_, f) => facetRimGeometry(geo, f))), [geo]);
   const fight = SEAL.fight.includes(index);
   // A fight is walled in; the other seals keep their loose orbiters
   const orbiters = useMemo(() => timed("seal: orbiters", () => (fight ? [] : makeOrbiters(900 + index * 53))), [index, fight]);
@@ -500,7 +541,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
   // backdrop the glass refracts; the cover, glow and orbiters are in it
   useEffect(() => {
     // The panel too: nothing refracts it (the glass is gone by then)
-    const hide = [glass.current, edges.current, facetMesh.current, ring.current, cracks.current, panel.current, flash.current, rimGroup.current].filter(Boolean) as THREE.Object3D[];
+    const hide = [glass.current, edges.current, facetMesh.current, ring.current, cracks.current, panel.current, flash.current, rimGroup.current, facetRim.current].filter(Boolean) as THREE.Object3D[];
     registerSeal(registry, index, body.current, hide);
     return () => unregisterSeal(registry, index, hide);
   }, [registry, index]);
@@ -529,17 +570,18 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
     // A fight: the cage turns, carrying its window round, and the body
     // turns with it so the lit facet looks out through the window
     const phase = WALL.phases[Math.min(s.hits, WALL.phases.length - 1)];
-    const gapAz = gapAzimuth(phase, FREEZE ? 0 : state.t, SEAL.gapOffset[index] ?? 0);
+    // archivefreeze=1 (tests): everything holds still, the window parked
+    // over the lit facet so a frozen fight can be won
+    const fc0 = facets[s.litFacet % facets.length].center;
+    const gapAz = FREEZE
+      ? Math.atan2(fc0.z, fc0.x) - bodyRot(phase, 0)
+      : gapAzimuth(phase, state.t, SEAL.gapOffset[index] ?? 0);
+    // Test hook (scripts/shot/fight.mjs): the window's azimuth, live
+    if (fight) exposeGap(index, gapAz, phase);
+    // The seal turns on its own clock (WALL spin), not with the cage: a
+    // shot exists only while its facet is inside the window
     if (body.current && fight && !s.freed) {
-      const fc = facets[s.litFacet % facets.length].center;
-      _fv[0] = fc.x;
-      _fv[1] = fc.y;
-      _fv[2] = fc.z;
-      const want = bodyRotForGap(_fv, gapAz);
-      const cur = body.current.rotation.y;
-      const d = Math.atan2(Math.sin(want - cur), Math.cos(want - cur));
-      // A new facet after a hit swings round to the window; otherwise locked
-      body.current.rotation.y = Math.abs(d) < 1e-3 ? want : cur + d * (1 - Math.exp(-5 * delta));
+      body.current.rotation.y = bodyRot(phase, FREEZE ? 0 : state.t);
     } else if (body.current) {
       body.current.rotation.y += delta * 0.08 * k * (index % 2 ? -1 : 1);
       body.current.position.y = reduced || FREEZE ? 0 : Math.sin(t * 0.4 + index) * 0.25;
@@ -574,6 +616,13 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
     if (facetMesh.current) {
       if (facetMesh.current.geometry !== f.geo) facetMesh.current.geometry = f.geo;
       facetMesh.current.visible = !s.freed;
+    }
+    // The target's own bright edge, breathing; gone once freed
+    if (facetRim.current) {
+      const rg = facetRims[s.litFacet % facetRims.length];
+      if (facetRim.current.geometry !== rg) facetRim.current.geometry = rg;
+      facetRim.current.visible = !s.freed;
+      (facetRim.current.material as THREE.MeshBasicMaterial).opacity = reduced ? 0.95 : 0.8 + 0.2 * Math.sin(t * 3.1);
     }
     if (facetMat.current) {
       facetMat.current.uniforms.uTime.value = reduced ? 0 : t;
@@ -668,7 +717,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
       rimGroup.current.visible = fight && !s.freed;
       rimGroup.current.rotation.y = -gapAz;
       rimGroup.current.position.y = by;
-      const breathe = reduced ? 0.8 : 0.68 + 0.22 * Math.sin(t * 2.4);
+      const breathe = reduced ? 0.95 : 0.85 + 0.15 * Math.sin(t * 2.4);
       for (const sp of rimSprites.current) if (sp) (sp.material as THREE.SpriteMaterial).opacity = breathe;
     }
 
@@ -752,6 +801,10 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
             toneMapped={false}
           />
         </mesh>
+        {/* The lit facet's bright edge: the target, legible from afar */}
+        <mesh ref={facetRim} geometry={facetRims[state.seals[index].litFacet % 12]} renderOrder={3}>
+          <meshBasicMaterial color="#fff2cf" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} fog={false} />
+        </mesh>
         {/* Cracks from facet hits */}
         <lineSegments ref={cracks} renderOrder={3}>
           <bufferGeometry />
@@ -773,7 +826,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
           {rim.map((r, i) => {
             const o = wallShardOffset(r, 0, [0, 0, 0], WALL.radius * 1.02);
             return (
-              <sprite key={i} ref={(el) => { rimSprites.current[i] = el; }} position={o} scale={[0.9, 0.9, 1]} renderOrder={3}>
+              <sprite key={i} ref={(el) => { rimSprites.current[i] = el; }} position={o} scale={[1.2, 1.2, 1]} renderOrder={3}>
                 <spriteMaterial map={edgeTex} color="#ffd98a" transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} toneMapped={false} />
               </sprite>
             );

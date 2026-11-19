@@ -17,6 +17,10 @@ export const MOTES = {
   voidRadius: 50,
   /** Cluster shell around a seal: inner / outer radius. */
   near: [6, 14] as [number, number],
+  /** Around a fight, its motes lie in a flat band well outside the firing
+   * ring (~16 from the seal): rearming means leaving the window for a few
+   * seconds. Inner / outer radius, and half-height. */
+  fightBand: { r: [23, 30] as [number, number], h: 4 },
   /** Pulled toward you inside this distance (only while not fully charged). */
   magnet: 4.5,
   /** Collected inside this distance. */
@@ -124,7 +128,7 @@ export interface Mote {
   fade: number;
 }
 
-export function createMotes(seals: V3[], seed = 2024): Mote[] {
+export function createMotes(seals: V3[], seed = 2024, fight: boolean[] = []): Mote[] {
   const rnd = lcg(seed);
   const out: Mote[] = [];
   const add = (home: V3) => out.push({ home, pos: [...home] as V3, phase: rnd() * Math.PI * 2, alive: true, respawnAt: 0, fade: 1 });
@@ -133,8 +137,16 @@ export function createMotes(seals: V3[], seed = 2024): Mote[] {
     const r = MOTES.voidRadius * Math.cbrt(rnd());
     add([d[0] * r, d[1] * r, d[2] * r]);
   }
-  for (const c of seals) {
+  for (let si = 0; si < seals.length; si++) {
+    const c = seals[si];
     for (let i = 0; i < MOTES.perSeal; i++) {
+      if (fight[si]) {
+        const a = rnd() * Math.PI * 2;
+        const [r0, r1] = MOTES.fightBand.r;
+        const r = r0 + rnd() * (r1 - r0);
+        add([c[0] + Math.cos(a) * r, c[1] + (rnd() * 2 - 1) * MOTES.fightBand.h, c[2] + Math.sin(a) * r]);
+        continue;
+      }
       const d = randomDir(rnd);
       const r = MOTES.near[0] + rnd() * (MOTES.near[1] - MOTES.near[0]);
       add([c[0] + d[0] * r, c[1] + d[1] * r, c[2] + d[2] * r]);
@@ -268,21 +280,28 @@ const DEG = Math.PI / 180;
 
 /**
  * A fighting seal hides inside a closed cage of shards with one window in
- * it. The cage turns about the seal's vertical axis, so the window sweeps
- * round, and the seal turns with it: the lit facet always looks out
- * through the window. Shards are on a sphere, in rows of latitude,
- * alternate rows staggered so no pulse fits between three neighbours.
+ * it. The cage and the seal turn about the vertical axis independently, on
+ * periods that are not multiples of each other: a shot exists only while
+ * the lit facet is inside the window, and that alignment drifts round the
+ * seal and from one pass to the next. Shards sit on a sphere, in rows of
+ * latitude, alternate rows staggered so no pulse fits between three
+ * neighbours.
  */
 export const WALL = {
   /** Cage radius (world units from the seal centre). */
-  radius: 6.2,
+  radius: 5.6,
   /** Arc between neighbouring shard centres, along a row and between rows. */
-  spacing: 1.5,
+  spacing: 2.05,
   /** Shard scale; its hit radius is scale x SHARD_HIT like any shard. */
-  shardScale: 0.55,
+  shardScale: 0.75,
   /** Per phase: the window's half-width (azimuth) and half-height
-   * (latitude), and how fast the cage turns (rad/s). */
-  phases: [{ halfAz: 26 * DEG, halfLat: 30 * DEG, sweep: 0.22 }],
+   * (latitude); how fast the cage turns (`sweep`, rad/s, azimuth
+   * increasing) and how fast the seal turns (`spin`, rad/s of its Y
+   * rotation; positive moves its facets AGAINST the sweep). */
+  // Phase 1: the cage turns once per 10 s, the seal once per 23 s against
+  // it. Measured (scripts/sim/fight-timing.mjs): an opening every ~7 s,
+  // ~0.75 s long, ~110 deg round from the last one
+  phases: [{ halfAz: 18 * DEG, halfLat: 30 * DEG, sweep: (2 * Math.PI) / 10, spin: (2 * Math.PI) / 23 }],
   /** Facets on the seal's equator (they can look out through the window),
    * lit in this order, one per hit. */
   facets: [2, 7, 9, 3],
@@ -334,13 +353,45 @@ export function wallShardOffset(s: WallSlot, gapAz: number, out: V3, radius = WA
   return out;
 }
 
+/** The seal's own Y rotation at game time t (independent of the cage).
+ * Three's Y rotation by r maps a body-space azimuth p to world p - r. */
+export function bodyRot(ph: WallPhase, t: number, offset = 0): number {
+  return offset + ph.spin * t;
+}
+
+/** World azimuth a body-space facet looks along at body rotation r. */
+export function facetAzimuth(facet: V3, r: number): number {
+  return Math.atan2(facet[2], facet[0]) - r;
+}
+
 /**
- * The body's rotation about Y that turns a facet (body space) to look
- * along world azimuth gapAz. Three's Y rotation by r maps a body-space
- * azimuth p to p - r.
+ * Fill a fight seal's hit target for game time t: cage shards, body
+ * rotation. Shared by the scene (Seal.tsx) and the timing simulation, so
+ * what is measured is what is played.
  */
-export function bodyRotForGap(facet: V3, gapAz: number): number {
-  return Math.atan2(facet[2], facet[0]) - gapAz;
+export function fightTargetAt(
+  out: SealTarget,
+  slots: WallSlot[],
+  ph: WallPhase,
+  t: number,
+  gapOffset: number,
+  rotOffset: number,
+): SealTarget {
+  const gap = gapAzimuth(ph, t, gapOffset);
+  out.rotY = bodyRot(ph, t, rotOffset);
+  for (let j = 0; j < slots.length; j++) {
+    const sh = out.shards[j];
+    if (wallSlotOpen(slots[j], ph)) {
+      sh.r = -1;
+      continue;
+    }
+    wallShardOffset(slots[j], gap, sh.p);
+    sh.p[0] += out.center[0];
+    sh.p[1] += out.center[1];
+    sh.p[2] += out.center[2];
+    sh.r = WALL.shardScale * SHARD_HIT;
+  }
+  return out;
 }
 
 /**

@@ -150,6 +150,13 @@ function addCharge(g: ArchiveState, n: number) {
 function spendCharge(g: ArchiveState) {
   g.charge = 0;
 }
+/** Test hooks (scripts/shot/fight.mjs): the motes and the charge, live. */
+function exposePlay(g: ArchiveState, ms: Mote[]) {
+  const w = window as unknown as { __archiveMotes?: Mote[]; __archiveCharge?: () => number };
+  w.__archiveMotes = ms;
+  w.__archiveCharge = () => g.charge;
+}
+
 function setStartCharge(g: ArchiveState) {
   if (!START_CHARGE) return;
   g.charge = START_CHARGE;
@@ -272,8 +279,10 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
       started.current = true;
       setStartCharge(g);
     }
-    motes.current ??= createMotes(SEALS.map((s) => s.pos));
+    // A fight's motes lie in a band well outside its firing ring (game.ts)
+    motes.current ??= createMotes(SEALS.map((s) => s.pos), 2024, SEALS.map((_, i) => SEAL.fight.includes(i)));
     const ms = motes.current;
+    if (t === dt) exposePlay(g, ms);
     const cam = state.camera;
     const player: V3 = [cam.position.x, cam.position.y, cam.position.z];
 
