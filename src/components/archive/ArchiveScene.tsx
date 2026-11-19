@@ -20,6 +20,20 @@ import Reassembly from "./Reassembly";
 import StudioEnvironment from "@/components/crystal/StudioEnvironment";
 import { timed } from "@/components/scene/costs";
 import { projects } from "@/content/projects";
+import { isReadyOnScreen } from "@/components/scene/warm";
+
+/**
+ * The seals' glass is linked (real and cheap, plain and instanced): until
+ * then a seal would draw as a flat stand-in, so the Archive keeps its
+ * curtain down (Archive.tsx). Plain module state: read by the DOM side.
+ */
+export const sealGlassState = { ready: false, listeners: new Set<() => void>() };
+function setSealGlassReady() {
+  if (sealGlassState.ready) return;
+  sealGlassState.ready = true;
+  (window as unknown as { __sealGlassReadyAt?: number }).__sealGlassReadyAt = performance.now();
+  sealGlassState.listeners.forEach((l) => l());
+}
 
 /** Longest frame fed to the flight; a hitch never fast-forwards. */
 const MAX_DT = 1 / 20;
@@ -661,6 +675,11 @@ function HudDriver({ game, hud }: { game: React.RefObject<ArchiveState>; hud: Re
   return null;
 }
 
+/** Module helper (React-compiler rules forbid writing a material's userData in a callback body). */
+function markEarly(m: THREE.Material) {
+  m.userData.warmEarly = true;
+}
+
 export interface ArchiveSceneProps {
   input: React.RefObject<InputState>;
   reduced: boolean;
@@ -683,22 +702,46 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
   const [shardGlass, setShardGlass] = useState<THREE.Material | null>(null);
   const [cheapSeal, setCheapSeal] = useState<THREE.Material | null>(null);
   const [cheapShard, setCheapShard] = useState<THREE.Material | null>(null);
+  // userData.warmEarly: the seal glass compiles first in the Archive's
+  // warm-up and is never dropped from it (scene/warm.ts)
   const holdSealGlass = useCallback((m: unknown) => {
     applyCrystalShader(m as THREE.Material | null, SEAL_RIM);
+    if (m) markEarly(m as THREE.Material);
     if (m) setSealGlass(m as THREE.Material);
   }, []);
   const holdShardGlass = useCallback((m: unknown) => {
     applyCrystalShader(m as THREE.Material | null, SHARD_RIM);
+    if (m) markEarly(m as THREE.Material);
     if (m) setShardGlass(m as THREE.Material);
   }, []);
   const holdCheapSeal = useCallback((m: THREE.Material | null) => {
     applyCrystalShader(m, SEAL_RIM);
+    if (m) markEarly(m);
     if (m) setCheapSeal(m);
   }, []);
   const holdCheapShard = useCallback((m: THREE.Material | null) => {
     applyCrystalShader(m, SHARD_RIM);
+    if (m) markEarly(m);
     if (m) setCheapShard(m);
   }, []);
+  // Curtain: poll until every seal material is linked for the screen, in
+  // the variant each draws in (bodies plain, shards instanced)
+  useEffect(() => {
+    if (!sealGlass || !shardGlass || !cheapSeal || !cheapShard) return;
+    let raf = 0;
+    const poll = () => {
+      if (
+        isReadyOnScreen(sealGlass, false) && isReadyOnScreen(cheapSeal, false) &&
+        isReadyOnScreen(shardGlass, true) && isReadyOnScreen(cheapShard, true)
+      ) {
+        setSealGlassReady();
+        return;
+      }
+      raf = requestAnimationFrame(poll);
+    };
+    raf = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(raf);
+  }, [sealGlass, shardGlass, cheapSeal, cheapShard]);
   return (
     <>
       <color attach="background" args={[VOID.fog]} />
@@ -719,15 +762,17 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
       <mesh visible={false} userData={{ warm: true }}>
         <MeshTransmissionMaterial {...glassProps} buffer={backdrop.texture} thickness={thicknessFor(SEAL_SIZE)} resolution={UNUSED_FBO} ref={holdSealGlass} />
       </mesh>
-      <mesh visible={false} userData={{ warm: true }}>
+      {/* Shards draw instanced: their holder is instanced too, so the
+          program warmed is the one the cages use */}
+      <instancedMesh args={[undefined, undefined, 1]} visible={false} userData={{ warm: true }}>
         <MeshTransmissionMaterial {...shardProps} buffer={backdrop.texture} thickness={thicknessFor(1.2, true)} resolution={UNUSED_FBO} flatShading ref={holdShardGlass} />
-      </mesh>
+      </instancedMesh>
       <mesh visible={false} userData={{ warm: true }}>
         <meshPhysicalMaterial {...cheapProps} ref={holdCheapSeal} />
       </mesh>
-      <mesh visible={false} userData={{ warm: true }}>
+      <instancedMesh args={[undefined, undefined, 1]} visible={false} userData={{ warm: true }}>
         <meshPhysicalMaterial {...cheapProps} flatShading ref={holdCheapShard} />
-      </mesh>
+      </instancedMesh>
       {sealGlass && shardGlass && cheapSeal && cheapShard && SEALS.map((spot, i) => {
         const pr = projects[spot.project];
         return (

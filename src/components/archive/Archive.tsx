@@ -5,7 +5,11 @@ import { createPortal } from "react-dom";
 import Swap from "@/components/ui/Swap";
 import { Canvas, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import ArchiveScene from "./ArchiveScene";
+import ArchiveScene, { sealGlassState } from "./ArchiveScene";
+import { VOID } from "./layout";
+
+/** The curtain never holds longer than this (s): a stand-in beats a wall. */
+const CURTAIN_MAX_S = 15;
 import { FIRE_KEYS, FLIGHT_KEYS, TAP_MS, TAP_PX, createInput, setPointer, type InputState } from "./input";
 import { createArchiveState, createHudEls, type ArchiveState, type HudEls } from "./archiveState";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
@@ -92,6 +96,19 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
   const [lowPower] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
   /** The full control list, behind the "?" in the corner. */
   const [help, setHelp] = useState(false);
+  // Curtain: the void's own colour until the seal glass is linked, so the
+  // first seal a visitor sees is glass, never its flat stand-in
+  const [glassReady, setGlassReady] = useState(() => sealGlassState.ready);
+  useEffect(() => {
+    const done = () => setGlassReady(true);
+    sealGlassState.listeners.add(done);
+    const cap = window.setTimeout(done, CURTAIN_MAX_S * 1000);
+    if (sealGlassState.ready) queueMicrotask(done);
+    return () => {
+      sealGlassState.listeners.delete(done);
+      window.clearTimeout(cap);
+    };
+  }, []);
   const helpRef = useRef(false);
   useEffect(() => {
     helpRef.current = help;
@@ -251,6 +268,17 @@ export default function Archive({ rootRef, active, open, onWake }: ArchiveProps)
           className="pointer-events-none absolute inset-0"
           style={{ background: "radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(4,2,20,0.55) 100%)" }}
         />
+      </div>
+
+      {/* Curtain over the void until the seal glass is linked; lifts on
+          the entrance curve */}
+      <div
+        aria-hidden="true"
+        data-on={glassReady ? undefined : ""}
+        className="archive-curtain pointer-events-none absolute inset-0 z-[5] grid place-items-center opacity-0 data-[on]:opacity-100"
+        style={{ backgroundColor: VOID.fog, transition: "opacity var(--dur-standard) var(--ease-entrance)" }}
+      >
+        <span className="font-mono text-label uppercase tracking-[0.2em] text-white/60">Assembling the archive</span>
       </div>
 
       {/* HUD: compass arc toward the nearest unfreed seal; reticle whose

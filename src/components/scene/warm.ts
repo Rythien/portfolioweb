@@ -305,6 +305,19 @@ function keyOf(m: THREE.Material, kind: Kind, transparent: boolean, instanced: b
 function isReady(m: THREE.Material, key: string): boolean {
   return ready.get(m)?.has(key) ?? false;
 }
+/**
+ * True once the material's on-screen program is linked (the variant for an
+ * instanced or a plain draw). The Archive holds its curtain on this for
+ * the seal glass, so the first frame a visitor sees is glass.
+ */
+export function isReadyOnScreen(m: THREE.Material, instanced: boolean): boolean {
+  return isReady(m, keyOf(m, "screen", m.transparent, instanced));
+}
+
+/** userData.warmEarly: compiled ahead of everything else in its phase,
+ * and never dropped when the pre-warm budget runs out. */
+const EARLY = -40;
+
 function markReady(m: THREE.Material, key: string) {
   let s = ready.get(m);
   if (!s) ready.set(m, (s = new Set()));
@@ -614,7 +627,7 @@ export function guardScene(scene: THREE.Scene, gl: THREE.WebGLRenderer, opts: Gu
           return m;
         }
         // userData.warmFirst (the marquee): the hero's main content, ahead of the rest
-        const prio = base - (m.userData.warmFirst ? 5 : 0);
+        const prio = m.userData.warmEarly ? EARLY : base - (m.userData.warmFirst ? 5 : 0);
         queueMaterial({ gl, object: o, material: m, scene, camera, kind, transparent: m.transparent }, opts.phase, prio + (isLit(m) ? 0.5 : 0), false);
         if (isLit(m)) {
           const s = standInFor(m);
@@ -703,7 +716,8 @@ export function prewarmScene(
       for (const kind of kinds) {
         // One variant: the one the material is in (crystal glass is always
         // transparent, see applyCrystalShader)
-        queueMaterial({ gl, object: o, material: m, scene, camera, kind, transparent: m.transparent }, opts.phase, prio + (isLit(m) ? 0.5 : 0), true);
+        const early = !!m.userData.warmEarly;
+        queueMaterial({ gl, object: o, material: m, scene, camera, kind, transparent: m.transparent }, opts.phase, (early ? EARLY : prio) + (isLit(m) ? 0.5 : 0), !early);
       }
     }
   });
