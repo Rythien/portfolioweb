@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  CHARGE_FULL, ENDING, HITS_TO_FREE, MOTES, PULSE, createMotes, endingDue, nextFacet, releasePulse, resolveFacetHit, stepMotes, stepPulse,
+  CHARGE_FULL, ENDING, HITS_TO_FREE, MOTES, PULSE, SHARD_HIT, WALL, bodyRotForGap, createMotes, endingDue, nextFacet, releasePulse,
+  resolveFacetHit, stepMotes, stepPulse, wallShardOffset, wallSlotOpen, wallSlots,
   type SealTarget, type V3,
 } from "./game.ts";
 
@@ -120,4 +121,99 @@ test("the ending waits for all three, then for the last panel or the timeout", (
   assert.equal(endingDue(true, 10, false, 10 + ENDING.wait - 0.1), false, "waits after the last freeing");
   assert.equal(endingDue(true, 10, true, 10.5), true, "floating into the last panel starts it at once");
   assert.equal(endingDue(true, 10, false, 10 + ENDING.wait), true, "or the wait runs out");
+});
+
+/* ── Shield wall ──────────────────────────────────────────────── */
+
+const RADII: V3 = [2.94, 3.59, 2.94];
+/** An equatorial facet in body space, as on the real seals. */
+const EQ_FACET: V3 = [2.9, 0.05, 0.4];
+
+/** A walled seal at the origin with its window looking along gapAz. */
+function walled(gapAz: number, phase = 0): SealTarget {
+  const ph = WALL.phases[phase];
+  const shards = wallSlots()
+    .filter((s) => !wallSlotOpen(s, ph))
+    .map((s) => ({ p: wallShardOffset(s, gapAz, [0, 0, 0]), r: WALL.shardScale * SHARD_HIT }));
+  return { center: [0, 0, 0], rotY: bodyRotForGap(EQ_FACET, gapAz), radii: RADII, facet: EQ_FACET, shards, freed: false };
+}
+
+/** The facet's world position on a walled seal (body turns about Y). */
+function facetWorld(t: SealTarget): V3 {
+  const c = Math.cos(t.rotY), s = Math.sin(t.rotY);
+  return [t.facet[0] * c + t.facet[2] * s, t.facet[1], -t.facet[0] * s + t.facet[2] * c];
+}
+
+test("the pulse is a projectile: about 18 units/s, so a long shot takes time", () => {
+  assert.ok(PULSE.speed >= 15 && PULSE.speed <= 20);
+  const p = releasePulse([0, 0, 0], [0, 0, -1]);
+  stepPulse(p, 0.5, []);
+  assert.ok(Math.abs(p.travelled - PULSE.speed * 0.5) < 0.3);
+});
+
+test("the body turns so the lit facet looks out through the window", () => {
+  for (const gap of [0, 1, 2.5, -2]) {
+    const f = facetWorld(walled(gap));
+    const az = Math.atan2(f[2], f[0]);
+    assert.ok(Math.abs(Math.atan2(Math.sin(az - gap), Math.cos(az - gap))) < 1e-6, `gap ${gap}: facet at ${az}`);
+  }
+});
+
+test("a pulse through the window cracks the facet", () => {
+  for (const gap of [0, 0.9, -2.2]) {
+    const t = walled(gap);
+    const f = facetWorld(t);
+    const out: V3 = [Math.cos(gap) * 16, 0.4, Math.sin(gap) * 16];
+    const h = fly(out, [f[0] - out[0], f[1] - out[1], f[2] - out[2]], [t]);
+    assert.equal(h?.kind, "facet", `gap ${gap}`);
+  }
+});
+
+/** First point where the segment o -> a meets the sphere of radius r at the origin. */
+function crossing(o: V3, a: V3, r: number): V3 {
+  const d: V3 = [a[0] - o[0], a[1] - o[1], a[2] - o[2]];
+  const A = d[0] ** 2 + d[1] ** 2 + d[2] ** 2;
+  const B = 2 * (o[0] * d[0] + o[1] * d[1] + o[2] * d[2]);
+  const C = o[0] ** 2 + o[1] ** 2 + o[2] ** 2 - r * r;
+  const k = (-B - Math.sqrt(Math.max(0, B * B - 4 * A * C))) / (2 * A);
+  return [o[0] + d[0] * k, o[1] + d[1] * k, o[2] + d[2] * k];
+}
+
+test("the cage is closed: a shot that crosses it outside the window never reaches the facet", () => {
+  // 600 shots from all round the seal, each aimed at the facet (or near it)
+  const gap = 0.7;
+  const t = walled(gap);
+  const f = facetWorld(t);
+  const ph = WALL.phases[0];
+  let s = 7;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  let blocked = 0;
+  for (let i = 0; i < 600; i++) {
+    const lat = Math.asin(2 * rnd() - 1);
+    const az = gap + (rnd() * 2 - 1) * Math.PI;
+    const o: V3 = [16 * Math.cos(lat) * Math.cos(az), 16 * Math.sin(lat), 16 * Math.cos(lat) * Math.sin(az)];
+    const aim: V3 = [f[0] + (rnd() - 0.5), f[1] + (rnd() - 0.5), f[2] + (rnd() - 0.5)];
+    // Where the path crosses the cage: a shot through the window (with a
+    // margin of one shard spacing) may legitimately land
+    const x = crossing(o, aim, WALL.radius);
+    const xAz = Math.atan2(Math.sin(Math.atan2(x[2], x[0]) - gap), Math.cos(Math.atan2(x[2], x[0]) - gap));
+    const xLat = Math.asin(x[1] / WALL.radius);
+    const m = WALL.spacing / WALL.radius;
+    if (Math.abs(xAz) < ph.halfAz + m && Math.abs(xLat) < ph.halfLat + m) continue;
+    const rel = xAz;
+    const h = fly(o, [aim[0] - o[0], aim[1] - o[1], aim[2] - o[2]], [t]);
+    assert.notEqual(h?.kind, "facet", `shot crossing the cage at lat ${xLat.toFixed(2)} az ${rel.toFixed(2)} reached the facet`);
+    if (h?.kind === "shard") blocked++;
+  }
+  assert.ok(blocked > 300, `the wall takes most shots (${blocked})`);
+
+});
+
+test("when the window has turned away, a shot at the facet's old place hits the wall", () => {
+  const before = walled(0);
+  const f = facetWorld(before);
+  const out: V3 = [16, 0.4, 0];
+  const after = walled(1.4);
+  const h = fly(out, [f[0] - out[0], f[1] - out[1], f[2] - out[2]], [after]);
+  assert.equal(h?.kind, "shard");
 });

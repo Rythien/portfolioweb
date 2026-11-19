@@ -5,7 +5,10 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { SEAL, type SealSpot } from "./layout";
 import { sealProgress, sealSlug, type ArchiveState, type SealState } from "./archiveState";
-import { ENDING, FREE, type SealTarget, type V3 } from "./game";
+import {
+  ENDING, FREE, SHARD_HIT, WALL, bodyRotForGap, gapAzimuth, wallShardOffset, wallSlotOpen, wallSlots,
+  type SealTarget, type V3, type WallSlot,
+} from "./game";
 import type { Project } from "@/content/projects";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
 import { timed } from "@/components/scene/costs";
@@ -144,6 +147,40 @@ function innerGlowTexture(): THREE.CanvasTexture {
   _glow = new THREE.CanvasTexture(c);
   _glow.colorSpace = THREE.SRGBColorSpace;
   return _glow;
+}
+
+/** A white radial glow, tinted per sprite (the window's lit edge). */
+let _edge: THREE.CanvasTexture | null = null;
+function edgeGlowTexture(): THREE.CanvasTexture {
+  if (_edge) return _edge;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const x = c.getContext("2d")!;
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.3, "rgba(255,255,255,0.55)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+  _edge = new THREE.CanvasTexture(c);
+  _edge.colorSpace = THREE.SRGBColorSpace;
+  return _edge;
+}
+
+/**
+ * Points around the window's rim, in cage space with the window looking
+ * along azimuth 0: its two upright edges and its sill and lintel, a
+ * little outside the opening so they sit on the cut shards.
+ */
+function windowRim(): WallSlot[] {
+  const ph = WALL.phases[0];
+  const step = (WALL.spacing * 0.5) / WALL.radius;
+  const az = ph.halfAz + step * 0.4;
+  const lat = ph.halfLat + step * 0.4;
+  const out: WallSlot[] = [];
+  for (let l = -lat; l <= lat + 1e-6; l += step) out.push({ lat: l, az: -az }, { lat: l, az });
+  for (let a = -az + step; a < az - 1e-6; a += step) out.push({ lat: -lat, az: a }, { lat, az: a });
+  return out;
 }
 
 /** Project covers, created once with the right colour space (they stream in). */
@@ -393,6 +430,8 @@ const _s = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _end = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _wo: V3 = [0, 0, 0];
+const _fv: V3 = [0, 0, 0];
 
 /** A brighter rim than the hero's: it has to separate a seal from violet fog at any distance. */
 export const SEAL_RIM = { intensity: 1.1, power: 2.6 };
@@ -418,6 +457,9 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
   const panelText = useRef<THREE.MeshBasicMaterial>(null);
   const panelGlow = useRef<THREE.Sprite>(null);
   const flash = useRef<THREE.Sprite>(null);
+  /** The window's lit rim (fights only), turned with the cage. */
+  const rimGroup = useRef<THREE.Group>(null);
+  const rimSprites = useRef<(THREE.Sprite | null)[]>([]);
   /** Panel art is fetched when the seal is freed, not up front. */
   const panelTex = useRef<{ cover: THREE.Texture; text: THREE.CanvasTexture } | null>(null);
   /** Last shard positions (local) and scale, so the ending converges from where they are. */
@@ -428,7 +470,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
     rotY: 0,
     radii: SEAL_RADII,
     facet: [0, 0, 1],
-    shards: Array.from({ length: SEAL.orbiters }, () => ({ p: [0, 0, 0] as V3, r: 0.5 })),
+    shards: Array.from({ length: SEAL.fight.includes(index) ? wallSlots().length : SEAL.orbiters }, () => ({ p: [0, 0, 0] as V3, r: 0.5 })),
     freed: false,
   });
   const coverTex = useMemo(() => timed("seal: cover texture", () => coverTexture(cover)), [cover]);
@@ -437,7 +479,12 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
   const geo = useMemo(() => timed("seal: geometry", () => sealGeometry(101 + index * 37)), [index]);
   // Every facet's overlay, built once: the lit one moves after each hit
   const facets = useMemo(() => timed("seal: facets", () => Array.from({ length: 12 }, (_, f) => facetGeometry(geo, f))), [geo]);
-  const orbiters = useMemo(() => timed("seal: orbiters", () => makeOrbiters(900 + index * 53)), [index]);
+  const fight = SEAL.fight.includes(index);
+  // A fight is walled in; the other seals keep their loose orbiters
+  const orbiters = useMemo(() => timed("seal: orbiters", () => (fight ? [] : makeOrbiters(900 + index * 53))), [index, fight]);
+  const slots = useMemo(() => (fight ? wallSlots() : []), [fight]);
+  const rim = useMemo(() => (fight ? windowRim() : []), [fight]);
+  const edgeTex = useMemo(() => (fight ? edgeGlowTexture() : null), [fight]);
   const fragments = useMemo(() => timed("seal: fragments", () => makeFragments(1300 + index * 71)), [index]);
   const facetUniforms = useMemo(
     () => ({
@@ -453,7 +500,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
   // backdrop the glass refracts; the cover, glow and orbiters are in it
   useEffect(() => {
     // The panel too: nothing refracts it (the glass is gone by then)
-    const hide = [glass.current, edges.current, facetMesh.current, ring.current, cracks.current, panel.current, flash.current].filter(Boolean) as THREE.Object3D[];
+    const hide = [glass.current, edges.current, facetMesh.current, ring.current, cracks.current, panel.current, flash.current, rimGroup.current].filter(Boolean) as THREE.Object3D[];
     registerSeal(registry, index, body.current, hide);
     return () => unregisterSeal(registry, index, hide);
   }, [registry, index]);
@@ -479,7 +526,21 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
     wearMaterial(glass.current, real ? glassMaterial : cheapGlassMaterial);
     wearMaterial(swarm.current, real ? shardMaterial : cheapShardMaterial);
 
-    if (body.current) {
+    // A fight: the cage turns, carrying its window round, and the body
+    // turns with it so the lit facet looks out through the window
+    const phase = WALL.phases[Math.min(s.hits, WALL.phases.length - 1)];
+    const gapAz = gapAzimuth(phase, FREEZE ? 0 : state.t, SEAL.gapOffset[index] ?? 0);
+    if (body.current && fight && !s.freed) {
+      const fc = facets[s.litFacet % facets.length].center;
+      _fv[0] = fc.x;
+      _fv[1] = fc.y;
+      _fv[2] = fc.z;
+      const want = bodyRotForGap(_fv, gapAz);
+      const cur = body.current.rotation.y;
+      const d = Math.atan2(Math.sin(want - cur), Math.cos(want - cur));
+      // A new facet after a hit swings round to the window; otherwise locked
+      body.current.rotation.y = Math.abs(d) < 1e-3 ? want : cur + d * (1 - Math.exp(-5 * delta));
+    } else if (body.current) {
       body.current.rotation.y += delta * 0.08 * k * (index % 2 ? -1 : 1);
       body.current.position.y = reduced || FREEZE ? 0 : Math.sin(t * 0.4 + index) * 0.25;
     }
@@ -539,14 +600,32 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
     // Shards: orbiters fly out and slow to a drift when freed; the body's
     // own fragments burst from its surface; the ending gathers them all
     const n = orbiters.length;
+    const W = slots.length;
     const ang = (angles.current ??= orbiters.map((o) => o.phase));
     const tg = target.current;
     const sw = swarm.current;
     const local = end ? _end.set(end.point[0] - spot.pos[0], end.point[1] - spot.pos[1], end.point[2] - spot.pos[2]) : null;
-    if (end && !endFrom.current) endFrom.current = Array.from({ length: n + BURST }, () => new THREE.Vector3());
-    for (let i = 0; i < n + BURST; i++) {
+    if (end && !endFrom.current) endFrom.current = Array.from({ length: n + BURST + W }, () => new THREE.Vector3());
+    for (let i = 0; i < n + BURST + W; i++) {
       let scale: number;
-      if (i < n) {
+      if (i >= n + BURST) {
+        // The shield wall: a closed cage but for the window
+        const j = i - n - BURST;
+        const slot = slots[j];
+        const open = wallSlotOpen(slot, phase);
+        wallShardOffset(slot, gapAz, _wo, WALL.radius * (1 + (FREE.flyOut - 1) * fly));
+        _p.set(_wo[0], _wo[1] + by, _wo[2]);
+        // Each shard points out of the cage, with a slow wobble of its own
+        _e.set(slot.lat + Math.sin(t * 0.6 + j) * 0.15 * k, -(slot.az + gapAz), (j % 7) * 0.4 + t * 0.2 * k);
+        // Freed: the cage flies out and thins, so the panel reads
+        scale = open ? 0 : WALL.shardScale * (1 - 0.65 * fly);
+        const sh = tg.shards[j];
+        sh.p[0] = spot.pos[0] + _p.x;
+        sh.p[1] = spot.pos[1] + _p.y;
+        sh.p[2] = spot.pos[2] + _p.z;
+        // An open slot never blocks
+        sh.r = open ? -1 : scale * SHARD_HIT;
+      } else if (i < n) {
         const o = orbiters[i];
         ang[i] += delta * o.speed * k * (1 - 0.7 * fly);
         const r = o.radius * (1 + (FREE.flyOut - 1) * fly);
@@ -557,7 +636,7 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
         sh.p[0] = spot.pos[0] + _p.x;
         sh.p[1] = spot.pos[1] + _p.y;
         sh.p[2] = spot.pos[2] + _p.z;
-        sh.r = o.scale * 1.15;
+        sh.r = o.scale * SHARD_HIT;
       } else {
         const fr = fragments[i - n];
         const d = SEAL.radius * 0.6 + (fr.out - SEAL.radius * 0.6) * fly;
@@ -582,6 +661,16 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
       }
     }
     if (sw) sw.instanceMatrix.needsUpdate = true;
+
+    // The window's rim: lit so the opening reads from anywhere, turned
+    // with the cage, breathing; gone once the seal is free
+    if (rimGroup.current) {
+      rimGroup.current.visible = fight && !s.freed;
+      rimGroup.current.rotation.y = -gapAz;
+      rimGroup.current.position.y = by;
+      const breathe = reduced ? 0.8 : 0.68 + 0.22 * Math.sin(t * 2.4);
+      for (const sp of rimSprites.current) if (sp) (sp.material as THREE.SpriteMaterial).opacity = breathe;
+    }
 
     // Cracks: rebuilt when a facet hit adds one
     if (cracks.current && s.cracks.length !== crackCount.current) {
@@ -676,7 +765,20 @@ export default function Seal({ spot, index, cover, label, project, reduced, glas
       </mesh>
       {/* Shards in orbit: three tilted rings, the middle one counter-rotating */}
       {_shardGeo && (
-        <instancedMesh ref={swarm} args={[_shardGeo, shardMaterial, orbiters.length + BURST]} frustumCulled={false} />
+        <instancedMesh ref={swarm} args={[_shardGeo, shardMaterial, orbiters.length + BURST + slots.length]} frustumCulled={false} />
+      )}
+      {/* The window's lit rim (fights) */}
+      {edgeTex && (
+        <group ref={rimGroup}>
+          {rim.map((r, i) => {
+            const o = wallShardOffset(r, 0, [0, 0, 0], WALL.radius * 1.02);
+            return (
+              <sprite key={i} ref={(el) => { rimSprites.current[i] = el; }} position={o} scale={[0.9, 0.9, 1]} renderOrder={3}>
+                <spriteMaterial map={edgeTex} color="#ffd98a" transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} toneMapped={false} />
+              </sprite>
+            );
+          })}
+        </group>
       )}
       {/* The burst: one white-violet flash as the glass gives way */}
       <sprite ref={flash} visible={false} renderOrder={4}>

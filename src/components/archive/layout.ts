@@ -33,6 +33,12 @@ export const SEAL = {
   orbiters: 15,
   /** Which facet is lit (the pulse target), per seal. */
   litFacet: [0, 5, 9],
+  /** Seals that are fights: a shield wall (game.ts WALL) in place of the
+   * loose orbiters. Archive v2 is being built one seal at a time. */
+  fight: [0],
+  /** Where each fighting seal's window starts (rad), so the three do not
+   * open the same way. */
+  gapOffset: [Math.PI / 2, 0, Math.PI],
 };
 
 /** Test hook (archiveat=<i>): a spot this far in front of seal i, facing it. */

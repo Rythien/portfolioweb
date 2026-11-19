@@ -410,8 +410,17 @@ function Pilot({ input, reduced, game, registry }: PilotProps) {
 
   // Test hook: Playwright reads the flight state (never used by the UI)
   useEffect(() => {
-    const w = window as unknown as { __archiveFlight?: FlightState; __archiveAim?: (i: number) => void };
+    const w = window as unknown as {
+      __archiveFlight?: FlightState;
+      __archiveAim?: (i: number) => void;
+      __archiveTargets?: SealRegistry["targets"];
+      __archiveT?: () => number;
+    };
     w.__archiveFlight = flight.current;
+    // What a pulse can hit (live) and the game clock: a scripted pilot can
+    // lead a moving facet (scripts/shot/fight.mjs)
+    w.__archiveTargets = registry.targets;
+    w.__archiveT = () => game.current.t;
     // Re-park facing seal i's lit facet (it moves after every hit)
     w.__archiveAim = (i: number) => {
       aimIdx.current = i;
@@ -420,9 +429,11 @@ function Pilot({ input, reduced, game, registry }: PilotProps) {
     return () => {
       delete w.__archiveFlight;
       delete w.__archiveAim;
+      delete w.__archiveTargets;
+      delete w.__archiveT;
       setPadOpen(0);
     };
-  }, []);
+  }, [registry, game]);
 
   useFrame((state, delta) => {
     // Test hook: frames rendered (Playwright times the handover with it)

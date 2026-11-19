@@ -4,7 +4,7 @@
  * rules live in game.ts.
  */
 import { SEAL, SEALS } from "./layout";
-import { CHARGE_FULL, HITS_TO_FREE, type V3 } from "./game";
+import { CHARGE_FULL, HITS_TO_FREE, WALL, type V3 } from "./game";
 import { projects } from "@/content/projects";
 
 export { CHARGE_FULL, HITS_TO_FREE };
@@ -49,7 +49,8 @@ export function createArchiveState(freed: string[] = []): ArchiveState {
     return {
       hits: was ? HITS_TO_FREE : 0,
       freed: was,
-      litFacet: SEAL.litFacet[i % SEAL.litFacet.length],
+      // A fight lights an equatorial facet: it has to look out through the window
+      litFacet: SEAL.fight.includes(i) ? WALL.facets[0] : SEAL.litFacet[i % SEAL.litFacet.length],
       cracks: [],
       freedAt: was ? -Infinity : -1,
       touched: false,

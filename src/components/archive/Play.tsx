@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import {
-  CHARGE_FULL, ENDING, MOTES, createMotes, endingDue, nextFacet, releasePulse, resolveFacetHit, stepMotes, stepPulse,
+  CHARGE_FULL, ENDING, MOTES, WALL, createMotes, endingDue, nextFacet, releasePulse, resolveFacetHit, stepMotes, stepPulse,
   type Hit, type Mote, type Pulse, type V3,
 } from "./game";
 import { sealSlug, type ArchiveState, type HudEls } from "./archiveState";
@@ -76,7 +76,8 @@ function applyHit(g: ArchiveState, hit: Hit, reduced: boolean): "crack" | "freed
     g.shake = reduced ? 0 : 0.6;
     return r;
   }
-  s.litFacet = nextFacet(s.litFacet, s.hits);
+  // A fight lights the next equatorial facet (it must face the window)
+  s.litFacet = SEAL.fight.includes(hit.seal) ? WALL.facets[s.hits % WALL.facets.length] : nextFacet(s.litFacet, s.hits);
   g.shake = reduced ? 0 : 0.35;
   return r;
 }
@@ -184,6 +185,47 @@ const MOTE_FRAG = /* glsl */ `
   }
 `;
 
+/* ── Shatter: a blocked pulse breaks into sparks ───────────────── */
+
+const SHATTER_SLOTS = 3;
+const SPARKS = 26;
+/** Seconds a shatter lasts; sparks decelerate and fade over it. */
+const SHATTER_LIFE = 0.55;
+/** Spark directions, fixed: a cone thrown back off the shard, plus scatter. */
+const SPARK_DIRS: V3[] = (() => {
+  let s = 911;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  return Array.from({ length: SPARKS }, () => {
+    const th = Math.acos(2 * rnd() - 1);
+    const ph = rnd() * Math.PI * 2;
+    const sp = 0.5 + rnd();
+    return [Math.sin(th) * Math.cos(ph) * sp, Math.cos(th) * sp, Math.sin(th) * Math.sin(ph) * sp] as V3;
+  });
+})();
+
+const SPARK_VERT = /* glsl */ `
+  attribute float aAlpha;
+  uniform float uPx;
+  varying float vA;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = uPx * 190.0 / max(0.3, -mv.z);
+    vA = aAlpha;
+  }
+`;
+const SPARK_FRAG = /* glsl */ `
+  varying float vA;
+  void main() {
+    vec2 q = abs(gl_PointCoord - 0.5) * 2.0;
+    // A small hard diamond: a chip of the pulse, not a soft mote
+    float d = q.x + q.y;
+    float a = smoothstep(1.0, 0.6, d) * vA;
+    // Hot white-gold when fresh, cooling to violet: reads on violet fog
+    gl_FragColor = vec4(mix(vec3(0.8, 0.72, 1.0), vec3(1.4, 1.25, 0.95), vA) * a, 1.0);
+  }
+`;
+
 interface PlayProps {
   input: React.RefObject<InputState>;
   game: React.RefObject<ArchiveState>;
@@ -212,6 +254,12 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
   const tex = useMemo(() => timed("archive: mote textures", () => textures()), []);
   const buffers = useMemo(() => ({ pos: new Float32Array(MOTE_COUNT * 3), alpha: new Float32Array(MOTE_COUNT) }), []);
   const uniforms = useMemo(() => ({ uPx: { value: 1 }, uTime: { value: 0 } }), []);
+  const sparkGeo = useRef<THREE.BufferGeometry>(null);
+  const sparkBuf = useMemo(() => ({ pos: new Float32Array(SHATTER_SLOTS * SPARKS * 3), alpha: new Float32Array(SHATTER_SLOTS * SPARKS) }), []);
+  const sparkUniforms = useMemo(() => ({ uPx: { value: 1 } }), []);
+  const sparkMat = useRef<THREE.ShaderMaterial>(null);
+  /** Live shatters: where, which way the pulse was going, when. */
+  const shatters = useRef(Array.from({ length: SHATTER_SLOTS }, () => ({ t0: -1, at: [0, 0, 0] as V3, dir: [0, 0, 1] as V3 })));
 
   useFrame((state, delta) => {
     const g = game.current;
@@ -270,6 +318,13 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
         const k = slot < 0 ? 0 : slot;
         impactState.current[k] = { t0: t, kind: hit.kind, alive: true };
         impacts.current[k]?.position.set(...hit.at);
+        // Blocked by a shard: the pulse visibly breaks up where it struck
+        if (hit.kind === "shard" || hit.kind === "body") {
+          const sl = shatters.current.reduce((a, b) => (b.t0 < a.t0 ? b : a));
+          sl.t0 = t;
+          sl.at = [...hit.at] as V3;
+          sl.dir = [...p.dir] as V3;
+        }
         pulse.current = null;
       }
     }
@@ -296,12 +351,41 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
         return;
       }
       sp.visible = true;
-      const size = (s.kind === "facet" ? SEAL.radius * 1.6 : 1.6) * (0.2 + 0.8 * Math.sqrt(a));
+      // A blocked pulse gets a tight, hard ring: it broke here
+      const size = (s.kind === "facet" ? SEAL.radius * 1.6 : 3.2) * (0.2 + 0.8 * Math.sqrt(a));
       sp.scale.set(size, size, 1);
       const m = sp.material as THREE.SpriteMaterial;
-      m.opacity = (1 - a) * (s.kind === "facet" ? 1 : 0.5);
-      m.color.set(s.kind === "facet" ? "#ffe2a0" : "#a99bd6");
+      m.opacity = (1 - a) * (s.kind === "facet" ? 1 : 0.9);
+      m.color.set(s.kind === "facet" ? "#ffe2a0" : "#e9ddff");
     });
+
+    // Sparks: thrown back off the shard and scattered, slowing as they fade
+    const sg = sparkGeo.current;
+    if (sg) {
+      const pos = sg.getAttribute("position") as THREE.BufferAttribute;
+      const al = sg.getAttribute("aAlpha") as THREE.BufferAttribute;
+      shatters.current.forEach((sl, si) => {
+        const age = sl.t0 < 0 ? Infinity : t - sl.t0;
+        const a = age / SHATTER_LIFE;
+        // Ease-out travel: fast off the shard, settling (1 - (1 - a)^3)
+        const travel = a >= 1 ? 0 : (1 - Math.pow(1 - a, 3)) * 3.2;
+        for (let k = 0; k < SPARKS; k++) {
+          const d = SPARK_DIRS[k];
+          const idx = si * SPARKS + k;
+          // Recoil: biased back against the pulse's travel
+          pos.setXYZ(
+            idx,
+            sl.at[0] + (d[0] - sl.dir[0] * 0.9) * travel,
+            sl.at[1] + (d[1] - sl.dir[1] * 0.9) * travel,
+            sl.at[2] + (d[2] - sl.dir[2] * 0.9) * travel,
+          );
+          al.setX(idx, a >= 1 ? 0 : (1 - a) * (1 - a));
+        }
+      });
+      pos.needsUpdate = true;
+      al.needsUpdate = true;
+    }
+    if (sparkMat.current) sparkMat.current.uniforms.uPx.value = state.gl.getPixelRatio();
 
     followAudio(g);
 
@@ -338,6 +422,21 @@ export default function Play({ input, game, hud, registry, reduced }: PlayProps)
           uniforms={uniforms}
           vertexShader={MOTE_VERT}
           fragmentShader={MOTE_FRAG}
+        />
+      </points>
+      <points frustumCulled={false}>
+        <bufferGeometry ref={sparkGeo}>
+          <bufferAttribute attach="attributes-position" args={[sparkBuf.pos, 3]} />
+          <bufferAttribute attach="attributes-aAlpha" args={[sparkBuf.alpha, 1]} />
+        </bufferGeometry>
+        <shaderMaterial
+          ref={sparkMat}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          uniforms={sparkUniforms}
+          vertexShader={SPARK_VERT}
+          fragmentShader={SPARK_FRAG}
         />
       </points>
       <sprite ref={head} scale={[2.4, 2.4, 1]} visible={false}>

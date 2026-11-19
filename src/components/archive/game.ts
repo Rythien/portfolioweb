@@ -26,8 +26,9 @@ export const MOTES = {
 };
 
 export const PULSE = {
-  /** Units per second. */
-  speed: 32,
+  /** Units per second: slow enough that distance matters and a moving
+   * target has to be led (about 0.8 s across a 15-unit approach). */
+  speed: 18,
   /** It fizzles out after this far. */
   range: 90,
   /** Collision sampling step along the path. */
@@ -259,6 +260,87 @@ export function stepPulse(p: Pulse, dt: number, seals: SealTarget[]): Hit | null
     if (p.travelled >= PULSE.range) return { kind: "fizzle", seal: -1, at: [...p.pos] as V3 };
   }
   return null;
+}
+
+/* ── The shield wall ──────────────────────────────────────────── */
+
+const DEG = Math.PI / 180;
+
+/**
+ * A fighting seal hides inside a closed cage of shards with one window in
+ * it. The cage turns about the seal's vertical axis, so the window sweeps
+ * round, and the seal turns with it: the lit facet always looks out
+ * through the window. Shards are on a sphere, in rows of latitude,
+ * alternate rows staggered so no pulse fits between three neighbours.
+ */
+export const WALL = {
+  /** Cage radius (world units from the seal centre). */
+  radius: 6.2,
+  /** Arc between neighbouring shard centres, along a row and between rows. */
+  spacing: 1.5,
+  /** Shard scale; its hit radius is scale x SHARD_HIT like any shard. */
+  shardScale: 0.55,
+  /** Per phase: the window's half-width (azimuth) and half-height
+   * (latitude), and how fast the cage turns (rad/s). */
+  phases: [{ halfAz: 26 * DEG, halfLat: 30 * DEG, sweep: 0.22 }],
+  /** Facets on the seal's equator (they can look out through the window),
+   * lit in this order, one per hit. */
+  facets: [2, 7, 9, 3],
+};
+
+/** A shard's hit radius per unit of scale (shared with the orbiters). */
+export const SHARD_HIT = 1.15;
+
+/** One place in the cage: latitude, and azimuth from the window's centre. */
+export interface WallSlot {
+  lat: number;
+  az: number;
+}
+
+/** Every place in the cage (the window is cut out per phase, wallSlotOpen). */
+export function wallSlots(): WallSlot[] {
+  const step = WALL.spacing / WALL.radius;
+  const rows = Math.floor(Math.PI / 2 / step);
+  const out: WallSlot[] = [];
+  for (let k = -rows; k <= rows; k++) {
+    const lat = k * step;
+    const n = Math.max(3, Math.round((2 * Math.PI * WALL.radius * Math.cos(lat)) / WALL.spacing));
+    const off = (Math.abs(k) % 2) * 0.5;
+    for (let i = 0; i < n; i++) out.push({ lat, az: ((i + off) / n) * 2 * Math.PI - Math.PI });
+  }
+  return out;
+}
+
+export type WallPhase = (typeof WALL.phases)[number];
+
+/** Inside the window: no shard there. */
+export function wallSlotOpen(s: WallSlot, ph: WallPhase): boolean {
+  return Math.abs(s.az) < ph.halfAz && Math.abs(s.lat) < ph.halfLat;
+}
+
+/** The window's world azimuth at game time t: angle in the x-z plane,
+ * atan2(z, x). */
+export function gapAzimuth(ph: WallPhase, t: number, offset = 0): number {
+  return offset + ph.sweep * t;
+}
+
+/** World offset (from the seal centre) of a cage slot when the window
+ * looks along gapAz; `radius` lets the freed cage fly out. */
+export function wallShardOffset(s: WallSlot, gapAz: number, out: V3, radius = WALL.radius): V3 {
+  const a = s.az + gapAz;
+  out[0] = radius * Math.cos(s.lat) * Math.cos(a);
+  out[1] = radius * Math.sin(s.lat);
+  out[2] = radius * Math.cos(s.lat) * Math.sin(a);
+  return out;
+}
+
+/**
+ * The body's rotation about Y that turns a facet (body space) to look
+ * along world azimuth gapAz. Three's Y rotation by r maps a body-space
+ * azimuth p to p - r.
+ */
+export function bodyRotForGap(facet: V3, gapAz: number): number {
+  return Math.atan2(facet[2], facet[0]) - gapAz;
 }
 
 /**
