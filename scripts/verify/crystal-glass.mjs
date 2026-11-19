@@ -4,15 +4,16 @@
  * bent but still there, at hero scale and at parked scale. Opaque fails.
  *
  *   node scripts/verify/crystal-glass.mjs [--url=http://localhost:3000]
- *        [--widths=1440,390] [--modes=wake,dream]
+ *        [--widths=1440] [--modes=wake,dream]
  *
  * The parked crystal has nothing of its own behind it (the copy sits above
  * the canvas), so both sizes are compared over the same thing: the hero
  * headline, frozen (crystalfreeze). Parked scale is the hero scale x 0.45,
  * the measured parked/hero radius at 1440 (128 / 288 px), forced with
- * crystalscale. On phones the parked crystal does not exist (it sits out
- * past the hero), so 390 checks hero scale only, and its headline runs
- * along the crystal's lower edge, so the box is inset 5% there (15% on
+ * crystalscale. On phones there is nothing behind the crystal to compare:
+ * it sits above the headline (crystal-phone.mjs checks that) and sits out
+ * About onward, so phones are not run by default. A phone width can still
+ * be passed; its box is inset 5% there (15% on
  * desktop). Each size is captured twice, with the crystal and with
  * crystalview=hidden, and compared on luma:
  *
@@ -29,7 +30,7 @@ import sharp from "sharp";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const base = arg("url", "http://localhost:3000");
-const widths = arg("widths", "1440,390").split(",").map(Number);
+const widths = arg("widths", "1440").split(",").map(Number);
 const modes = arg("modes", "wake,dream").split(",");
 const PARKED_RATIO = 0.45;
 const MIN_PRESENT = 0.35;

@@ -24,6 +24,7 @@ mkdirSync(outDir, { recursive: true });
 
 // [name, selector, offset from the element's top to put at the viewport top]
 const STOPS = [
+  ["hero", "#top", 0],
   ["about", "#about", -40],
   ["disciplines-a", "#disciplines", 60],
   ["disciplines-b", "#disciplines .discipline-row:nth-child(3)", -60],
@@ -47,7 +48,9 @@ for (const mode of ["wake", "dream"]) {
     const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
     await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
     await page.mouse.move(w - 1, h - 1);
-    await page.waitForTimeout(5000);
+    // DREAM's glass compiles later; before that the crystal is the flat
+    // stand-in, which is not what a visitor sees for long
+    await page.waitForTimeout(mode === "dream" ? 15000 : 5000);
     for (const [name, sel, off] of STOPS) {
       if (only && !name.startsWith(only)) continue;
       const y = await page.evaluate(([sel, off]) => {

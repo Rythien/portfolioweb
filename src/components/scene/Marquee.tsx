@@ -9,6 +9,14 @@ import { SITE_DATA } from "@/content/site";
 import { getSectionProgress, useScrollStore } from "@/store/useScrollStore";
 import { patchVeilMaterial, updateVeil } from "./marqueeVeil";
 import { introReveal } from "@/store/useIntroStore";
+import {
+  TEXT_Z,
+  VIS_HEIGHT,
+  MOBILE_TEXT_Y,
+  MOBILE_FONT_SHARE,
+  DESKTOP_FONT_SHARE,
+  LINE_HALF,
+} from "./marqueeLayout";
 
 const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("crystalfreeze");
 
@@ -16,14 +24,8 @@ const HEADLINE_TILE = `${SITE_DATA.hero.headlineLine1}  ${SITE_DATA.hero.headlin
 // Subset of Inter Tight Bold (npm run gen:font): only what the headline can use
 const FONT_URL = "/fonts/inter-tight-bold-subset.woff";
 
-const FBO_HALF_FOV_RAD = (50 / 2) * (Math.PI / 180);
-const FBO_CAM_Z = 6;
-const TEXT_Z = -3;
-const CAM_TO_TEXT = FBO_CAM_Z - TEXT_Z;
-// Phones: headline sits just below the crystal (~66px under centre at 844 tall)
-const MOBILE_TEXT_Y = -0.66;
-/** Half the headline's line box, in font sizes (anchorY middle). */
-const LINE_HALF = 0.6;
+// Camera, plane and sizes: marqueeLayout.ts (the phone crystal reads them
+// to stay above the type)
 /** The entrance clip window, reused every frame: [x0, y0, x1, y1]. */
 const clipBox = [-1e5, 0, 1e5, 0];
 
@@ -41,9 +43,9 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
   const dampState = useRef({ vel: 0 });
   const { size, camera } = useThree();
 
-  const visHeight = 2 * CAM_TO_TEXT * Math.tan(FBO_HALF_FOV_RAD);
+  const visHeight = VIS_HEIGHT;
   const visWidth = visHeight * (size.width / size.height);
-  const fontSize = isMobile ? visHeight * 0.14 : visHeight * 0.22;
+  const fontSize = visHeight * (isMobile ? MOBILE_FONT_SHARE : DESKTOP_FONT_SHARE);
 
   const [tileCount, setTileCount] = useState(6);
 

@@ -9,6 +9,7 @@ import { getSectionProgress } from "@/store/useScrollStore";
 import { useFractureStore } from "@/store/useFractureStore";
 import { ease } from "@/lib/motion";
 import { stepSpring, zetaForOvershoot, type Spring } from "@/motion/spring";
+import { mobileMarqueeTopPx } from "@/components/scene/marqueeLayout";
 
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -128,8 +129,13 @@ const _d = { s: 0, breakVal: 0, fade: 1 };
 
 /** Matches SceneRoot's isMobile breakpoint. */
 export const MOBILE_MAX_PX = 768;
-/** Mobile hero crystal centre, world units above the viewport midline. */
-const MOBILE_HERO_Y = 0.55;
+/** Phones: the most the hero crystal is ever scaled to. */
+const MOBILE_HERO_SCALE_MAX = 0.9;
+/** Phones: clearance between the crystal's bounding sphere and the role
+ * label above it, and the top of the headline's line box below it (the
+ * glyphs start another ~3% of the viewport height lower). */
+const MOBILE_HERO_GAP_ABOVE_PX = 12;
+const MOBILE_HERO_GAP_BELOW_PX = 8;
 /** Crystal scale when parked beside the About/Disciplines copy. */
 const PARK_SCALE = 0.6;
 /** Below this the parked crystal is too small to bother: it fades out. */
@@ -162,6 +168,9 @@ let _copyPxW = 0;
 
 /** About's top in page coordinates (the segment starts as it enters), or -1. */
 let _aboutDocTop = -1;
+/** The hero's role label bottom in page coordinates, or -1 (phones: the
+ * crystal sits between it and the headline). */
+let _heroLabelDocBottom = -1;
 
 function measureCopy() {
   _copyRects = [];
@@ -170,6 +179,8 @@ function measureCopy() {
   const sy = window.scrollY;
   const about = document.getElementById("about");
   _aboutDocTop = about ? about.getBoundingClientRect().top + sy : -1;
+  const label = document.querySelector("#top [data-hero-line]");
+  _heroLabelDocBottom = label ? label.getBoundingClientRect().bottom + sy : -1;
   document.querySelectorAll("[data-crystal-avoid]").forEach((el) => {
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return;
@@ -213,6 +224,19 @@ function fitScalePx(left: number, right: number, y: number, v: View): number {
   const tr = Math.atan(((right - v.pxW / 2) / v.ppu) / v.d);
   const xc = v.d * Math.tan((tl + tr) / 2);
   return (Math.hypot(xc, y, v.d) * Math.sin((tr - tl) / 2)) / _boundR;
+}
+
+/**
+ * Largest scale, and the world y to put it at, whose silhouette fits
+ * between screen y top..bottom at world x (the vertical twin of
+ * fitScalePx).
+ */
+function fitVertPx(top: number, bottom: number, x: number, v: View) {
+  if (bottom <= top) return { y: 0, s: 0 };
+  const tt = Math.atan(((v.pxH / 2 - top) / v.ppu) / v.d);
+  const tb = Math.atan(((v.pxH / 2 - bottom) / v.ppu) / v.d);
+  const y = v.d * Math.tan((tt + tb) / 2);
+  return { y, s: (Math.hypot(x, y, v.d) * Math.sin((tt - tb) / 2)) / _boundR };
 }
 
 /** World x that puts the silhouette's left edge at screen x `left`. */
@@ -381,12 +405,23 @@ export function tickCrystalPose(
   // No usable column: sit out About/Disciplines like narrow viewports
   const noRoom = parkScale < PARK_SCALE_MIN;
   const xPark = Math.max(0.6, xForLeftPx(slotLeft, PARK_Y, Math.max(parkScale, PARK_SCALE_MIN), view));
-  // Phones: centred just under the role label (MOBILE_HERO_Y), its lower
-  // half crossing the marquee as on desktop; it sits out About onward
+  // Phones: above the headline, never on it. The crystal fills the band
+  // between the role label and the marquee's top (less a gap each side),
+  // centred in it, up to MOBILE_HERO_SCALE_MAX; it sits out About onward.
+  // (It used to sit at a fixed y with its lower half across the headline:
+  // at phone size that read as an opaque mass on the type.)
   const mobile = pxW < MOBILE_MAX_PX;
-  const heroX = mobile ? 0 : 0.6;
-  const heroY = mobile ? MOBILE_HERO_Y : 0;
-  const heroScale = mobile ? 0.9 : 1.35;
+  let heroX = 0.6;
+  let heroY = 0;
+  let heroScale = 1.35;
+  if (mobile) {
+    const top = (_heroLabelDocBottom >= 0 ? _heroLabelDocBottom : 152) + MOBILE_HERO_GAP_ABOVE_PX;
+    const bottom = mobileMarqueeTopPx(pxH) - MOBILE_HERO_GAP_BELOW_PX;
+    const fit = fitVertPx(top, bottom, 0, view);
+    heroX = 0;
+    heroY = fit.y;
+    heroScale = Math.min(MOBILE_HERO_SCALE_MAX, fit.s);
+  }
   // Channel progress. Reduced motion: no travel at all, the hero pose,
   // then the parked pose, swapped at the bottom of a fade (pose.fade
   // below) near the START of the segment: it must be parked before
