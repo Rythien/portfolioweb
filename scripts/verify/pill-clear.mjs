@@ -3,7 +3,10 @@
  * The fixed WAKE/DREAM pill never covers a section's last row.
  *
  *   node scripts/verify/pill-clear.mjs [--url=http://localhost:3000]
- *        [--widths=1440,390] [--modes=wake,dream]
+ *        [--widths=1440,1024] [--modes=wake,dream]
+ *
+ * The floating pill exists from lg (1024) up; below that the control is
+ * docked in the header and pill-cover.mjs checks it.
  *
  * For each content section it scrolls the section's end to the bottom of
  * the viewport and requires the lowest line of text in it to end at least
@@ -13,7 +16,7 @@ import { firefox } from "playwright";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const base = arg("url", "http://localhost:3000");
-const widths = arg("widths", "1440,390").split(",").map(Number);
+const widths = arg("widths", "1440,1024").split(",").map(Number);
 const modes = arg("modes", "wake,dream").split(",");
 const SECTIONS = ["about", "disciplines", "works", "recognition", "contact"];
 
@@ -35,7 +38,7 @@ for (const mode of modes) {
       }, id);
       await page.waitForTimeout(900);
       const m = await page.evaluate((id) => {
-        const pill = document.querySelector('[aria-label="Site mode"]').getBoundingClientRect();
+        const pill = [...document.querySelectorAll('[aria-label="Site mode"]')].find((e) => e.getClientRects().length).getBoundingClientRect();
         let low = -Infinity;
         const walk = document.createTreeWalker(document.getElementById(id), NodeFilter.SHOW_TEXT);
         for (let n = walk.nextNode(); n; n = walk.nextNode()) {

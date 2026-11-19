@@ -26,7 +26,7 @@ export default function Home() {
       >
         Skip to main content
       </a>
-      <Header />
+      <Header modeControl />
       <SectionRail />
       <SceneLoader />
       <main id="main-content" className="relative z-[1] block w-full">

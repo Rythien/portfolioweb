@@ -7,8 +7,14 @@ import { useMounted } from "@/utils/useMounted";
 import { useSoundStore } from "@/store/useSoundStore";
 import { initAudioContext, playTick } from "@/hooks/crystalAudio";
 import Swap from "@/components/ui/Swap";
+import ModePill from "@/components/chrome/ModePill";
 
-export default function Header() {
+/**
+ * `modeControl`: the page has a WAKE / DREAM switch (home only). Below lg
+ * it docks here, beside the nav; from lg up the floating pill takes over
+ * (ModePill).
+ */
+export default function Header({ modeControl = false }: { modeControl?: boolean }) {
   const mounted = useMounted();
   const [timeStr, setTimeStr] = useState<string>("--:--");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -67,11 +73,18 @@ export default function Header() {
         <div className="pointer-events-auto">
           <Link
             href="#top"
-            className="hit font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-ink"
+            className="hit whitespace-nowrap font-[family-name:var(--font-sans)] text-sm sm:text-base tracking-tight font-medium text-ink"
           >
             <Swap>{SITE_DATA.brand.name}</Swap>
           </Link>
         </div>
+
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-6">
+        {modeControl && (
+          <div className="pointer-events-auto lg:hidden">
+            <ModePill docked />
+          </div>
+        )}
 
         {/* Desktop Navigation */}
         {/* One magnet group: only the control nearest the pointer leans */}
@@ -108,9 +121,11 @@ export default function Header() {
 
         {/* Mobile */}
         <div className="md:hidden pointer-events-auto flex items-center gap-3">
+          {/* With the mode toggle docked a phone has no room for the
+              clock; it moves into the menu */}
           <div
             aria-live="off"
-            className="font-mono text-label text-ink/80 tabular-nums mr-1"
+            className={`font-mono text-label text-ink/80 tabular-nums mr-1 ${modeControl ? "hidden" : ""}`}
           >
             {mounted ? timeStr : "--:--"}
           </div>
@@ -119,10 +134,11 @@ export default function Header() {
             aria-label="Toggle navigation menu"
             aria-expanded={isMobileMenuOpen}
             aria-controls="mobile-navigation"
-            className="hit pressable px-2 -mr-2 text-ink font-mono text-label"
+            className="hit pressable px-1 -mr-1 sm:px-2 sm:-mr-2 text-ink font-mono text-label"
           >
             <Swap>{isMobileMenuOpen ? "[Close]" : "[Menu]"}</Swap>
           </button>
+        </div>
         </div>
       </div>
 
@@ -134,6 +150,11 @@ export default function Header() {
           className="md:hidden relative pointer-events-auto bg-surface text-ink border-b border-rule px-6 py-8 flex flex-col gap-6 font-mono text-label"
           style={{ mixBlendMode: "normal" }}
         >
+          {modeControl && (
+            <div aria-live="off" className="text-ink/80 tabular-nums">
+              {SITE_DATA.brand.city} · {mounted ? timeStr : "--:--"}
+            </div>
+          )}
           <a
             href="#works"
             onClick={() => setIsMobileMenuOpen(false)}

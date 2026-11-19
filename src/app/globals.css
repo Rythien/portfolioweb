@@ -471,6 +471,14 @@ html.lenis, html.lenis body {
 
 /* ── Section rhythm ───────────────────────────────────────────── */
 
+/* Below lg the mode control is docked in the header (ModePill), so
+   nothing floats over the bottom of the page and no clearance is owed */
+@media (max-width: 63.999rem) {
+  :root {
+    --pill-clear: 0px;
+  }
+}
+
 /* Bottom padding of a content section: the usual rhythm (4/6/8rem) plus
    the pill's clearance, so the last row never ends under the pill */
 .section-end {
@@ -497,7 +505,8 @@ html.lenis, html.lenis body {
 }
 
 .footer-end {
-  padding-bottom: calc(var(--pill-clear) + 1.5rem);
+  /* viewport-fit=cover: the page runs under the iOS home indicator */
+  padding-bottom: calc(var(--pill-clear) + 1.5rem + env(safe-area-inset-bottom));
 }
 
 /* ── Header backdrop ──────────────────────────────────────────── */
@@ -551,6 +560,18 @@ html.lenis, html.lenis body {
 /* WAKE / DREAM pill segments: the press, plus their colours turning over
    with the page on the mode-change curve (Tailwind's transition utilities
    lose to the unlayered .pressable, so the segments used to snap) */
+/* The docked toggle is 36px tall; its segments reach the 44px touch
+   target through an invisible band above and below */
+.mode-pill-seg--docked {
+  position: relative;
+}
+
+.mode-pill-seg--docked::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+}
+
 .pressable.mode-pill-seg {
   transition:
     scale var(--dur-press) var(--ease-entrance),
