@@ -36,7 +36,8 @@ export default function Recognition() {
       <div data-skew className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div className="mb-12 sm:mb-16 flex flex-col sm:flex-row items-baseline gap-6 sm:gap-12">
           <div className="font-mono text-display sm:text-8xl font-medium text-ink tabular-nums tracking-tighter">
-            <Counter value={parseInt(SITE_DATA.recognition.totalAccolades, 10)} padDigits={2} />
+            {/* The count is the list: it cannot drift from what is shown */}
+            <Counter value={SITE_DATA.recognition.items.length} padDigits={2} />
           </div>
           <div className="font-mono text-label uppercase tracking-widest text-ink-muted max-w-xs">
             {SITE_DATA.recognition.accoladesLabel}

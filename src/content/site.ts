@@ -105,7 +105,6 @@ export const SITE_DATA = {
   recognition: {
     sectionNum: "(04)",
     title: "Recognition",
-    totalAccolades: "04",
     accoladesLabel: "Total Distinctions & Milestones",
     items: [
       {
@@ -113,24 +112,6 @@ export const SITE_DATA = {
         project: "Asia e University",
         honor: "Bachelor of Information & Communication Technology (BICT)",
         result: "Graduated with Honors",
-      },
-      {
-        year: "2024",
-        project: "Design Systems & Frontend",
-        honor: "Independent WebGL & Canvas Research",
-        result: "Architectural Showcase",
-      },
-      {
-        year: "2023",
-        project: "Open Source Ecosystem",
-        honor: "Interactive Web Experiments & Component Library",
-        result: "Community Recognition",
-      },
-      {
-        year: "2022",
-        project: "Creative Coding Research",
-        honor: "Realtime Shaders & Mathematical Typography",
-        result: "Featured Lab",
       },
     ] as RecognitionItem[],
   },
