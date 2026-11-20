@@ -232,7 +232,7 @@ const ALVERONIUM_CASE: CaseStudy = {
 
 const CARE_OPS_CASE: CaseStudy = {
   problem: [
-    "Care Ops is an aged-care app. A care provider runs on shifts: who is with which participant, when, whether they are qualified for that person's needs, and what each shift costs.",
+    "Care Ops is an app for NDIS disability-support providers. A provider runs on shifts: who is with which participant, when, whether they are qualified for that person's needs, and what each shift costs.",
     "Coordinators plan and pay for that week; support workers live it, one visit at a time. Care Ops puts both sides in one app, each with its own view.",
   ],
   role: [
@@ -256,7 +256,7 @@ const CARE_OPS_CASE: CaseStudy = {
     {
       title: "Cost the shift as it lands",
       body: [
-        "The same engine prices every shift on drop: the billing rate against the worker's award cost under SCHADS, with weekend, evening, night, public holiday, overtime and sleepover rates applied.",
+        "The same engine prices every shift on drop: the NDIS billing rate against the worker's award cost under SCHADS, with weekend, evening, night, public holiday, overtime and sleepover rates applied.",
         "Auto-fill uses the same rules, assigning unfilled shifts to the qualified worker with the fewest hours, so a filled roster and a hand-built one are checked and costed the same way.",
       ],
     },
@@ -386,15 +386,15 @@ export const projects: Project[] = [
     counter: "03 / 03",
     title: "Care Ops",
     titleAccent: "Ops",
-    subtitle: "Rostering, clock-in and care notes for aged care",
+    subtitle: "Rostering, clock-in and care notes for NDIS disability support",
     category: "Operations Web App",
     type: "App design",
     year: "2026",
     roles: ["Design", "Frontend", "Planning"],
     description:
-      "A role-aware operations app for aged care, built with Saurav. Admins roster support workers by dragging them onto a participant's day, and each shift is checked for clashes and qualifications and costed as it drops; support workers see their next shift, slide to clock in and file care notes. Names and details shown are placeholders.",
+      "A role-aware operations app for NDIS disability-support providers, built with Saurav. Admins roster support workers by dragging them onto a participant's day, and each shift is checked for clashes and qualifications and costed as it drops; support workers see their next shift, slide to clock in and file care notes. Names and details shown are placeholders.",
     summary:
-      "Role-aware rostering, clock-in and care notes for aged care, built with Saurav.",
+      "Role-aware rostering, clock-in and care notes for NDIS disability support, built with Saurav.",
     overview:
       "One app with two faces. Admins and coordinators sign in with a password and see live shifts, a weekly roster, participants, staff, timesheets and reports. Support workers sign in with a magic link and see their next shift, clock in and write care notes. The data layer is a mock API over IndexedDB, with a database schema and access policies drawn up alongside it.",
     mainFeatures: [

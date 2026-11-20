@@ -2,7 +2,7 @@ import { pageMeta } from "@/lib/meta";
 
 export const metadata = pageMeta({
   title: "Projects",
-  description: "Selected work by Searon Maharjan: web platforms, 3D product animation and interface experiments, each with a case study.",
+  description: "Selected work by Searon Maharjan: a food delivery platform, a studio website on a real-time 3D stage and an NDIS operations app, each with a case study.",
   path: "/projects",
 });
 

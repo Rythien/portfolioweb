@@ -42,7 +42,7 @@ export default function ProjectsIndexPage() {
               Selected Projects.
             </h1>
             <p className="mt-4 font-[family-name:var(--font-sans)] text-base sm:text-lg text-ink-muted max-w-xl">
-              Case studies in website design, mobile apps, and 3D modeling from Kathmandu, Nepal.
+              Case studies in web apps and website design from Kathmandu, Nepal.
             </p>
           </div>
 
