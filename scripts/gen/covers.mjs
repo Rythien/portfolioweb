@@ -24,7 +24,9 @@
  * Usage:
  *   npm run gen:covers                          (writes to public/projects)
  *   npm run gen:covers -- --out <dir>           (review somewhere else)
- *   npm run gen:covers -- --only pixel-plus
+ *   npm run gen:covers -- --only nova-delivers
+ *   npm run gen:covers -- --kinds cover         (just the cover: projects
+ *                                                with real stills skip details)
  *   npm run gen:covers -- --sheet [path]        (contact sheet PNG; default
  *                                                <out>/contact-sheet.png)
  *
@@ -39,7 +41,7 @@ import { projects } from "../../src/content/projects.ts";
 const ROOT = process.cwd();
 const W = 1600;
 const H = 1000;
-const KINDS = ["cover", "detail-1", "detail-2", "detail-3"];
+const ALL_KINDS = ["cover", "detail-1", "detail-2", "detail-3"];
 
 /* ── CLI ────────────────────────────────────────────────────────── */
 
@@ -51,6 +53,8 @@ const argVal = (flag) => {
 };
 const outDir = path.resolve(ROOT, argVal("--out") ?? "public/projects");
 const only = argVal("--only");
+const KINDS = (argVal("--kinds") ?? ALL_KINDS.join(",")).split(",");
+for (const k of KINDS) if (!ALL_KINDS.includes(k)) throw new Error(`unknown kind ${k}`);
 const wantSheet = args.includes("--sheet");
 const sheetPath = path.resolve(ROOT, argVal("--sheet") ?? path.join(outDir, "contact-sheet.png"));
 
@@ -58,9 +62,9 @@ const sheetPath = path.resolve(ROOT, argVal("--sheet") ?? path.join(outDir, "con
 
 // Per-project accent so the three sets read apart
 const ACCENTS = {
-  "pixel-plus": "#e39a2d", // warm amber
-  "4c-iced-coffee": "#1fa9a3", // cold teal
-  "kinetic-archive": "#e5322b", // signal red
+  "nova-delivers": "#f29a1f", // Nova's order-button orange
+  alveronium: "#2fa59c", // Alveronium's reagent teal
+  "care-ops": "#2f54b8", // Care Ops' royal blue
 };
 const DEFAULT_ACCENT = "#8fa3ad";
 
@@ -76,6 +80,12 @@ const ICON_KEYS = {
   Git: "siGit",
   Blender: "siBlender",
   "Framer Motion": "siFramer",
+  JavaScript: "siJavascript",
+  GSAP: "siGsap",
+  SQLite: "siSqlite",
+  "Three.js": "siThreedotjs",
+  Vite: "siVite",
+  "React Router": "siReactrouter",
 };
 
 function iconsFor(project) {

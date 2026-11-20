@@ -53,8 +53,6 @@ export interface Project {
   caseStudy?: CaseStudy;
   placeholder?: boolean;
   link: string;
-  links?: { live?: string; repo?: string };
-  repo?: string;
   /** Panel and case-study hero. */
   cover: ProjectImage;
   /** Case-study gallery. */
@@ -70,171 +68,151 @@ export interface Project {
 }
 
 /*
- * All project media is generated concept artwork (npm run gen:covers),
- * not screenshots or product renders, and is labelled as such.
+ * The three projects are private builds that are not hosted anywhere and
+ * have no public repository. The cover is generated concept artwork
+ * (npm run gen:covers -- --kinds cover) and is labelled as such; the
+ * gallery is stills from screen recordings of each project running
+ * locally (scripts/capture).
  */
-const CONCEPT = "Concept artwork";
 
-/** "Concept artwork: <what it shows>." */
-const caption = (shows: string) => `${CONCEPT}: ${shows}.`;
-
-function conceptArt(slug: string, title: string, tools: string) {
-  const file = (name: string) => ({
-    src: `/projects/${slug}/${name}.webp`,
-    dreamSrc: `/projects/${slug}/${name}-dream.webp`,
-  });
+/** Generated cover, WAKE and DREAM variants. */
+function cover(slug: string, title: string, shows: string): ProjectImage {
   return {
-    cover: {
-      ...file("cover"),
-      alt: `Concept artwork for ${title}: ice chips refracting the title`,
-      caption: caption(`ice chips refracting the ${title} title`),
-    },
-    images: [
-      {
-        ...file("detail-1"),
-        alt: `Concept artwork for ${title}: a single ice chip refracting the title, shallow depth of field`,
-        caption: caption("one chip, close up, the title bent through it at a shallow depth of field"),
-      },
-      {
-        ...file("detail-2"),
-        alt: `Concept artwork for ${title}: ${tools} embossed beneath a row of glass chips`,
-        caption: caption(`${tools} embossed beneath a row of glass chips`),
-      },
-      {
-        ...file("detail-3"),
-        alt: `Concept artwork for ${title}: the title smeared along a light trail through fog`,
-        caption: caption("the title smeared along a light trail through fog"),
-      },
-    ],
+    src: `/projects/${slug}/cover.webp`,
+    dreamSrc: `/projects/${slug}/cover-dream.webp`,
+    alt: `Concept artwork for ${title}: ${shows}`,
+    caption: `Concept artwork: ${shows}.`,
   };
+}
+
+/** A still from the screen recording: public/projects/<slug>/still-<name>.webp. */
+function still(slug: string, name: string, caption: string): ProjectImage {
+  return { src: `/projects/${slug}/still-${name}.webp`, alt: caption.replace(/\.$/, ""), caption };
 }
 
 export const projects: Project[] = [
   {
-    slug: "pixel-plus",
+    slug: "nova-delivers",
     counter: "01 / 03",
-    title: "Pixel Plus",
-    titleAccent: "Plus",
-    subtitle: "Full-stack e-commerce web platform",
+    title: "Nova Delivers",
+    titleAccent: "Delivers",
+    subtitle: "A food delivery storefront and its operations portal",
     category: "Web Application / Full-Stack",
-    type: "Web design",
-    year: "2024",
-    placeholder: true,
-    roles: ["Frontend Engineering", "UI/UX Design", "REST API & DB Architecture"],
+    type: "Web app",
+    year: "2026",
+    roles: ["Design", "Frontend", "Backend & Database"],
     description:
-      "A complete full-stack e-commerce web platform designed and built from scratch as a final-year BICT capstone project. Features an interactive product catalog, reactive shopping cart, dynamic checkout validation, and a MongoDB backend.",
+      "A food delivery storefront for Kathmandu and a separate operations portal, built solo on plain Node.js and its built-in SQLite, with no npm dependencies. A 164-dish menu with live filtering and search, a cart with a simulated phone OTP at checkout, and a 120-frame scroll-scrubbed canvas; staff move each order from pending to delivered in the portal.",
     summary:
-      "A complete e-commerce website designed and built from scratch as a final-year BICT capstone project.",
+      "A food delivery storefront and operations portal on plain Node.js and SQLite, built solo.",
     overview:
-      "Designed and built a complete online store as a final-year university project, covering product listing, product pages, cart, checkout, user accounts, and administration.",
+      "Two Node.js servers share one SQLite database: the customer site on one port, the operations portal on another. Customers browse a 164-dish menu, filter and search it, build a cart and confirm a simulated phone OTP at checkout. Staff see every order arrive in the portal and move it from pending to cooking, out for delivery and delivered.",
     mainFeatures: [
-      "Interactive product catalog with filtering and search",
-      "Reactive shopping cart with real-time validation",
-      "Dynamic checkout flow with form validation",
-    ],
-    technicalChallenges: [
-      "Handling state synchronization across cart and checkout flows",
-      "Maintaining responsive layouts across mobile and desktop viewports",
+      "Customer site and operations portal as two servers over one SQLite database",
+      "164-dish menu across categories, filtered and searched without a page load",
+      "Cart and checkout with a simulated phone OTP, codes stored with an expiry",
+      "Scroll-scrubbed 120-frame burger ‘anatomy’ drawn to a canvas",
+      "Order board: pending, cooking, out for delivery, delivered",
     ],
     dreamDescription:
-      "A digital storefront sculpted from light and logic: product flows, reactive carts, and checkout choreography woven into a single cohesive architecture.",
-    link: "https://github.com/rythien",
-    repo: "https://github.com/rythien",
-    links: { repo: "https://github.com/rythien" },
-    ...conceptArt(
-      "pixel-plus",
-      "Pixel Plus",
-      "the React, Next.js, Tailwind CSS, TypeScript, Node.js and MongoDB logos",
-    ),
+      "A kitchen that never sleeps: a menu you scroll through like a film, and every order walking its way from the pass to the door.",
+    link: "/project/nova-delivers",
+    cover: cover("nova-delivers", "Nova Delivers", "ice chips refracting the Nova Delivers title"),
+    images: [
+      still("nova-delivers", "hero", "The customer site opens on a full-bleed video hero."),
+      still("nova-delivers", "anatomy", "Scrolling scrubs a 120-frame burger anatomy drawn to a canvas."),
+      still("nova-delivers", "menu", "The menu: category filters and search across 164 dishes."),
+      still("nova-delivers", "cart", "The cart drawer: add-ons, a rider tip and a promo code field."),
+      still("nova-delivers", "admin", "The operations portal: order counts, revenue and the order board. Customer details are masked."),
+    ],
     aspectRatio: "aspect-[16/10]",
     stack: {
-      frontend: ["React", "Next.js", "Tailwind CSS", "TypeScript"],
-      backend: ["Node.js", "MongoDB"],
-      tools: ["Figma", "Git"],
+      frontend: ["HTML", "CSS", "JavaScript", "GSAP", "Lenis"],
+      backend: ["Node.js", "SQLite"],
     },
-    tags: ["#webdesign", "#ecommerce", "#react", "#capstone"],
+    tags: ["#fullstack", "#node", "#sqlite", "#gsap"],
   },
   {
-    slug: "4c-iced-coffee",
+    slug: "alveronium",
     counter: "02 / 03",
-    title: "4C Iced Coffee",
-    titleAccent: "Coffee",
-    subtitle: "Commercial 3D product animation",
-    category: "3D Commercial Animation",
-    type: "3D / Blender",
-    year: "2024",
-    placeholder: true,
-    roles: ["3D Product Modeling", "Fluid Dynamics", "Lighting & Camera Motion"],
+    title: "Alveronium Studio",
+    titleAccent: "Studio",
+    subtitle: "A studio website on a single real-time 3D stage",
+    category: "Web Design / WebGL",
+    type: "Web design",
+    year: "2026",
+    roles: ["Design", "Frontend & WebGL", "Planning"],
     description:
-      "Commercial 3D product animation video produced for 4C Iced Coffee in Blender. Focuses on photorealistic beverage packaging, custom condensation shaders, dynamic fluid splash simulation, and kinetic commercial pacing.",
+      "The website for Alveronium Studio, built with Saurav. One page drawn as a technical sheet over a single WebGL stage whose camera rides a rail, one station per section: a 3D specimen in the hero, a particle structure behind the statement, a services instrument panel and a dotted-land globe at the close.",
     summary:
-      "Commercial 3D product animation video produced for 4C Iced Coffee in Blender.",
+      "A studio website drawn as a technical sheet over one shared WebGL stage, built with Saurav.",
     overview:
-      "Produced a commercial-grade 3D product animation focusing on photorealistic beverage packaging, custom condensation shaders, and dynamic fluid splash simulation.",
+      "A single-page site for Alveronium Studio. Six sections share one WebGL canvas; the camera moves along a rail with a station per section, so the 3D work continues from one section into the next instead of restarting. Built with Saurav: design, frontend and planning were mine.",
     mainFeatures: [
-      "Photorealistic beverage packaging with condensation",
-      "Dynamic fluid splash simulation",
-      "Kinetic commercial camera pacing",
-    ],
-    technicalChallenges: [
-      "Achieving photorealistic glass and liquid materials",
-      "Optimizing fluid simulation for render performance",
+      "One shared WebGL stage with a camera rail, one station per section",
+      "A real-time 3D specimen in the hero, drawn with dimension lines",
+      "Services rows that drive a live instrument panel",
+      "A dotted-land globe at the close, turned to the studio's city",
+      "Separate mobile layouts for every section",
     ],
     dreamDescription:
-      "Frozen condensation and fluid dynamics captured in 3D: photorealistic glass, kinetic splashes, and cinematic pacing rendered for a commercial audience.",
-    link: "https://github.com/rythien",
-    repo: "https://github.com/rythien",
-    links: { repo: "https://github.com/rythien" },
-    ...conceptArt("4c-iced-coffee", "4C Iced Coffee", "the Blender logo"),
+      "A blueprint that breathes: one stage, one camera, and a specimen drawn to scale as you pass it.",
+    link: "/project/alveronium",
+    cover: cover("alveronium", "Alveronium Studio", "ice chips refracting the Alveronium Studio title"),
+    images: [
+      still("alveronium", "hero", "The hero: a title block, the 3D specimen and its data sheet."),
+      still("alveronium", "statement", "The statement, set beside a particle structure on the shared stage."),
+      still("alveronium", "services", "Services: hovering a row redraws the instrument panel."),
+      still("alveronium", "process", "Process: five stages, each with its own line drawing."),
+      still("alveronium", "contact", "Contact closes on a dotted-land globe."),
+    ],
     aspectRatio: "aspect-[16/10]",
     stack: {
-      frontend: ["Blender", "EEVEE / Cycles"],
-      tools: ["Blender", "After Effects"],
+      frontend: ["Next.js", "React", "TypeScript", "Three.js", "React Three Fiber", "Framer Motion", "Lenis", "Tailwind CSS"],
     },
-    tags: ["#3d", "#blender", "#commercial", "#animation"],
+    tags: ["#webgl", "#r3f", "#nextjs", "#studio"],
   },
   {
-    slug: "kinetic-archive",
+    slug: "care-ops",
     counter: "03 / 03",
-    title: "Kinetic Architecture",
-    titleAccent: "Architecture",
-    subtitle: "Kinetic spatial typography interface",
-    category: "Interactive Interface / Mobile",
+    title: "Care Ops",
+    titleAccent: "Ops",
+    subtitle: "Rostering and shift operations for disability support",
+    category: "Web Application / Operations",
     type: "App design",
-    year: "2024",
-    placeholder: true,
-    roles: ["Interface Architecture", "Interaction Design", "Prototyping"],
+    year: "2026",
+    roles: ["Design", "Frontend", "Planning"],
     description:
-      "An exploratory mobile and web interface investigation into kinetic spatial typography, fluid micro-interactions, and accessible touch geometries designed for next-generation digital archives.",
+      "A role-aware operations app for disability support, built with Saurav. Admins roster support workers by dragging them onto a participant's day, and each shift is checked for clashes and qualifications and costed as it drops; support workers see their next shift, slide to clock in and file care notes. Names and details shown are placeholders.",
     summary:
-      "An exploratory interface investigation into kinetic spatial typography and fluid micro-interactions.",
+      "Role-aware rostering, clock-in and care notes for disability support, built with Saurav.",
     overview:
-      "An exploratory mobile and web interface investigation into kinetic spatial typography, fluid micro-interactions, and accessible touch geometries.",
+      "One app with two faces. Admins and coordinators sign in with a password and see live shifts, a weekly roster, participants, staff, timesheets and reports. Support workers sign in with a magic link and see their next shift, clock in and write care notes. The data layer is a mock API over IndexedDB, with a database schema and access policies drawn up alongside it.",
     mainFeatures: [
-      "Kinetic spatial typography system",
-      "Fluid micro-interactions and touch gestures",
-      "Accessible touch geometries for mobile",
-    ],
-    technicalChallenges: [
-      "Balancing animation fluidity with accessible interaction patterns",
-      "Touch geometry optimization for diverse device sizes",
+      "Role-aware sign-in: magic link for support workers, password for admins",
+      "Drag-and-drop rostering, validated and costed on drop",
+      "Participants with support needs, plan type and budget used",
+      "Support worker home: next shift and slide to clock in",
+      "Shift details with visit verification, checklist and care notes",
     ],
     dreamDescription:
-      "Spatial typography drifting through fluid micro-interactions: an interface experiment in kinetic geometry and accessible touch language.",
-    link: "https://github.com/rythien",
-    repo: "https://github.com/rythien",
-    links: { repo: "https://github.com/rythien" },
-    ...conceptArt(
-      "kinetic-archive",
-      "Kinetic Architecture",
-      "the React, Framer Motion, TypeScript and Figma logos",
-    ),
+      "A week of care laid out like a loom: each shift a thread, checked and costed the moment it lands.",
+    link: "/project/care-ops",
+    cover: cover("care-ops", "Care Ops", "ice chips refracting the Care Ops title"),
+    images: [
+      still("care-ops", "login", "Role-aware sign-in: magic link for support workers, password for admins."),
+      still("care-ops", "dashboard", "The admin console: who is on shift, unfilled shifts and live shift cards."),
+      still("care-ops", "roster", "Rostering: a support worker dropped onto a participant's day."),
+      still("care-ops", "participants", "Participants: support needs, plan type and budget used against total."),
+      still("care-ops", "reports", "Reports: staff hours split into ordinary, overtime and penalty rates."),
+      still("care-ops", "worker", "The support worker's home: the next shift and slide to clock in."),
+    ],
     aspectRatio: "aspect-[16/10]",
     stack: {
-      frontend: ["React", "Framer Motion", "TypeScript"],
-      tools: ["Figma"],
+      frontend: ["React", "TypeScript", "Vite", "React Router", "Tailwind CSS", "GSAP"],
+      backend: ["Mock API over IndexedDB", "Supabase schema & RLS policies"],
     },
-    tags: ["#interface", "#mobile", "#kinetic", "#archive"],
+    tags: ["#react", "#operations", "#rostering", "#roles"],
   },
 ];
 

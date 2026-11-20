@@ -10,6 +10,12 @@ import {
   siGit,
   siBlender,
   siFramer,
+  siJavascript,
+  siGsap,
+  siSqlite,
+  siThreedotjs,
+  siVite,
+  siReactrouter,
 } from "simple-icons";
 import type { Project } from "@/content/projects";
 
@@ -24,6 +30,12 @@ const ICONS: Record<string, { path: string; title: string }> = {
   Git: siGit,
   Blender: siBlender,
   "Framer Motion": siFramer,
+  JavaScript: siJavascript,
+  GSAP: siGsap,
+  SQLite: siSqlite,
+  "Three.js": siThreedotjs,
+  Vite: siVite,
+  "React Router": siReactrouter,
 };
 
 /** The project's tools that have a logo, in stack order, each once. */

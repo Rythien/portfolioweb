@@ -330,9 +330,7 @@ export default function Works() {
 
               <div className="flex items-center justify-between font-mono text-label text-ink/80 lg:col-start-9 lg:col-span-4 lg:row-start-2 lg:self-end">
                 {/* One tab stop per slide (the title link): this one and the
-                    panel duplicate it; the repo link is a different place,
-                    so screen readers keep it, and keyboard users reach it
-                    from the case study's Repository Link */}
+                    panel duplicate it */}
                 <Link
                   href={`/project/${project.slug}`}
                   tabIndex={-1}
@@ -341,18 +339,6 @@ export default function Works() {
                 >
                   <Swap>Case Study →</Swap>
                 </Link>
-
-                {project.repo && (
-                  <a
-                    href={project.repo}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    tabIndex={-1}
-                    className="hit"
-                  >
-                    <Swap>Source Code ↗</Swap>
-                  </a>
-                )}
               </div>
             </article>
           ))}

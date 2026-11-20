@@ -19,7 +19,7 @@ let fails = 0;
 const check = (ok, msg) => { console.log(`${ok ? "PASS" : "FAIL"}  ${msg}`); if (!ok) fails++; };
 
 await page.goto(`${BASE}/?nopreload=1&mode=dream&noarchive=1`, { waitUntil: "domcontentloaded" });
-await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: ["4c-iced-coffee", "kinetic-archive"], recovered: [], hintSeen: true })));
+await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: ["alveronium", "care-ops"], recovered: [], hintSeen: true })));
 await page.goto(`${BASE}/?nopreload=1&mode=dream&archiveaim=0&archivecharge=3&archivefreeze=1`, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(9000);
 // ...and the Archive warm-up finished: until then queued shader links can

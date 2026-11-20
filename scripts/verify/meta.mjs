@@ -15,7 +15,7 @@
  */
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const base = arg("url", "http://localhost:3000");
-const ROUTES = ["/", "/projects", "/project/pixel-plus", "/project/4c-iced-coffee", "/project/kinetic-archive", "/cv", "/journey"];
+const ROUTES = ["/", "/projects", "/project/nova-delivers", "/project/alveronium", "/project/care-ops", "/cv", "/journey"];
 
 let failures = 0;
 const check = (ok, msg) => {

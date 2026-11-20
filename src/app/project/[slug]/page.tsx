@@ -225,19 +225,6 @@ export default async function ProjectDetailPage({
             </article>
           )}
 
-          {project.links?.repo && (
-            <div className="pb-12 font-mono text-label">
-              <a
-                href={project.links.repo}
-                target="_blank"
-                rel="noreferrer"
-                className="hit underline underline-offset-4 decoration-ink/30 text-ink"
-              >
-                <Swap>Source code ↗</Swap>
-              </a>
-            </div>
-          )}
-
           {project.images.length > 0 && (
             <section aria-labelledby="gallery" className="pt-12 sm:pt-16 mb-16 border-t border-rule">
               <h2 id="gallery" className="font-mono text-label text-ink-muted mb-8">

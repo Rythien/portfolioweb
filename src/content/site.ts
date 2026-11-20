@@ -105,7 +105,7 @@ export const SITE_DATA = {
   recognition: {
     sectionNum: "(04)",
     title: "Recognition",
-    totalAccolades: "06",
+    totalAccolades: "04",
     accoladesLabel: "Total Distinctions & Milestones",
     items: [
       {
@@ -113,18 +113,6 @@ export const SITE_DATA = {
         project: "Asia e University",
         honor: "Bachelor of Information & Communication Technology (BICT)",
         result: "Graduated with Honors",
-      },
-      {
-        year: "2024",
-        project: "Pixel Plus E-Commerce",
-        honor: "Final-Year Capstone Engineering Distinction",
-        result: "Full-Stack Award",
-      },
-      {
-        year: "2024",
-        project: "4C Iced Coffee Commercial",
-        honor: "Commercial 3D Product Animation",
-        result: "Production Delivery",
       },
       {
         year: "2024",

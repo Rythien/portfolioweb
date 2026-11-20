@@ -139,7 +139,7 @@ function PixelSparkles() {
 
 /* ── Ghosted project titles ───────────────────────────────────── */
 
-const GHOST_TITLES = ["PIXEL PLUS", "4C ICED COFFEE", "KINETIC ARCHITECTURE"];
+const GHOST_TITLES = ["NOVA DELIVERS", "ALVERONIUM STUDIO", "CARE OPS"];
 
 function GhostedTitle({
   text,

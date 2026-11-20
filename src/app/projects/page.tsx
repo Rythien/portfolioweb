@@ -9,7 +9,7 @@ import ProjectArt from "@/components/ui/ProjectArt";
 import { projects } from "@/content/projects";
 import Swap from "@/components/ui/Swap";
 
-const TYPES = ["All", "Web design", "App design", "3D / Blender"];
+const TYPES = ["All", "Web app", "Web design", "App design"];
 
 export default function ProjectsIndexPage() {
   const [selectedType, setSelectedType] = useState("All");
