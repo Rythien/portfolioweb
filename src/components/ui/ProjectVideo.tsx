@@ -76,8 +76,12 @@ export default function ProjectVideo({ src, label, dreamSrc, sizes, variant, cla
   const loop = variant === "loop";
   return (
     <div className={`relative w-full aspect-[16/10] overflow-hidden bg-surface-elevated ${className}`}>
+      {/* suppressHydrationWarning: browser extensions inject data-vc-*
+          attributes into <video> before hydration. It covers this element's
+          own attributes only, not its children. */}
       <video
         ref={ref}
+        suppressHydrationWarning
         className="absolute inset-0 h-full w-full object-cover"
         poster={`${src}-poster.webp`}
         preload="none"
