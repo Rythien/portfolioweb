@@ -27,8 +27,8 @@ export interface CaseStudy {
   approach: string[];
   /** Two or three. */
   decisions: CaseDecision[];
-  /** What the author would do differently now. */
-  differently: string[];
+  /** What the author would do differently now, if they have said. */
+  differently?: string[];
   /** Optional outcome: results, reception, where it is used. */
   outcome?: string[];
 }
@@ -109,6 +109,131 @@ function still(slug: string, name: string, caption: string): ProjectImage {
   return { src: `/projects/${slug}/still-${name}.webp`, alt: caption.replace(/\.$/, ""), caption };
 }
 
+/*
+ * Case studies: written from what the author confirmed (why each was
+ * built, who did what, how long it took) and from the projects' own code
+ * and READMEs. Nothing is estimated or assumed. "What I'd do differently"
+ * is left out until the author says it.
+ */
+
+const NOVA_CASE: CaseStudy = {
+  problem: [
+    "Nova Delivers already had a website, and it was slow and full of bugs. I rebuilt it from scratch as a self-initiated project, rather than patching the old one.",
+    "The rebuild has two audiences with different jobs. Customers in Kathmandu need to find something among 164 dishes, build a cart and check out. The kitchen needs to see every order as it arrives and move it along until it reaches the door. So the project is two things: a storefront, and an operations portal that runs the day's orders.",
+  ],
+  role: [
+    "Solo, over about a month in 2026: the design, the frontend, the backend and the database. The only code I did not write is the animation libraries.",
+  ],
+  approach: [
+    "The whole system runs on Node.js and nothing else. Two small servers share one SQLite file through Node's built-in node:sqlite module: the customer site and its API on one port, the operations portal and its API on another, both started together by a short supervisor script. GSAP, ScrollTrigger, Flip and Lenis are vendored as plain files, and Lenis is driven only by GSAP's ticker, so scrolling and animation run on one clock.",
+    "The storefront is hand-written HTML, CSS and JavaScript across seven pages. The menu holds 164 dishes in twelve categories, filtered and searched in place without a page load, and the cart follows the visitor from page to page. Checkout validates a ten-digit Nepali phone number and asks for a four-digit code. The code is stored in SQLite with a five-minute expiry and deleted once used. The OTP is simulated: there is no SMS gateway, so the code comes back in the response and the whole flow can be tried end to end. A delivery address can carry a GPS pin taken from the browser's location.",
+    "The portal is a live board: order counts by status, revenue, and a card per order with the customer, the address, the dishes and the total. Staff accept an order, mark it cooking, out for delivery and delivered, or cancel it. Search covers the order number, the customer's name and phone, and the area, and any order can be printed as a kitchen ticket. A Simulate Order button drops a test order onto the board, so the portal can be exercised without going through checkout.",
+    "Around the menu sit an about page for the central kitchen, a delivery-charges page that sets out the tiered coverage and pricing, and privacy and terms pages, all sharing one design system of tokens, glass surfaces and spring-based interactions.",
+  ],
+  decisions: [
+    {
+      title: "Nothing to install but Node",
+      body: [
+        "The servers are built on Node's standard library alone: node:http for routing, node:fs for static files, node:sqlite for data. The project starts with node start.js on Node 22 or later, with no npm install and no dependency tree behind it.",
+        "The price is that routing and request parsing are written by hand. Across nine API endpoints, that is a small amount of code.",
+      ],
+    },
+    {
+      title: "Two servers, one database",
+      body: [
+        "The operations portal is not a page of the storefront. It is its own server on its own port with its own API, started alongside the customer site by the supervisor script.",
+        "Both servers open the same SQLite file. An order placed on the storefront is on the board the next time it loads, with no queue, webhook or sync step between the two halves.",
+      ],
+    },
+    {
+      title: "The burger anatomy as 120 bitmaps",
+      body: [
+        "The scroll-driven burger is a sequence of 120 WebP frames drawn to a canvas rather than a video, so the scroll position maps straight to a frame in either direction.",
+        "Loading is ordered for that. The first frame is fetched and drawn before anything else, so the canvas is never empty. The other 119 are decoded with createImageBitmap in batches of eight, off the main thread, while the page stays scrollable.",
+      ],
+    },
+  ],
+};
+
+const ALVERONIUM_CASE: CaseStudy = {
+  problem: [
+    "Alveronium Studio is a start-up Saurav and I are trying to get off the ground, and this is its website.",
+    "The idea is to draw the studio like a technical sheet: a title block, dimension lines, a data sheet, a specimen drawn to scale. And the 3D shouldn't start and stop at each section. It should carry on through the whole page.",
+  ],
+  role: [
+    "Built with Saurav over two to three weeks in 2026. I did the design, the frontend and the planning, and some of the backend; Saurav worked mainly on the backend and on penetration testing.",
+  ],
+  approach: [
+    "Next.js 16 with the App Router and React 19, TypeScript throughout, Tailwind 4 for layout. The 3D is React Three Fiber over three.js, with drei and postprocessing; Lenis smooths the scroll and Framer Motion handles interface motion.",
+    "The page opens on a hero with a hexagonal 3D specimen, drawn with dimension lines and a data sheet beside it. The statement is set against a particle structure. In services, hovering a row redraws an instrument panel for that discipline. The process runs through five stages, each with its own line drawing. Contact closes on a dotted-land globe, drawn on a 2D canvas in orthographic projection and turned to the studio's city, with its local time beside it. The globe sways slowly in longitude, and holds still for visitors who ask for reduced motion.",
+    "Phones get their own components rather than a squeezed desktop layout: a mobile hero and specimen, an accordion for the services, swipeable process cards, a navigation dock and a mobile contact globe. The preloader plays once per session.",
+    "The interface chrome keeps the drawing conceit going: a numbered section index across the top, a sheet counter and a scroll readout in the corners, a reticle cursor and a fine grain over everything.",
+  ],
+  decisions: [
+    {
+      title: "One stage, one camera",
+      body: [
+        "Instead of a canvas per section, the whole page shares one WebGL stage. Each section owns a station in a single 3D world, and scrolling flies one camera between them along a rail.",
+        "The stations are spaced deliberately wide: the travel between them is what gives the scroll something to do. Because it is one world, the 3D carries on from one section into the next instead of restarting. At the end the rail turns back toward the viewer, so the descent closes at contact instead of receding forever.",
+      ],
+    },
+    {
+      title: "Damped, not scrubbed",
+      body: [
+        "The camera is not pinned to the scroll value. The rail only works out where the camera should be; each frame, the camera eases toward that point with a frame-rate-independent damp, and the frame time is capped so returning to the tab doesn't make it jump.",
+        "A fast, flung scroll arrives with some weight instead of teleporting, and the camera keeps moving for a beat after the page stops. In the hero, a dolly rides on top of the rail, so the specimen pulls away as you begin to scroll.",
+      ],
+    },
+    {
+      title: "A camera that never tilts",
+      body: [
+        "Some 3D objects are placed to sit exactly on HTML boxes, and that placement assumes a camera looking straight down its axis. Aiming the damped camera at the rail's target tilted it during every ease, and the specimen drifted off its box whenever the page moved.",
+        "So the camera looks straight down from wherever it actually is, never at the target, and the 3D stays locked to the layout.",
+      ],
+    },
+  ],
+};
+
+const CARE_OPS_CASE: CaseStudy = {
+  problem: [
+    "Care Ops is an aged-care app. A care provider runs on shifts: who is with which participant, when, whether they are qualified for that person's needs, and what each shift costs.",
+    "Coordinators plan and pay for that week; support workers live it, one visit at a time. Care Ops puts both sides in one app, each with its own view.",
+  ],
+  role: [
+    "Built with Saurav over two to three weeks in 2026. I did the design, the frontend and the planning, and some of the backend; Saurav worked mainly on the backend and on penetration testing.",
+    "The names, addresses and branding in the recordings are placeholders.",
+  ],
+  approach: [
+    "React 19 and TypeScript on Vite, React Router for role-aware routes, Tailwind 4, GSAP for motion including the roster's drag and drop, and date-fns for the calendar.",
+    "Sign-in is split by role. Support workers ask for a magic link and a six-digit code; admins and coordinators use a password. Routes check the role, and a support worker who lands on an admin page is sent back to their shifts with a message saying why.",
+    "Coordinators get live shifts, a weekly roster (with daily and fortnightly views, times snapped to 15 minutes, draft, published and archived states, and tools to copy last week or save a week as a template), participants with their plan type and budget used, staff, timesheets, and reports that split hours into ordinary, overtime and penalty rates, exportable as CSV or PDF. Support workers get their next shift, a slide to clock in that records the device's GPS position, the shift with its checklist, a ten-section care-note form and an incident report.",
+    "Every screen talks to one typed API client. Behind it today is a mock backend that persists to IndexedDB in the browser and seeds itself on first run. A Postgres schema of fourteen tables, row-level security policies and seed data for Supabase sit alongside it; the app is not connected to them yet. The roster engine and the API's role checks each have their own test script, and the app installs as a web app that opens on the worker's shifts.",
+  ],
+  decisions: [
+    {
+      title: "Validate on drop, never refuse",
+      body: [
+        "Dragging a worker onto a participant's day runs the shift through the roster engine before anything is saved. It checks double booking, weekly hours past 38, breaks, stated availability and qualifications: a participant who needs a hoist needs a worker with manual-handling certification, and medication support needs a medication qualification. Each conflict is graded hard or soft.",
+        "A clean drop creates the shift at once. A conflicting one is not refused: it opens the shift form already filled in, with the warning, so the coordinator can fix the clash or override it knowingly.",
+      ],
+    },
+    {
+      title: "Cost the shift as it lands",
+      body: [
+        "The same engine prices every shift on drop: the billing rate against the worker's award cost under SCHADS, with weekend, evening, night, public holiday, overtime and sleepover rates applied.",
+        "Auto-fill uses the same rules, assigning unfilled shifts to the qualified worker with the fewest hours, so a filled roster and a hand-built one are checked and costed the same way.",
+      ],
+    },
+    {
+      title: "Screens that only know the contract",
+      body: [
+        "The screens depend on the API client's interface, never on where the data lives. That is why the whole app runs end to end in the browser with no server today.",
+        "It also means the mock behind the client can be replaced by the real backend without touching a screen.",
+      ],
+    },
+  ],
+};
+
 export const projects: Project[] = [
   {
     slug: "nova-delivers",
@@ -136,6 +261,7 @@ export const projects: Project[] = [
     dreamDescription:
       "A kitchen that never sleeps: a menu you scroll through like a film, and every order walking its way from the pass to the door.",
     link: "/project/nova-delivers",
+    caseStudy: NOVA_CASE,
     video: video(
       "nova-delivers",
       "Screen recording of Nova Delivers: the video hero, a scroll into the burger anatomy, then the Momo filter on the menu.",
@@ -182,6 +308,7 @@ export const projects: Project[] = [
     dreamDescription:
       "A blueprint that breathes: one stage, one camera, and a specimen drawn to scale as you pass it.",
     link: "/project/alveronium",
+    caseStudy: ALVERONIUM_CASE,
     video: video(
       "alveronium",
       "Screen recording of Alveronium Studio: the 3D specimen in the hero, a scroll into the statement, then hovering the services rows.",
@@ -206,15 +333,15 @@ export const projects: Project[] = [
     counter: "03 / 03",
     title: "Care Ops",
     titleAccent: "Ops",
-    subtitle: "Rostering and shift operations for disability support",
+    subtitle: "Rostering, clock-in and care notes for aged care",
     category: "Operations Web App",
     type: "App design",
     year: "2026",
     roles: ["Design", "Frontend", "Planning"],
     description:
-      "A role-aware operations app for disability support, built with Saurav. Admins roster support workers by dragging them onto a participant's day, and each shift is checked for clashes and qualifications and costed as it drops; support workers see their next shift, slide to clock in and file care notes. Names and details shown are placeholders.",
+      "A role-aware operations app for aged care, built with Saurav. Admins roster support workers by dragging them onto a participant's day, and each shift is checked for clashes and qualifications and costed as it drops; support workers see their next shift, slide to clock in and file care notes. Names and details shown are placeholders.",
     summary:
-      "Role-aware rostering, clock-in and care notes for disability support, built with Saurav.",
+      "Role-aware rostering, clock-in and care notes for aged care, built with Saurav.",
     overview:
       "One app with two faces. Admins and coordinators sign in with a password and see live shifts, a weekly roster, participants, staff, timesheets and reports. Support workers sign in with a magic link and see their next shift, clock in and write care notes. The data layer is a mock API over IndexedDB, with a database schema and access policies drawn up alongside it.",
     mainFeatures: [
@@ -227,6 +354,7 @@ export const projects: Project[] = [
     dreamDescription:
       "A week of care laid out like a loom: each shift a thread, checked and costed the moment it lands.",
     link: "/project/care-ops",
+    caseStudy: CARE_OPS_CASE,
     video: video(
       "care-ops",
       "Screen recording of Care Ops: the weekly roster, then a support worker dragged onto a participant's day.",

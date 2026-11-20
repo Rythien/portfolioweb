@@ -6,6 +6,8 @@ import Header from "@/components/common/Header";
 import Footer from "@/components/sections/Footer";
 import LenisProvider from "@/components/common/LenisProvider";
 import ProjectArt from "@/components/ui/ProjectArt";
+import ProjectVideo from "@/components/ui/ProjectVideo";
+import Architecture, { hasArchitecture } from "@/components/case-study/Architecture";
 import RecoveredMark from "@/components/ui/RecoveredMark";
 import { projects, getProjectBySlug, type Project } from "@/content/projects";
 import Swap from "@/components/ui/Swap";
@@ -99,6 +101,9 @@ export default async function ProjectDetailPage({
   const currentIndex = projects.findIndex((p) => p.slug === slug);
   const nextProject = projects[(currentIndex + 1) % projects.length];
   const cs = project.caseStudy;
+  // Parts are numbered in render order, so an omitted one leaves no gap
+  let part = 0;
+  const num = () => String(++part).padStart(2, "0");
 
   return (
     <LenisProvider>
@@ -136,16 +141,22 @@ export default async function ProjectDetailPage({
             )}
           </header>
 
+          {/* The walkthrough: a recording of the project running locally.
+              It is private and not hosted, so there is no live link */}
           <figure className="mb-16 flex flex-col gap-3">
-            <ProjectArt
-              image={project.cover}
+            <ProjectVideo
+              variant="player"
+              src={project.video.walkthrough}
+              label={project.video.walkthroughLabel}
               sizes={CASE_STUDY_FULL}
-              lcp
               className="border border-rule rounded-sm"
             />
-            <figcaption className="font-[family-name:var(--font-sans)] text-small text-ink/80 leading-relaxed [text-wrap:pretty]">
-              <span className="font-mono text-label text-ink tabular-nums mr-2">Fig. 01</span>
-              {project.cover.caption}
+            <figcaption className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 font-[family-name:var(--font-sans)] text-small text-ink/80 leading-relaxed [text-wrap:pretty]">
+              <span>
+                <span className="font-mono text-label text-ink tabular-nums mr-2">Fig. 01</span>
+                Walkthrough, recorded running locally. The captions are part of the video.
+              </span>
+              <span className="font-mono text-label text-ink/80">Code on request</span>
             </figcaption>
           </figure>
 
@@ -167,10 +178,15 @@ export default async function ProjectDetailPage({
 
           {cs ? (
             <article aria-label={`${project.title} case study`}>
-              <Part n="01" label="The problem">{paras(cs.problem)}</Part>
-              <Part n="02" label="My role">{paras(cs.role)}</Part>
-              <Part n="03" label="Approach">{paras(cs.approach)}</Part>
-              <Part n="04" label="Decisions">
+              <Part n={num()} label="The problem">{paras(cs.problem)}</Part>
+              <Part n={num()} label="My role">{paras(cs.role)}</Part>
+              <Part n={num()} label="Approach">{paras(cs.approach)}</Part>
+              {hasArchitecture(project.slug) && (
+                <Part n={num()} label="Architecture">
+                  <Architecture slug={project.slug} />
+                </Part>
+              )}
+              <Part n={num()} label="Decisions">
                 <ol className="flex flex-col gap-10">
                   {cs.decisions.map((d, i) => (
                     <li key={d.title} className="flex flex-col gap-3">
@@ -186,12 +202,14 @@ export default async function ProjectDetailPage({
                 </ol>
               </Part>
               {cs.outcome && cs.outcome.length > 0 && (
-                <Part n="05" label="Outcome">{paras(cs.outcome)}</Part>
+                <Part n={num()} label="Outcome">{paras(cs.outcome)}</Part>
               )}
-              <Part n={cs.outcome?.length ? "06" : "05"} label="What I'd do differently">
-                {paras(cs.differently)}
-              </Part>
-              <Part n={cs.outcome?.length ? "07" : "06"} label="Stack">
+              {cs.differently && cs.differently.length > 0 && (
+                <Part n={num()} label="What I'd do differently">
+                  {paras(cs.differently)}
+                </Part>
+              )}
+              <Part n={num()} label="Stack">
                 <StackList project={project} />
               </Part>
             </article>
