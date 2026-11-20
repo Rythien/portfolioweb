@@ -641,11 +641,6 @@ html.lenis, html.lenis body {
     inset 0 1px 3px rgba(0, 0, 0, calc(0.1 * (1 - var(--dream, 0))));
 }
 
-/* WAKE art only: the DREAM variant above it already reads at distance */
-.project-art-panel > img:not(.project-art-dream) {
-  filter: url(#art-tone);
-}
-
 /* ── Project artwork: DREAM layer rides the flood ─────────────── */
 
 .project-art-dream {

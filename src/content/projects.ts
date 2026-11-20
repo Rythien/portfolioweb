@@ -53,7 +53,16 @@ export interface Project {
   caseStudy?: CaseStudy;
   placeholder?: boolean;
   link: string;
-  /** Panel and case-study hero. */
+  /** Screen recordings: the panel loop and the captioned walkthrough. */
+  video: {
+    /** Path without extension (scripts/capture writes .webm, .mp4, -poster.webp). */
+    preview: string;
+    walkthrough: string;
+    /** What each clip shows, for screen readers. */
+    previewLabel: string;
+    walkthroughLabel: string;
+  };
+  /** Generated concept art: index cards, the Archive, Open Graph. */
   cover: ProjectImage;
   /** Case-study gallery. */
   images: ProjectImage[];
@@ -85,6 +94,16 @@ function cover(slug: string, title: string, shows: string): ProjectImage {
   };
 }
 
+/** The recordings in public/projects/<slug>/ (scripts/capture). */
+function video(slug: string, previewLabel: string, walkthroughLabel: string) {
+  return {
+    preview: `/projects/${slug}/preview`,
+    walkthrough: `/projects/${slug}/walkthrough`,
+    previewLabel,
+    walkthroughLabel,
+  };
+}
+
 /** A still from the screen recording: public/projects/<slug>/still-<name>.webp. */
 function still(slug: string, name: string, caption: string): ProjectImage {
   return { src: `/projects/${slug}/still-${name}.webp`, alt: caption.replace(/\.$/, ""), caption };
@@ -97,7 +116,7 @@ export const projects: Project[] = [
     title: "Nova Delivers",
     titleAccent: "Delivers",
     subtitle: "A food delivery storefront and its operations portal",
-    category: "Web Application / Full-Stack",
+    category: "Full-Stack Web App",
     type: "Web app",
     year: "2026",
     roles: ["Design", "Frontend", "Backend & Database"],
@@ -117,6 +136,11 @@ export const projects: Project[] = [
     dreamDescription:
       "A kitchen that never sleeps: a menu you scroll through like a film, and every order walking its way from the pass to the door.",
     link: "/project/nova-delivers",
+    video: video(
+      "nova-delivers",
+      "Screen recording of Nova Delivers: the video hero, a scroll into the burger anatomy, then the Momo filter on the menu.",
+      "Captioned walkthrough of Nova Delivers: the hero, the scroll-scrubbed anatomy, filtering and searching the menu, the cart drawer, then the operations portal accepting an order.",
+    ),
     cover: cover("nova-delivers", "Nova Delivers", "ice chips refracting the Nova Delivers title"),
     images: [
       still("nova-delivers", "hero", "The customer site opens on a full-bleed video hero."),
@@ -158,6 +182,11 @@ export const projects: Project[] = [
     dreamDescription:
       "A blueprint that breathes: one stage, one camera, and a specimen drawn to scale as you pass it.",
     link: "/project/alveronium",
+    video: video(
+      "alveronium",
+      "Screen recording of Alveronium Studio: the 3D specimen in the hero, a scroll into the statement, then hovering the services rows.",
+      "Captioned walkthrough of Alveronium Studio: the hero specimen, the particle statement, the services instrument panel, the process stages and the globe at the close.",
+    ),
     cover: cover("alveronium", "Alveronium Studio", "ice chips refracting the Alveronium Studio title"),
     images: [
       still("alveronium", "hero", "The hero: a title block, the 3D specimen and its data sheet."),
@@ -178,7 +207,7 @@ export const projects: Project[] = [
     title: "Care Ops",
     titleAccent: "Ops",
     subtitle: "Rostering and shift operations for disability support",
-    category: "Web Application / Operations",
+    category: "Operations Web App",
     type: "App design",
     year: "2026",
     roles: ["Design", "Frontend", "Planning"],
@@ -198,6 +227,11 @@ export const projects: Project[] = [
     dreamDescription:
       "A week of care laid out like a loom: each shift a thread, checked and costed the moment it lands.",
     link: "/project/care-ops",
+    video: video(
+      "care-ops",
+      "Screen recording of Care Ops: the weekly roster, then a support worker dragged onto a participant's day.",
+      "Captioned walkthrough of Care Ops: signing in as an admin, the admin console, rostering by drag and drop, participants, then the support worker's view and slide to clock in.",
+    ),
     cover: cover("care-ops", "Care Ops", "ice chips refracting the Care Ops title"),
     images: [
       still("care-ops", "login", "Role-aware sign-in: magic link for support workers, password for admins."),

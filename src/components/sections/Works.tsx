@@ -18,7 +18,7 @@ import {
 import { getLenis } from "@/lib/scroll";
 import Swap from "@/components/ui/Swap";
 import { projects, type Project } from "@/content/projects";
-import ProjectArt from "@/components/ui/ProjectArt";
+import ProjectVideo from "@/components/ui/ProjectVideo";
 import ToolLogos from "@/components/ui/ToolLogos";
 import { useThemeStore } from "@/store/useThemeStore";
 import RecoveredMark from "@/components/ui/RecoveredMark";
@@ -27,15 +27,6 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 /** Horizontal pan only where there is room for it and motion is welcome. */
 const HORIZONTAL = "(min-width: 1024px) and (prefers-reduced-motion: no-preference)";
-
-/**
- * Tone curve for the WAKE panel art, sampled at eighths (input 0, 0.125,
- * ... 1). The covers sit almost entirely in 0.8-1.0, so the steep part is
- * up there: paper ~0.95 -> ~0.88, the title watermark ~0.87 -> ~0.73 (title vs
- * paper 20 -> ~35 levels at 1440),
- * whites stay near white; shadows below 0.75 are compressed gently.
- */
-const ART_TONE = "0 0.08 0.18 0.28 0.38 0.47 0.55 0.76 0.97";
 
 function TitleWithAccent({ project }: { project: Project }) {
   const { title, titleAccent } = project;
@@ -218,19 +209,6 @@ export default function Works() {
       aria-label="Selected Works"
       className="scroll-mt-[108px] lg:scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
     >
-      {/* Tone curve for the WAKE panel art (.project-art-panel): the
-          generated covers are light-key (mean ~220/255, sd ~15), so the
-          title watermark and glass read only at 1:1 (see ART_TONE).
-          CSS contrast() would blow the light title out to white. */}
-      <svg aria-hidden="true" width="0" height="0" className="absolute">
-        <filter id="art-tone" colorInterpolationFilters="sRGB">
-          <feComponentTransfer>
-            <feFuncR type="table" tableValues={ART_TONE} />
-            <feFuncG type="table" tableValues={ART_TONE} />
-            <feFuncB type="table" tableValues={ART_TONE} />
-          </feComponentTransfer>
-        </filter>
-      </svg>
       {/* Pinned viewport for the horizontal pan (data-h is set by the
           script when the pan runs); otherwise a plain stacked column */}
       <div ref={pinRef} className="work-pin group/works data-[h]:h-[100dvh] data-[h]:flex data-[h]:items-center data-[h]:overflow-hidden data-[h]:pt-20">
@@ -238,7 +216,7 @@ export default function Works() {
           ref={trackRef}
           className="work-track flex flex-col gap-24 sm:gap-32 max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full group-data-[h]/works:flex-row group-data-[h]/works:items-center group-data-[h]/works:w-max group-data-[h]/works:max-w-none group-data-[h]/works:mx-0 group-data-[h]/works:gap-[6vw] group-data-[h]/works:px-[calc((100vw-var(--slide-w))/2)]"
         >
-          {projects.map((project, index) => (
+          {projects.map((project) => (
             <article
               key={project.slug}
               className="work-slide flex flex-col gap-8 sm:gap-12 lg:grid lg:grid-cols-12 lg:gap-x-10 lg:gap-y-6 lg:items-start group-data-[h]/works:w-[var(--slide-w)] group-data-[h]/works:shrink-0"
@@ -305,11 +283,12 @@ export default function Works() {
                   <div className="work-frame dream-glass relative p-2 sm:p-3">
                     <div className="work-frame-art relative overflow-hidden">
                       <div className="work-art-drift scale-[1.07] will-change-transform">
-                        <ProjectArt
-                          image={project.cover}
+                        <ProjectVideo
+                          variant="loop"
+                          src={project.video.preview}
+                          label={project.video.previewLabel}
+                          dreamSrc={project.cover.dreamSrc}
                           sizes="(min-width: 1280px) 1152px, (min-width: 1024px) calc(100vw - 128px), (min-width: 640px) calc(100vw - 80px), calc(100vw - 48px)"
-                          loading={index === 0 ? "eager" : "lazy"}
-                          className="project-art-panel"
                         />
                       </div>
                     </div>
@@ -324,8 +303,11 @@ export default function Works() {
                   />
                 </div>
               </div>
-              <p className="-mt-4 sm:-mt-8 lg:mt-0 lg:col-span-8 lg:row-start-3 font-mono text-label text-ink/80">
-                {project.cover.caption}
+              {/* Private builds: a recording, never a live site or a repo.
+                  Plain text on purpose, nothing here is a link. */}
+              <p className="-mt-4 sm:-mt-8 lg:mt-0 lg:col-span-8 lg:row-start-3 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-label text-ink/80">
+                <span>Video preview</span>
+                <span>Code on request</span>
               </p>
 
               <div className="flex items-center justify-between font-mono text-label text-ink/80 lg:col-start-9 lg:col-span-4 lg:row-start-2 lg:self-end">

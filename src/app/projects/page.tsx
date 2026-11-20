@@ -110,11 +110,10 @@ export default function ProjectsIndexPage() {
                   >
                     <Swap>Read study →</Swap>
                   </Link>
-                  {project.placeholder && (
-                    <span className="text-label text-ink-muted">
-                      Pending
-                    </span>
-                  )}
+                  {/* Private builds: plain text, not a link */}
+                  <span className="text-label text-ink-muted">
+                    Code on request
+                  </span>
                 </div>
               </article>
             ))}

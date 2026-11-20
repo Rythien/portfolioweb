@@ -426,7 +426,7 @@ interface SealProps {
   index: number;
   /** Cover of the project held inside. */
   cover: string;
-  /** The ring label, e.g. "NOVA DELIVERS · WEB APPLICATION / FULL-STACK · 2026". */
+  /** The ring label, e.g. "NOVA DELIVERS · FULL-STACK WEB APP · 2026". */
   label: string;
   /** The project held inside (its panel when freed). */
   project: Project | undefined;
