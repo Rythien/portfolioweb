@@ -8,6 +8,7 @@ import LenisProvider from "@/components/common/LenisProvider";
 import ProjectArt from "@/components/ui/ProjectArt";
 import ProjectVideo from "@/components/ui/ProjectVideo";
 import Architecture, { hasArchitecture } from "@/components/case-study/Architecture";
+import CodeExcerpt from "@/components/case-study/CodeExcerpt";
 import RecoveredMark from "@/components/ui/RecoveredMark";
 import { projects, getProjectBySlug, type Project } from "@/content/projects";
 import Swap from "@/components/ui/Swap";
@@ -201,6 +202,19 @@ export default async function ProjectDetailPage({
                   ))}
                 </ol>
               </Part>
+              {cs.excerpts && cs.excerpts.length > 0 && (
+                <Part n={num()} label="In the code">
+                  <p>
+                    The repository is private, so here are a few short excerpts instead, copied as
+                    written. A &ldquo;// &hellip;&rdquo; line marks where something was left out.
+                  </p>
+                  <div className="flex flex-col gap-10 mt-2">
+                    {cs.excerpts.map((e, i) => (
+                      <CodeExcerpt key={e.source} excerpt={e} n={i + 1} />
+                    ))}
+                  </div>
+                </Part>
+              )}
               {cs.outcome && cs.outcome.length > 0 && (
                 <Part n={num()} label="Outcome">{paras(cs.outcome)}</Part>
               )}

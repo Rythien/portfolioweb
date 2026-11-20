@@ -65,6 +65,9 @@ html[data-mode="wake"] {
   --t-rule: rgba(26, 26, 30, 0.1);
   --t-rule-hover: rgba(26, 26, 30, 0.25);
   --t-grid: rgba(26, 26, 30, 0.06);
+  /* Code excerpts, on the elevated surface: keyword 6.4:1, string 5.4:1, comment (ink-muted) 4.6:1 */
+  --t-code-kw: #3b3f9e;
+  --t-code-str: #7a4a12;
   /* Keyboard focus: ink on paper (14:1) */
   --t-focus: var(--t-ink);
 }
@@ -78,6 +81,9 @@ html[data-mode="dream"] {
   --t-rule: rgba(242, 239, 233, 0.08);
   --t-rule-hover: rgba(242, 239, 233, 0.2);
   --t-grid: rgba(242, 239, 233, 0.06);
+  /* Code excerpts, on the elevated night surface: keyword 8.8:1, string 10.8:1, comment 5.6:1 */
+  --t-code-kw: #b7a8ff;
+  --t-code-str: #e7c27a;
   /* Keyboard focus: the DREAM accent (7.8:1 on night) */
   --t-focus: #a894ff;
 }
@@ -639,6 +645,20 @@ html.lenis, html.lenis body {
   box-shadow:
     inset 0 0 0 1px var(--t-rule),
     inset 0 1px 3px rgba(0, 0, 0, calc(0.1 * (1 - var(--dream, 0))));
+}
+
+/* ── Code excerpts (case studies) ─────────────────────────────── */
+
+.tok-c {
+  color: var(--t-ink-muted);
+  font-style: italic;
+}
+.tok-s,
+.tok-n {
+  color: var(--t-code-str);
+}
+.tok-k {
+  color: var(--t-code-kw);
 }
 
 /* ── Project artwork: DREAM layer rides the flood ─────────────── */

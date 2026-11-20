@@ -1,0 +1,14 @@
+// Load initial keyframe first for instant render
+const firstBitmap = ('createImageBitmap' in window)
+  ? await createImageBitmap(firstBlob)
+  : await decodeImageFallback(firstBlob);
+bitmaps[0] = firstBitmap;
+drawFrame(0);
+
+// Stream the remaining frames in non-blocking batches
+const BATCH_SIZE = 8;
+for (let b = 0; b < TOTAL_FRAMES; b += BATCH_SIZE) {
+  const batchPromises = [];
+  // … fetch → blob → createImageBitmap for each frame in the batch
+  await Promise.all(batchPromises);
+}

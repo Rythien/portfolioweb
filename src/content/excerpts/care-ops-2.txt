@@ -1,0 +1,13 @@
+const needs = (participant.support_needs_summary || "").toLowerCase()
+const quals = (worker.qualifications || []).map((q) => q.toLowerCase())
+if (needs.includes("hoist") || needs.includes("manual handling")) {
+  const hasManualHandling = quals.some((q) => q.includes("manual handling"))
+  if (!hasManualHandling) {
+    conflicts.push({
+      type: "missing_qualification",
+      severity: "hard",
+      title: "Missing Qualification: Manual Handling / Hoist",
+      message: `${participant.first_name} requires ceiling hoist / manual handling, but ${worker.full_name} does not hold a verified Manual Handling certification.`,
+    })
+  }
+}

@@ -1,4 +1,14 @@
-﻿export interface ProjectImage {
+﻿/** A short excerpt from a private repository, shown in a case study. */
+export interface Excerpt {
+  /** Path within the project, shown above the code. */
+  file: string;
+  /** File in src/content/excerpts/, copied verbatim; "// …" marks a cut. */
+  source: string;
+  /** One sentence on why it is written this way. */
+  why: string;
+}
+
+export interface ProjectImage {
   /** WAKE variant. */
   src: string;
   /** DREAM variant, crossfaded in by the --dream flood value. */
@@ -31,6 +41,8 @@ export interface CaseStudy {
   differently?: string[];
   /** Optional outcome: results, reception, where it is used. */
   outcome?: string[];
+  /** Two or three short excerpts (src/content/excerpts), each approved by the author. */
+  excerpts?: Excerpt[];
 }
 
 export interface Project {
@@ -153,6 +165,18 @@ const NOVA_CASE: CaseStudy = {
       ],
     },
   ],
+  excerpts: [
+    {
+      file: "js/exploded-view.js",
+      source: "nova-delivers-1.txt",
+      why: "The first frame is decoded and drawn before anything else, so the canvas is never empty. The other 119 frames are decoded off the main thread in batches of 8, which keeps scrolling smooth while they load.",
+    },
+    {
+      file: "admin-server.js",
+      source: "nova-delivers-2.txt",
+      why: "Search text never goes into the SQL string itself. It's passed as a separate value, so whatever someone types in the search box can't change the query.",
+    },
+  ],
 };
 
 const ALVERONIUM_CASE: CaseStudy = {
@@ -190,6 +214,18 @@ const ALVERONIUM_CASE: CaseStudy = {
         "Some 3D objects are placed to sit exactly on HTML boxes, and that placement assumes a camera looking straight down its axis. Aiming the damped camera at the rail's target tilted it during every ease, and the specimen drifted off its box whenever the page moved.",
         "So the camera looks straight down from wherever it actually is, never at the target, and the 3D stays locked to the layout.",
       ],
+    },
+  ],
+  excerpts: [
+    {
+      file: "components/canvas/stations.ts",
+      source: "alveronium-1.txt",
+      why: "This only works out where the camera should be. The smooth movement is applied separately, and the scratch vectors are allocated once, so nothing is allocated on every frame.",
+    },
+    {
+      file: "components/canvas/Stage.tsx",
+      source: "alveronium-2.txt",
+      why: "The camera eases toward its target at the same rate on any frame rate, so a fast scroll arrives with some weight instead of jumping. Capping the frame time stops a jump when you return to the tab.",
     },
   ],
 };
@@ -230,6 +266,23 @@ const CARE_OPS_CASE: CaseStudy = {
         "The screens depend on the API client's interface, never on where the data lives. That is why the whole app runs end to end in the browser with no server today.",
         "It also means the mock behind the client can be replaced by the real backend without touching a screen.",
       ],
+    },
+  ],
+  excerpts: [
+    {
+      file: "pages/RosterPage.tsx",
+      source: "care-ops-1.txt",
+      why: "A drop is never silently refused. A clean shift is created at once, and a conflicting one opens the shift form already filled in, so the coordinator can fix it or override it.",
+    },
+    {
+      file: "utils/rosterEngine.ts",
+      source: "care-ops-2.txt",
+      why: "A missing safety qualification counts as a hard conflict, unlike overtime, which only warns. The message names both the participant and the worker, so the coordinator knows exactly what to fix.",
+    },
+    {
+      file: "components/worker/SlideToClockIn.tsx",
+      source: "care-ops-3.txt",
+      why: "Clocking in is a slide, not a tap, so a phone in a pocket can't start a shift. It completes at 75% so it doesn't demand a perfect swipe.",
     },
   ],
 };

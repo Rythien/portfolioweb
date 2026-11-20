@@ -1,0 +1,9 @@
+/** Frame-rate independent lerp. */
+const damp = (current: number, target: number, lambda: number, delta: number) =>
+  THREE.MathUtils.lerp(current, target, 1 - Math.exp(-lambda * delta));
+
+    // … then, inside the rail's useFrame((state, delta) => {
+    const d = Math.min(delta, 0.1); // guard against tab-restore jumps
+    const target = railPosition(scrollState.page);
+    state.camera.position.x = damp(state.camera.position.x, target.x, 2.4, d);
+    state.camera.position.y = damp(state.camera.position.y, target.y, 2.4, d);

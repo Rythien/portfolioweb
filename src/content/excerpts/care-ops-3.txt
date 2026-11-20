@@ -1,0 +1,15 @@
+const currentX = clientX - rect.left - puckWidth / 2
+const clamped = Math.max(0, Math.min(maxDist, currentX))
+const progress = clamped / maxDist
+setSliderPos(progress)
+onDragProgress?.(progress)
+
+// Auto-trigger when dragged beyond 75%
+if (progress >= 0.75) {
+  setIsCompleted(true)
+  setSliderPos(1)
+  // … end the drag, buzz the phone, then
+  setTimeout(() => {
+    onClockIn()
+  }, 350)
+}

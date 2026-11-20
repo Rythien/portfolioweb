@@ -1,0 +1,15 @@
+export function railPosition(progress: number): RailPose {
+  const span = ORDER.length - 1;
+  const scaled = Math.min(1, Math.max(0, progress)) * span;
+  const index = Math.min(span - 1, Math.floor(scaled));
+  const t = scaled - index;
+
+  const a = ORDER[index].at;
+  const b = ORDER[index + 1].at;
+  from.set(a[0], a[1], a[2]);
+  to.set(b[0], b[1], b[2]);
+  position.lerpVectors(from, to, t);
+  // … pose.x and pose.y likewise
+  pose.z = position.z + CAMERA_STANDOFF;
+  return pose;
+}

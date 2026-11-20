@@ -1,0 +1,14 @@
+if (statusFilter && statusFilter !== 'all') {
+  conditions.push('status = ?');
+  params.push(statusFilter);
+}
+if (search) {
+  conditions.push('(id LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ? OR area LIKE ?)');
+  const s = `%${search}%`;
+  params.push(s, s, s, s);
+}
+if (conditions.length > 0) {
+  sql += ' WHERE ' + conditions.join(' AND ');
+}
+sql += ' ORDER BY created_at DESC';
+const orders = db.prepare(sql).all(...params);

@@ -1,0 +1,11 @@
+// If hard conflict or soft conflict, open sheet pre-filled so admin can review/override
+if (!validation.isValid) {
+  setSheetParticipantId(participantId)
+  setSheetWorkerId(worker.id)
+  setSheetDate(dateStr)
+  // … start and end times, break and shift type
+  setIsSheetOpen(true)
+  showToast(`Warning: Schedule conflict detected for ${worker.full_name}`)
+  return
+}
+// Otherwise, create shift directly
