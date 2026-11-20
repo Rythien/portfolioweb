@@ -52,3 +52,6 @@ next-env.d.ts
 /shots/
 /perf-*.log
 /bench-*.log
+
+# Capture configs: client-identifying masking rules and paths stay local
+scripts/capture/*.local.json

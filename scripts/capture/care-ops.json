@@ -1,0 +1,295 @@
+{
+  "slug": "care-ops",
+  "_comment": "The server, the logo swap and the masking rules name the client, so they live in care-ops.local.json (gitignored). Without it the capture refuses to run.",
+  "requiresLocal": true,
+  "base": "http://localhost:8443",
+  "viewport": [
+    1600,
+    1000
+  ],
+  "colorScheme": "light",
+  "captionLabel": "Care Ops",
+  "init": {
+    "css": "html{scrollbar-width:none}"
+  },
+  "preview": {
+    "seconds": 8,
+    "posterAt": 0.6,
+    "setup": [
+      {
+        "do": "goto",
+        "url": "/login",
+        "wait": 2500
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Admin & Coordinator')",
+        "ms": 1,
+        "after": 300
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Admin Demo')",
+        "ms": 1,
+        "after": 300
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Sign In to Portal')",
+        "ms": 1,
+        "after": 2500
+      },
+      {
+        "do": "goto",
+        "url": "/roster",
+        "wait": 2500
+      }
+    ],
+    "beats": [
+      {
+        "do": "wait",
+        "ms": 900
+      },
+      {
+        "do": "scroll",
+        "by": 160,
+        "ms": 900,
+        "settle": 200
+      },
+      {
+        "do": "drag",
+        "from": ".worker-drag-source",
+        "to": "[data-roster-cell='true'] >> nth=2",
+        "ms": 1600,
+        "after": 2200
+      },
+      {
+        "do": "wait",
+        "ms": 1300
+      }
+    ]
+  },
+  "walkthrough": {
+    "posterAt": 1,
+    "setup": [
+      {
+        "do": "goto",
+        "url": "/login",
+        "wait": 3000
+      }
+    ],
+    "beats": [
+      {
+        "do": "caption",
+        "text": "A care-provider operations app. Sign-in is role-aware: magic link for support workers, password for admins.",
+        "hold": 2200
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Admin & Coordinator')",
+        "after": 700
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Admin Demo')",
+        "after": 600
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Sign In to Portal')",
+        "after": 2200
+      },
+      {
+        "do": "caption",
+        "text": "The admin console: who is on shift now, unfilled shifts, attendance."
+      },
+      {
+        "do": "scroll",
+        "by": 420,
+        "ms": 2200,
+        "settle": 900
+      },
+      {
+        "do": "caption",
+        "text": "Rostering: drag a worker onto a participant's day. The shift is validated and costed on drop."
+      },
+      {
+        "do": "goto",
+        "url": "/roster",
+        "wait": 1800
+      },
+      {
+        "do": "scroll",
+        "by": 160,
+        "ms": 800,
+        "settle": 300
+      },
+      {
+        "do": "drag",
+        "from": ".worker-drag-source",
+        "to": "[data-roster-cell='true'] >> nth=2",
+        "ms": 1500,
+        "after": 2400
+      },
+      {
+        "do": "caption",
+        "text": "Participants: support needs, plan type and budget used against total."
+      },
+      {
+        "do": "goto",
+        "url": "/participants",
+        "wait": 1600
+      },
+      {
+        "do": "scroll",
+        "by": 380,
+        "ms": 2000,
+        "settle": 900
+      },
+      {
+        "do": "caption",
+        "text": "The same app as a support worker: the next shift, then slide to clock in."
+      },
+      {
+        "do": "goto",
+        "url": "/dashboard",
+        "wait": 1000,
+        "cut": true
+      },
+      {
+        "do": "cut"
+      },
+      {
+        "do": "click",
+        "sel": "header button:has-text('Worker'), button:text-is('Worker')",
+        "ms": 1,
+        "after": 800
+      },
+      {
+        "do": "eval",
+        "js": "(()=>{const s=document.createElement(\"style\");s.textContent=\"div[role=status].fixed{display:none!important}\";document.head.appendChild(s)})()",
+        "after": 900
+      },
+      {
+        "do": "cut",
+        "off": true
+      },
+      {
+        "do": "wait",
+        "ms": 1000
+      },
+      {
+        "do": "drag",
+        "from": "[role='slider'][aria-label='Slide to clock in'] > div:last-child",
+        "by": [
+          440,
+          0
+        ],
+        "ms": 1300,
+        "after": 1200
+      },
+      {
+        "do": "caption",
+        "text": "Clocking in opens the shift itself: visit verification, checklist and care notes."
+      },
+      {
+        "do": "wait",
+        "ms": 2600
+      },
+      {
+        "do": "caption",
+        "text": null,
+        "hold": 600
+      }
+    ]
+  },
+  "stills": {
+    "beats": [
+      {
+        "do": "goto",
+        "url": "/login",
+        "wait": 3000
+      },
+      {
+        "do": "still",
+        "name": "login"
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Admin & Coordinator')",
+        "ms": 1,
+        "after": 300
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Admin Demo')",
+        "ms": 1,
+        "after": 300
+      },
+      {
+        "do": "click",
+        "sel": "button:has-text('Sign In to Portal')",
+        "ms": 1,
+        "after": 5500
+      },
+      {
+        "do": "still",
+        "name": "dashboard"
+      },
+      {
+        "do": "goto",
+        "url": "/roster",
+        "wait": 2500
+      },
+      {
+        "do": "drag",
+        "from": ".worker-drag-source",
+        "to": "[data-roster-cell='true'] >> nth=2",
+        "ms": 600,
+        "after": 5000
+      },
+      {
+        "do": "still",
+        "name": "roster"
+      },
+      {
+        "do": "goto",
+        "url": "/participants",
+        "wait": 2500
+      },
+      {
+        "do": "still",
+        "name": "participants"
+      },
+      {
+        "do": "goto",
+        "url": "/reports",
+        "wait": 2500
+      },
+      {
+        "do": "still",
+        "name": "reports"
+      },
+      {
+        "do": "goto",
+        "url": "/dashboard",
+        "wait": 1500
+      },
+      {
+        "do": "click",
+        "sel": "header button:has-text('Worker'), button:text-is('Worker')",
+        "ms": 1,
+        "after": 800
+      },
+      {
+        "do": "eval",
+        "js": "(()=>{const s=document.createElement(\"style\");s.textContent=\"div[role=status].fixed{display:none!important}\";document.head.appendChild(s)})()",
+        "after": 900
+      },
+      {
+        "do": "still",
+        "name": "worker"
+      }
+    ]
+  }
+}

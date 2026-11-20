@@ -1,0 +1,252 @@
+{
+  "slug": "nova-delivers",
+  "base": "http://localhost:3200",
+  "viewport": [
+    1600,
+    1000
+  ],
+  "captionLabel": "Nova Delivers",
+  "server": [
+    {
+      "cmd": "node",
+      "args": [
+        "server.js"
+      ],
+      "cwd": "C:/nvadeee/nvade/site",
+      "env": {
+        "PORT": "3200"
+      },
+      "ready": "http://localhost:3200/"
+    },
+    {
+      "cmd": "node",
+      "args": [
+        "admin-server.js"
+      ],
+      "cwd": "C:/nvadeee/nvade/site",
+      "env": {
+        "ADMIN_PORT": "3201"
+      },
+      "ready": "http://localhost:3201/"
+    }
+  ],
+  "preserve": [
+    "C:/nvadeee/nvade/site/nova.db"
+  ],
+  "init": {
+    "css": "html{scrollbar-width:none}",
+    "replace": [
+      ["\\b98\\d{8}\\b", "g", "9800000000"],
+      ["[\\w.]+@gmail\\.com", "gi", "customer@example.com"],
+      ["Customer \\d{4}", "g", "Customer 0000"],
+      ["\\bSeron\\b", "g", "Customer 0000"],
+      ["27\\.\\d{3,4}, ?85\\.\\d{3,4}", "g", "27.7172, 85.3240"]
+    ]
+  },
+  "preview": {
+    "seconds": 8,
+    "posterAt": 0.8,
+    "setup": [
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 3500
+      }
+    ],
+    "beats": [
+      {
+        "do": "wait",
+        "ms": 1500
+      },
+      {
+        "do": "scroll",
+        "by": 2100,
+        "ms": 3000,
+        "settle": 300
+      },
+      {
+        "do": "jump",
+        "to": "#filter-bar",
+        "offset": 260,
+        "settle": 900
+      },
+      {
+        "do": "click",
+        "sel": "#filter-bar button:has-text('Momo')",
+        "ms": 600,
+        "after": 1400
+      }
+    ]
+  },
+  "walkthrough": {
+    "posterAt": 1.5,
+    "setup": [
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 3500
+      }
+    ],
+    "beats": [
+      {
+        "do": "caption",
+        "text": "The customer site opens on a full-bleed video hero.",
+        "hold": 3000
+      },
+      {
+        "do": "caption",
+        "text": "Scrolling scrubs a 120-frame burger 'anatomy' drawn to a canvas."
+      },
+      {
+        "do": "scroll",
+        "by": 2500,
+        "ms": 6500,
+        "settle": 600
+      },
+      {
+        "do": "caption",
+        "text": "The menu: 164 dishes, filtered by category without a page load."
+      },
+      {
+        "do": "jump",
+        "to": "#filter-bar",
+        "offset": 260,
+        "settle": 900
+      },
+      {
+        "do": "click",
+        "sel": "#filter-bar button:has-text('Momo')",
+        "after": 1300
+      },
+      {
+        "do": "click",
+        "sel": "#filter-bar button:has-text('Pizza')",
+        "after": 1300
+      },
+      {
+        "do": "caption",
+        "text": "Live search narrows the catalogue as you type."
+      },
+      {
+        "do": "click",
+        "sel": "#filter-bar button:has-text('All')",
+        "nth": 0,
+        "after": 500
+      },
+      {
+        "do": "scroll",
+        "by": -240,
+        "ms": 500,
+        "settle": 200
+      },
+      {
+        "do": "type",
+        "sel": "#menu-search-input",
+        "text": "biryani",
+        "after": 1400
+      },
+      {
+        "do": "caption",
+        "text": "Add to cart, then review the order in the cart drawer."
+      },
+      {
+        "do": "click",
+        "sel": "#dish-grid button[aria-label^='Add ']:visible",
+        "after": 900
+      },
+      {
+        "do": "click",
+        "sel": "#cart-open-btn",
+        "after": 2600
+      },
+      {
+        "do": "caption",
+        "text": "A separate operations portal on its own port reads the same SQLite database."
+      },
+      {
+        "do": "goto",
+        "url": "http://localhost:3201/",
+        "wait": 2000
+      },
+      {
+        "do": "wait",
+        "ms": 1600
+      },
+      {
+        "do": "caption",
+        "text": "Staff move each order along: pending, cooking, out for delivery, delivered."
+      },
+      {
+        "do": "click",
+        "sel": ".btn-accept",
+        "after": 1500
+      },
+      {
+        "do": "click",
+        "sel": ".admin-tab[data-status='cooking']",
+        "after": 2200
+      },
+      {
+        "do": "caption",
+        "text": null,
+        "hold": 600
+      }
+    ]
+  },
+  "stills": {
+    "beats": [
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 3500
+      },
+      {
+        "do": "still",
+        "name": "hero"
+      },
+      {
+        "do": "scroll",
+        "by": 1300,
+        "ms": 2500,
+        "settle": 1500
+      },
+      {
+        "do": "still",
+        "name": "anatomy"
+      },
+      {
+        "do": "jump",
+        "to": "#filter-bar",
+        "offset": 200,
+        "settle": 1500
+      },
+      {
+        "do": "still",
+        "name": "menu"
+      },
+      {
+        "do": "click",
+        "sel": "#dish-grid button[aria-label^='Add ']:visible",
+        "after": 600
+      },
+      {
+        "do": "click",
+        "sel": "#cart-open-btn",
+        "after": 1800
+      },
+      {
+        "do": "still",
+        "name": "cart"
+      },
+      {
+        "do": "goto",
+        "url": "http://localhost:3201/",
+        "wait": 2500
+      },
+      {
+        "do": "still",
+        "name": "admin"
+      }
+    ]
+  }
+}
