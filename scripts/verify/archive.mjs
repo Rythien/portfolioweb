@@ -100,7 +100,13 @@ const suspended = await page.evaluate(() => ({
   headerInert: !!document.querySelector("header")?.closest("[inert]"),
   mainInert: !!document.getElementById("main-content")?.closest("[inert]"),
   pillCovered: document.elementFromPoint(720, 860)?.closest(".archive-root") != null,
-  chrome: [...document.querySelectorAll(".archive-root button")].map((b) => b.textContent?.trim()),
+  // The label as assistive tech reads it: Swap repeats it in an
+  // aria-hidden copy for the hover roll, which textContent would count twice
+  chrome: [...document.querySelectorAll(".archive-root button")].map((b) => {
+    const c = b.cloneNode(true);
+    c.querySelectorAll("[aria-hidden='true']").forEach((n) => n.remove());
+    return c.textContent?.trim();
+  }),
 }));
 check(suspended.overflow === "hidden", "page scroll locked");
 check(suspended.headerInert && suspended.mainInert, "header and main are inert");
