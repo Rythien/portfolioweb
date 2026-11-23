@@ -39,7 +39,7 @@ export default function CVPage() {
               Searon Maharjan
             </h1>
             <p className="mt-4 font-[family-name:var(--font-sans)] text-lg sm:text-xl text-ink/80 font-normal leading-relaxed">
-              Website and app designer and frontend developer in Kathmandu. I design interfaces and build them in code, from first sketch to launch. BICT graduate, Asia e University, 2025.
+              Website and app designer and frontend developer in Kathmandu. I design interfaces and build them in code, from first sketch to launch. BICT graduate with honours, Asia e University, 2025.
             </p>
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-8 font-mono text-xs text-ink-muted">
               <span>Kathmandu, Nepal (UTC+5:45)</span>
@@ -78,7 +78,7 @@ export default function CVPage() {
                 I&apos;m Searon, a website and app designer and frontend developer from Kathmandu, Nepal. I design interfaces from the first sketch to the final screen, then build them in code so nothing gets lost between the design and the launch.
               </p>
               <p>
-                I finished my BICT degree at Asia e University in 2025, where I built a full e-commerce website as my capstone project. I have also used Blender during an internship, so I&apos;m comfortable bringing 3D into a project when it helps.
+                I finished my BICT degree with honours at Asia e University in 2025, where I built a full e-commerce website as my capstone project. I have also used Blender during an internship, so I&apos;m comfortable bringing 3D into a project when it helps.
               </p>
             </div>
           </section>
@@ -110,7 +110,7 @@ export default function CVPage() {
                   Bachelor of Information and Communication Technology (BICT)
                 </h3>
                 <p className="mt-1 text-sm text-ink/80">
-                  Graduated 2025. Capstone project: designed and built a full e-commerce website.
+                  Graduated with honours, 2025. Capstone project: designed and built a full e-commerce website.
                 </p>
               </div>
             </div>

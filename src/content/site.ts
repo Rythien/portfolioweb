@@ -39,8 +39,7 @@ export const SITE_DATA = {
     statementItalic: "contemplation,",
     statementSuffix: "crafting tactile interfaces designed to outlive the noise.",
     body: "Based in Kathmandu, I work at the intersection of graphic design, realtime frontend engineering, and 3D visualization. Every system begins with structural clarity: planning the journey, choosing the type, and choreographing responsive motion that communicates intent rather than ornamentation.",
-    // Stated as on the CV: no honours claim
-    education: "BICT, Asia e University, 2025",
+    education: "BICT with honours, Asia e University, 2025",
     secondaryLanguage: {
       lang: "Nepali / नेपाली",
       quote: "काठमाडौँको ऐतिहासिक शिल्प र आधुनिक डिजिटल प्रविधिको संगम: स्पष्टता, सौन्दर्य र स्थायित्व।",
