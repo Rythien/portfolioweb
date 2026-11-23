@@ -17,122 +17,20 @@ interface KineticHeadingProps {
   children: string;
   as?: "h1" | "h2" | "h3" | "span" | "div";
   className?: string;
-  minWeight?: number;
-  maxWeight?: number;
-  radius?: number;
+  /** Fixed variable-font weight. It never follows the cursor: a weight
+   * change reflows the line, which reads as the text moving. */
+  weight?: number;
   stagger?: gsap.TweenVars["stagger"];
-}
-
-export function useProximityWeight(
-  containerRef: React.RefObject<HTMLElement | null>,
-  radius = 160,
-  minWeight = 300,
-  maxWeight = 700
-) {
-  useEffect(() => {
-    const isFinePointer = window.matchMedia("(pointer: fine)").matches;
-    const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!isFinePointer || isReduced) return;
-
-    const container = containerRef.current;
-    if (!container) return;
-
-    const letters = container.querySelectorAll<HTMLElement>("[data-kinetic-char]");
-    if (!letters.length) return;
-
-    let mouseX = -1000;
-    let mouseY = -1000;
-    let isMoving = false;
-    let idleTimeout: NodeJS.Timeout;
-    let animId: number;
-
-    const weights = new Float32Array(letters.length).fill(minWeight);
-    const targetWeights = new Float32Array(letters.length).fill(minWeight);
-
-    // Pre-calculate letter center positions
-    let letterRects: { x: number; y: number }[] = [];
-    const measure = () => {
-      letterRects = Array.from(letters).map((el) => {
-        const rect = el.getBoundingClientRect();
-        return {
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-        };
-      });
-    };
-
-    measure();
-    window.addEventListener("resize", measure, { passive: true });
-    window.addEventListener("scroll", measure, { passive: true });
-
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-      isMoving = true;
-
-      clearTimeout(idleTimeout);
-      idleTimeout = setTimeout(() => {
-        isMoving = false;
-      }, 300);
-    };
-
-    const updateWeights = () => {
-      if (isMoving) {
-        for (let i = 0; i < letterRects.length; i++) {
-          const dx = mouseX - letterRects[i].x;
-          const dy = mouseY - letterRects[i].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < radius) {
-            const factor = 1 - dist / radius;
-            targetWeights[i] = minWeight + (maxWeight - minWeight) * Math.pow(factor, 1.8);
-          } else {
-            targetWeights[i] = minWeight;
-          }
-        }
-      } else {
-        for (let i = 0; i < targetWeights.length; i++) {
-          targetWeights[i] = minWeight;
-        }
-      }
-
-      // Smooth interpolation
-      for (let i = 0; i < letters.length; i++) {
-        const diff = targetWeights[i] - weights[i];
-        if (Math.abs(diff) > 0.5) {
-          weights[i] += diff * 0.2;
-          letters[i].style.fontVariationSettings = `'wght' ${Math.round(weights[i])}`;
-        }
-      }
-
-      animId = requestAnimationFrame(updateWeights);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    animId = requestAnimationFrame(updateWeights);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure);
-      cancelAnimationFrame(animId);
-      clearTimeout(idleTimeout);
-    };
-  }, [containerRef, radius, minWeight, maxWeight]);
 }
 
 export default function KineticHeading({
   children,
   as: Component = "h2",
   className = "",
-  minWeight = 300,
-  maxWeight = 700,
-  radius = 180,
+  weight = 300,
   stagger = CHAR_STAGGER,
 }: KineticHeadingProps) {
   const containerRef = useRef<HTMLElement | null>(null);
-
-  useProximityWeight(containerRef, radius, minWeight, maxWeight);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -175,8 +73,8 @@ export default function KineticHeading({
               <span key={cIdx} className="inline-block overflow-visible">
                 <span
                   data-kinetic-char
-                  className="inline-block transition-[font-variation-settings] duration-(--dur-pointer) will-change-transform will-change-opacity"
-                  style={{ fontVariationSettings: `'wght' ${minWeight}` }}
+                  className="inline-block will-change-transform will-change-opacity"
+                  style={{ fontVariationSettings: `'wght' ${weight}` }}
                 >
                   {char}
                 </span>

@@ -7,7 +7,10 @@ import * as THREE from "three";
 import { useScrollStore, getSectionProgress } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import Debris from "@/components/crystal/Debris";
-import { useCrystalPose } from "@/hooks/useCrystalPose";
+import { useCrystalPose, getCrystalTimeOverride } from "@/hooks/useCrystalPose";
+
+/** The scene clock, pinned when a test freezes the crystal pose (crystalfreeze). */
+const sceneTime = (state: { clock: THREE.Clock }) => getCrystalTimeOverride() ?? state.clock.elapsedTime;
 import { useThemeStore } from "@/store/useThemeStore";
 import Marquee from "./Marquee";
 
@@ -63,7 +66,7 @@ function DustParticles() {
 
   useFrame((state) => {
     if (!ref.current) return;
-    const t = state.clock.elapsedTime * 0.03;
+    const t = sceneTime(state) * 0.03;
     const { progress } = useScrollStore.getState();
     ref.current.rotation.y = t;
     ref.current.rotation.x = Math.sin(t * 0.5) * 0.08;
@@ -113,7 +116,7 @@ function PixelSparkles() {
   useFrame((state) => {
     if (!ref.current) return;
     const mat = ref.current.material as THREE.PointsMaterial;
-    opacityRef.current = 0.5 + Math.sin(state.clock.elapsedTime * 2.0) * 0.3;
+    opacityRef.current = 0.5 + Math.sin(sceneTime(state) * 2.0) * 0.3;
     mat.opacity = opacityRef.current;
   });
 
@@ -172,7 +175,7 @@ function GhostedTitle({
     ref.current.visible = vis > 0.001;
     if (!ref.current.visible) return;
 
-    const t = state.clock.elapsedTime * speed;
+    const t = sceneTime(state) * speed;
     ref.current.position.z = position[2] + Math.sin(t) * 0.4;
     ref.current.position.x = position[0] + Math.sin(t * 0.7) * 0.2;
     const mat = ref.current.material as THREE.MeshBasicMaterial;
@@ -254,7 +257,7 @@ function FogDrift() {
   const tex = useMemo(() => getFogTexture(), []);
 
   useFrame((state) => {
-    const t = state.clock.elapsedTime;
+    const t = sceneTime(state);
     for (let i = 0; i < FOG_BILLOWS.length; i++) {
       const s = refs.current[i];
       if (!s) continue;
@@ -296,7 +299,7 @@ function FogPlane() {
   useFrame((state) => {
     if (!ref.current) return;
     const mat = ref.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = 0.15 + Math.sin(state.clock.elapsedTime * 0.2) * 0.05;
+    mat.opacity = 0.15 + Math.sin(sceneTime(state) * 0.2) * 0.05;
   });
 
   return (

@@ -76,7 +76,8 @@ function playSwapTick() {
 /*
  * Test-only views behind URL params (Playwright comparisons; the UI never
  * sets them): crystalview=assembled shows the shards laid back together in
- * place of the intact mesh; crystalfreeze=<s> pins rotation and the logo;
+ * place of the intact mesh; crystalfreeze=<s> pins rotation, the logo and the
+ * broken shards' drift;
  * crystallogo=0 hides the hero logo (to sample the glass behind it);
  * crystallogo=matte paints the logo and its contour flat magenta, so a
  * test can find the logo's exact (refracted) silhouette. A frozen pose
@@ -444,7 +445,14 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       }),
       [variant, gfx],
     );
-    const shardGlass = useMemo(() => timed("crystal: shard glass props (normal map)", () => crystalGlassProps(variant, "shard")), [variant]);
+    const shardGlass = useMemo(
+      () => ({
+        ...timed("crystal: shard glass props (normal map)", () => crystalGlassProps(variant, "shard")),
+        // A frozen pose stills the shards' shimmer as well as the intact mesh's
+        ...(DEBUG?.freeze != null ? { temporalDistortion: 0 } : {}),
+      }),
+      [variant],
+    );
     const cheapGlass = useMemo(() => timed("crystal: cheap glass props", () => crystalCheapProps(variant)), [variant]);
     /** Bounding radius per shard (local units), for its on-screen size. */
     const shardRadii = useMemo(
@@ -860,17 +868,18 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
         const s = shards[i];
 
+        // A frozen pose pins the broken shards' drift and tumble too
+        const driftT = DEBUG?.freeze ?? elapsed;
         const driftX = s.driftCenter.x
-          + Math.sin(elapsed * s.lissFreq.x + s.lissPhase.x) * s.lissAmp.x;
+          + Math.sin(driftT * s.lissFreq.x + s.lissPhase.x) * s.lissAmp.x;
         const driftY = s.driftCenter.y
-          + Math.sin(elapsed * s.lissFreq.y + s.lissPhase.y) * s.lissAmp.y;
+          + Math.sin(driftT * s.lissFreq.y + s.lissPhase.y) * s.lissAmp.y;
         const driftZ = s.driftCenter.z
-          + Math.sin(elapsed * s.lissFreq.z + s.lissPhase.z) * s.lissAmp.z;
+          + Math.sin(driftT * s.lissFreq.z + s.lissPhase.z) * s.lissAmp.z;
 
-        const mx = pose.mouseX * 0.15 * (1 + i * 0.05);
-        const my = pose.mouseY * 0.08 * (1 + i * 0.05);
-
-        _off.current.set(driftX + mx - pose.x, driftY + my - pose.y, driftZ - pose.z);
+        // No cursor parallax: the shards refract the headline, so any
+        // pointer-driven offset reads as the text sliding with the mouse
+        _off.current.set(driftX - pose.x, driftY - pose.y, driftZ - pose.z);
         _off.current.applyQuaternion(_invQ.current);
         const dlx = _off.current.x / gs;
         const dly = _off.current.y / gs;
@@ -892,7 +901,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
         const tumbleFade = smoothstep(0.02, 0.15, breakVal);
         const tumbleAngle = tumbleFade *
-          (breakVal * Math.PI + elapsed * s.tumbleSpeed * Math.min(breakVal * 2, 1));
+          (breakVal * Math.PI + driftT * s.tumbleSpeed * Math.min(breakVal * 2, 1));
         mesh.quaternion.setFromAxisAngle(s.tumbleAxis, tumbleAngle);
         if (assembled) {
           mesh.position.copy(s.centroid);

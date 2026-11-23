@@ -6,7 +6,7 @@ import { useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getSectionProgress } from "@/store/useScrollStore";
-import { getCrystalPose, MOBILE_MAX_PX } from "@/hooks/useCrystalPose";
+import { getCrystalPose, getCrystalTimeOverride, MOBILE_MAX_PX } from "@/hooks/useCrystalPose";
 
 const CHIP_COUNT = 35;
 const TWO_PI = Math.PI * 2;
@@ -100,7 +100,8 @@ export default function Debris({ seed = 42 }: { seed?: number }) {
     }
 
     const breakVal = useFractureStore.getState().breakVal;
-    const elapsed = state.clock.elapsedTime;
+    // A frozen crystal pose (crystalfreeze) pins the chips' drift too
+    const elapsed = getCrystalTimeOverride() ?? state.clock.elapsedTime;
 
     // Chips live over the hero only (hover break): drifting across Works
     // and Recognition they read as dust on the screen. They fade out as

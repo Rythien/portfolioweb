@@ -103,8 +103,6 @@ export interface CrystalPose {
   breakVal: number;
   rotY: number;
   rotX: number;
-  mouseX: number;
-  mouseY: number;
   /** Global crystal-system visibility: 1 over hero→Works, 0 past Works
    * (and during About/Disciplines on narrow viewports with no empty column). */
   fade: number;
@@ -119,8 +117,6 @@ const pose: CrystalPose = {
   breakVal: 0,
   rotY: 0,
   rotX: 0,
-  mouseX: 0,
-  mouseY: 0,
   fade: 1,
   clamp: 0,
 };
@@ -301,6 +297,10 @@ let _timeOverride: number | null = null;
 export function setCrystalTimeOverride(t: number | null) {
   _timeOverride = t;
 }
+/** The pinned time, or null when the crystal runs on the clock. */
+export function getCrystalTimeOverride(): number | null {
+  return _timeOverride;
+}
 
 /**
  * Fragments (the crystal's shards and the Debris chips) belong to the
@@ -340,17 +340,6 @@ export const crystalEvents = {
   floodCenterY: 0,
   floodMaxRadiusPx: 0,
 };
-
-if (typeof window !== "undefined") {
-  window.addEventListener(
-    "mousemove",
-    (e) => {
-      pose.mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
-      pose.mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
-    },
-    { passive: true },
-  );
-}
 
 export function tickCrystalPose(
   elapsed: number,

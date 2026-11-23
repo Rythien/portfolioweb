@@ -9,7 +9,7 @@ import { useScrollStore } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import Debris from "@/components/crystal/Debris";
 import CrystalHover from "@/components/crystal/CrystalHover";
-import { useCrystalPose, getCrystalPose, crystalEvents } from "@/hooks/useCrystalPose";
+import { useCrystalPose, getCrystalPose, getCrystalTimeOverride, crystalEvents } from "@/hooks/useCrystalPose";
 import { useThemeStore } from "@/store/useThemeStore";
 import Marquee from "./Marquee";
 
@@ -158,7 +158,8 @@ function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
 
   useFrame((state, delta) => {
     if (!meshRef.current || reducedMotion) return;
-    const elapsed = state.clock.elapsedTime;
+    // A frozen crystal pose (crystalfreeze) pins the ring with it
+    const elapsed = getCrystalTimeOverride() ?? state.clock.elapsedTime;
     const pose = getCrystalPose();
 
     damp(dampedPos.current, "x", pose.x, 0.3, delta);
