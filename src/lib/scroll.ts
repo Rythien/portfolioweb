@@ -75,11 +75,27 @@ export function installRefreshes() {
     timer = window.setTimeout(refresh, DURATION.quick * 1000);
   };
   window.addEventListener("resize", onResize, { passive: true });
+  // The page changing height without a resize: a late style or font that
+  // fonts.ready did not wait for, or copy swapping between WAKE and DREAM.
+  // A refresh rebuilds the pin spacers at the same size, so this settles.
+  let lastHeight = -1;
+  const ro =
+    typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(([entry]) => {
+          const h = Math.round(entry.contentRect.height);
+          if (h === lastHeight) return;
+          const first = lastHeight < 0;
+          lastHeight = h;
+          if (!first) onResize();
+        });
+  ro?.observe(document.body);
   return () => {
     alive = false;
     unsubscribe();
     window.clearTimeout(timer);
     window.removeEventListener("resize", onResize);
+    ro?.disconnect();
   };
 }
 
