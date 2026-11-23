@@ -143,7 +143,7 @@ function still(slug: string, name: string, caption: string): ProjectImage {
  * Case studies: written from what the author confirmed (why each was
  * built, who did what, how long it took) and from the projects' own code
  * and READMEs. Nothing is estimated or assumed. "What I'd do differently"
- * is left out until the author says it.
+ * is the author's own, as given.
  */
 
 const NOVA_CASE: CaseStudy = {
@@ -182,6 +182,9 @@ const NOVA_CASE: CaseStudy = {
         "Loading is ordered for that. The first frame is fetched and drawn before anything else, so the canvas is never empty. The other 119 are decoded with createImageBitmap in batches of eight, off the main thread, while the page stays scrollable.",
       ],
     },
+  ],
+  differently: [
+    "I'd put the customer site and the operations portal behind one shared data layer, instead of two servers each opening the same SQLite file, and I'd settle the schema and its migrations before the feature set grew.",
   ],
   excerpts: [
     {
@@ -233,6 +236,10 @@ const ALVERONIUM_CASE: CaseStudy = {
         "So the camera looks straight down from wherever it actually is, never at the target, and the 3D stays locked to the layout.",
       ],
     },
+  ],
+  differently: [
+    "I'd build the scroll choreography as one timeline from the start. It grew as separate effects, and became hard to retune without breaking something else.",
+    "Today four parts each read the scroll in their own way: the camera rail listens to the window's scroll, the hero grid and the process line measure their own progress with Framer Motion, the services panel watches for a row crossing a reading line, and the statement's particles start assembling on a timer once its heading comes into view.",
   ],
   excerpts: [
     {
@@ -287,6 +294,9 @@ const CARE_OPS_CASE: CaseStudy = {
       ],
     },
   ],
+  differently: [
+    "I'd model shifts, availability and qualifications properly up front. The clash and qualification checks were added afterwards, which made them more complicated than they needed to be.",
+  ],
   excerpts: [
     {
       file: "pages/RosterPage.tsx",
@@ -333,7 +343,7 @@ export const projects: Project[] = [
       "A kitchen that never sleeps: a menu you scroll through like a film, and every order walking its way from the pass to the door.",
     link: "/project/nova-delivers",
     caseStudy: NOVA_CASE,
-    // Not yet confirmed by the author: say so rather than present them
+    // The author wrote these figures as placeholders: say so wherever they appear
     dataNote: "Placeholder copy, not results",
     dataNoteDetail: "Placeholder copy, not results: the delivery time and on-time rate in the hero were written as placeholders.",
     video: video(
