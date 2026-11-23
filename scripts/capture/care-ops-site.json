@@ -1,0 +1,258 @@
+{
+  "slug": "care-ops-site",
+  "_comment": "The public website of the provider whose staff app is care-ops. Server, logo swap and masking rules name the client, so they live in care-ops-site.local.json (gitignored); without it the capture refuses to run. The testimonials section is removed from the page before anything is filmed: it names a participant, their diagnosis and two support workers. The About section is removed too: its copy explains where the provider's name comes from.",
+  "requiresLocal": true,
+  "base": "http://localhost:4321",
+  "viewport": [
+    1600,
+    1000
+  ],
+  "colorScheme": "light",
+  "captionLabel": "Care Ops website",
+  "init": {
+    "css": "html{scrollbar-width:none} #testimonials,#about{display:none!important}"
+  },
+  "stills": {
+    "beats": [
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 4000
+      },
+      {
+        "do": "still",
+        "name": "hero"
+      },
+      {
+        "do": "jump",
+        "to": ".trust-section",
+        "offset": 40,
+        "settle": 1500
+      },
+      {
+        "do": "still",
+        "name": "trust"
+      },
+      {
+        "do": "jump",
+        "to": "#services",
+        "offset": 80,
+        "settle": 1500
+      },
+      {
+        "do": "still",
+        "name": "services"
+      },
+      {
+        "do": "jump",
+        "to": "#how-it-works",
+        "offset": 80,
+        "settle": 1500
+      },
+      {
+        "do": "still",
+        "name": "how-it-works"
+      },
+      {
+        "do": "jump",
+        "to": "#contact",
+        "offset": 60,
+        "settle": 1500
+      },
+      {
+        "do": "still",
+        "name": "contact"
+      }
+    ]
+  },
+  "preview": {
+    "seconds": 12,
+    "posterAt": 0.8,
+    "_comment": "Five beats, hard cuts between them (jump pauses the recording); about 12 s.",
+    "setup": [
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 4000
+      }
+    ],
+    "beats": [
+      {
+        "do": "move",
+        "to": [
+          700,
+          600
+        ],
+        "ms": 1000,
+        "after": 700
+      },
+      {
+        "do": "scroll",
+        "by": 250,
+        "ms": 900,
+        "settle": 250
+      },
+      {
+        "do": "jump",
+        "to": ".trust-section",
+        "offset": 40,
+        "settle": 1200
+      },
+      {
+        "do": "move",
+        "to": [
+          1100,
+          500
+        ],
+        "ms": 1000,
+        "after": 1000
+      },
+      {
+        "do": "jump",
+        "to": "#services",
+        "offset": 80,
+        "settle": 1200
+      },
+      {
+        "do": "scroll",
+        "by": 500,
+        "ms": 2200,
+        "settle": 300
+      },
+      {
+        "do": "jump",
+        "to": "#how-it-works",
+        "offset": 80,
+        "settle": 1200
+      },
+      {
+        "do": "scroll",
+        "by": 250,
+        "ms": 1600,
+        "settle": 250
+      },
+      {
+        "do": "move",
+        "to": [
+          800,
+          650
+        ],
+        "ms": 600,
+        "after": 300
+      },
+      {
+        "do": "jump",
+        "to": "#contact",
+        "offset": 60,
+        "settle": 1200
+      },
+      {
+        "do": "type",
+        "sel": "form[name='consultation-enquiry'] input >> nth=0",
+        "text": "Alex",
+        "delay": 90,
+        "after": 700
+      }
+    ]
+  },
+  "walkthrough": {
+    "posterAt": 1.5,
+    "setup": [
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 4000
+      }
+    ],
+    "beats": [
+      {
+        "do": "caption",
+        "text": "The provider's public website, for participants and families: the other half of the Care Ops staff app.",
+        "hold": 600
+      },
+      {
+        "do": "move",
+        "to": [
+          700,
+          600
+        ],
+        "ms": 1400,
+        "after": 3200
+      },
+      {
+        "do": "caption",
+        "text": "Under the hero, the provider's credentials and the area it covers."
+      },
+      {
+        "do": "jump",
+        "to": ".trust-section",
+        "offset": 40,
+        "settle": 1400
+      },
+      {
+        "do": "wait",
+        "ms": 3800
+      },
+      {
+        "do": "caption",
+        "text": "The services, in an asymmetric grid with the main support featured."
+      },
+      {
+        "do": "jump",
+        "to": "#services",
+        "offset": 80,
+        "settle": 1400
+      },
+      {
+        "do": "scroll",
+        "by": 900,
+        "ms": 5600,
+        "settle": 1200
+      },
+      {
+        "do": "caption",
+        "text": "How getting started works, in three steps."
+      },
+      {
+        "do": "jump",
+        "to": "#how-it-works",
+        "offset": 80,
+        "settle": 1400
+      },
+      {
+        "do": "scroll",
+        "by": 250,
+        "ms": 2400,
+        "settle": 2800
+      },
+      {
+        "do": "caption",
+        "text": "Contact: the phone numbers and an enquiry form."
+      },
+      {
+        "do": "jump",
+        "to": "#contact",
+        "offset": 60,
+        "settle": 1400
+      },
+      {
+        "do": "type",
+        "sel": "form[name='consultation-enquiry'] input >> nth=0",
+        "text": "Alex Smith",
+        "delay": 90,
+        "after": 1200
+      },
+      {
+        "do": "scroll",
+        "by": 300,
+        "ms": 1400,
+        "settle": 2600
+      },
+      {
+        "do": "caption",
+        "text": null,
+        "hold": 600
+      }
+    ]
+  }
+}
