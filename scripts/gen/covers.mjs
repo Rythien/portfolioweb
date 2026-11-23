@@ -60,11 +60,12 @@ const sheetPath = path.resolve(ROOT, argVal("--sheet") ?? path.join(outDir, "con
 
 /* ── Project inputs ─────────────────────────────────────────────── */
 
-// Per-project accent so the three sets read apart
+// Per-project accent so the sets read apart
 const ACCENTS = {
   "nova-delivers": "#f29a1f", // Nova's order-button orange
   alveronium: "#2fa59c", // Alveronium's reagent teal
   "care-ops": "#2f54b8", // Care Ops' royal blue
+  "care-ops-site": "#d4a62a", // the website's gold
 };
 const DEFAULT_ACCENT = "#8fa3ad";
 
@@ -86,6 +87,7 @@ const ICON_KEYS = {
   "Three.js": "siThreedotjs",
   Vite: "siVite",
   "React Router": "siReactrouter",
+  Astro: "siAstro",
 };
 
 function iconsFor(project) {
