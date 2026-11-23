@@ -192,7 +192,7 @@ const ALVERONIUM_CASE: CaseStudy = {
   ],
   approach: [
     "Next.js 16 with the App Router and React 19, TypeScript throughout, Tailwind 4 for layout. The 3D is React Three Fiber over three.js, with drei and postprocessing; Lenis smooths the scroll and Framer Motion handles interface motion.",
-    "The page opens on a hero with a hexagonal 3D specimen, drawn with dimension lines and a data sheet beside it. The statement is set against a particle structure. In services, hovering a row redraws an instrument panel for that discipline. The process runs through five stages, each with its own line drawing. Contact closes on a dotted-land globe, drawn on a 2D canvas in orthographic projection and turned to the studio's city, with its local time beside it. The globe sways slowly in longitude, and holds still for visitors who ask for reduced motion.",
+    "The page opens on a hero with a hexagonal 3D specimen, drawn with dimension lines and a data sheet beside it. The statement is set against a particle structure. In services, an instrument panel redraws for each discipline as its row scrolls past the middle of the screen. The process runs through five stages, each with its own line drawing. Contact closes on a dotted-land globe, drawn on a 2D canvas in orthographic projection and turned to the studio's city, with its local time beside it. The globe sways slowly in longitude, and holds still for visitors who ask for reduced motion.",
     "Phones get their own components rather than a squeezed desktop layout: a mobile hero and specimen, an accordion for the services, swipeable process cards, a navigation dock and a mobile contact globe. The preloader plays once per session.",
     "The interface chrome keeps the drawing conceit going: a numbered section index across the top, a sheet counter and a scroll readout in the corners, a reticle cursor and a fine grain over everything.",
   ],
@@ -374,7 +374,7 @@ export const projects: Project[] = [
     images: [
       still("alveronium", "hero", "The hero: a title block, the 3D specimen and its data sheet."),
       still("alveronium", "statement", "The statement, set beside a particle structure on the shared stage."),
-      still("alveronium", "services", "Services: hovering a row redraws the instrument panel."),
+      still("alveronium", "services", "Services: the instrument panel redraws for the row at the middle of the screen."),
       still("alveronium", "process", "Process: five stages, each with its own line drawing."),
       still("alveronium", "contact", "Contact closes on a dotted-land globe."),
     ],
