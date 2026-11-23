@@ -128,7 +128,7 @@ export default function Works() {
           return;
         }
 
-        // Moment 4: pin the section and pan the three panels sideways.
+        // Moment 4: pin the section and pan the panels sideways.
         // The pan is linear so scroll and position stay 1:1; each slide
         // grows from SCALE.slideAway to 1 as it reaches the centre.
         pin.dataset.h = "";

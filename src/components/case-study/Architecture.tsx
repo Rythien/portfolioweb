@@ -166,10 +166,38 @@ function CareOps() {
   );
 }
 
+function CareOpsSite() {
+  return (
+    <Frame
+      h={330}
+      title="Care Ops website architecture"
+      desc="Astro builds nine components on one route into static HTML and CSS, styled with Tailwind through Vite. In the browser, three pieces of script run over that page: the hero video, which plays only when motion, data and the device allow and otherwise leaves the poster; the scroll reveals, which GSAP runs through one IntersectionObserver and which switch off for reduced motion; and the enquiry form, which posts to the page itself because no handler is connected yet."
+    >
+      <Box x={10} y={10} w={280} title="Astro 5 build" note="9 components, 1 route" />
+      <Arrow x1={291} y1={38} x2={349} y2={38} />
+      <Box x={350} y={10} w={280} title="Static HTML + CSS" note="Tailwind 4 via Vite" />
+      <Arrow x1={490} y1={67} x2={110} y2={129} />
+      <Arrow x1={490} y1={67} x2={320} y2={129} />
+      <Arrow x1={490} y1={67} x2={530} y2={129} />
+      <Box x={10} y={130} w={200} title="Hero video" note="poster first" />
+      <Box x={220} y={130} w={200} title="Scroll reveals" note="GSAP, 1 observer" />
+      <Box x={430} y={130} w={200} title="Enquiry form" note="labelled, required" />
+      <Label x={20} y={216}>plays only if</Label>
+      <Label x={20} y={236}>motion, Save-Data</Label>
+      <Label x={20} y={256}>and device allow</Label>
+      <Label x={230} y={216}>off for reduced</Label>
+      <Label x={230} y={236}>motion: all shown</Label>
+      <Arrow x1={530} y1={187} x2={530} y2={261} dashed />
+      <Box x={430} y={262} w={200} title="Handler" note="not connected" dashed />
+    </Frame>
+  );
+}
+
 const DIAGRAMS: Record<string, () => React.ReactElement> = {
   "nova-delivers": Nova,
   alveronium: Alveronium,
   "care-ops": CareOps,
+  "care-ops-site": CareOpsSite,
 };
 
 export function hasArchitecture(slug: string) {

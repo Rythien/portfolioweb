@@ -258,7 +258,7 @@ const ALVERONIUM_CASE: CaseStudy = {
 const CARE_OPS_CASE: CaseStudy = {
   problem: [
     "Care Ops is an app for NDIS disability-support providers. A provider runs on shifts: who is with which participant, when, whether they are qualified for that person's needs, and what each shift costs.",
-    "Coordinators plan and pay for that week; support workers live it, one visit at a time. Care Ops puts both sides in one app, each with its own view.",
+    "Coordinators plan and pay for that week; support workers live it, one visit at a time. Care Ops puts both sides in one app, each with its own view. The same provider's public website is the next case study.",
   ],
   role: [
     "Built with Saurav over two to three weeks in 2026. I did the design, the frontend and the planning, and some of the backend; Saurav worked mainly on the backend and on penetration testing.",
@@ -313,6 +313,51 @@ const CARE_OPS_CASE: CaseStudy = {
       source: "care-ops-3.txt",
       why: "Clocking in is a slide, not a tap, so a phone in a pocket can't start a shift. It completes at 75% so it doesn't demand a perfect swipe.",
     },
+  ],
+};
+
+const CARE_OPS_SITE_CASE: CaseStudy = {
+  problem: [
+    "The provider behind Care Ops also needed a public face. Its existing website was poor quality, and it undermined the provider's credibility with the people it most needed to reach: participants and their families, deciding who to trust with daily care.",
+    "This replaced it: one clear page where a participant or a family member can understand what the provider does, see that it is registered, and make an enquiry. Care Ops is the staff side of the same provider; this is the side the public sees.",
+  ],
+  role: [
+    "Designed and built alone, in under a week: the first commit is on 11 October 2026 and the last on 15 October.",
+    "The recordings mask the provider's name, logo, contact details and suburbs, and reword its own copy. Two sections are never filmed: About, which explains the provider's name, and the testimonials, which name a participant.",
+  ],
+  approach: [
+    "Astro 5 renders the site to static HTML, with Tailwind 4 through Vite for styling and GSAP for motion. The page is nine Astro components on one route: a header, the hero, a strip of credentials, the services, an about section, the three steps of getting started, testimonials, the enquiry section and a footer.",
+    "The order follows the questions a family asks. Who are you, and are you registered? The hero answers with a badge and a headline, and the strip under it gives the registration, the verified ABN, the area covered and a promise of a prompt response. What do you actually do? Six NDIS services in an asymmetric grid, with personal care featured and respite in a wide card of its own, each with a button down to the enquiry form. What happens if I get in touch? Three steps, joined by a line that draws itself as they come into view. Then the enquiry form, beside both phone numbers, the email and the office hours.",
+    "On phones the header folds into a menu that slides down, and the hero gets an entrance of its own: the badge, the headline, the paragraph and the buttons rise in turn, and the text drifts up and fades as the page scrolls on. The services section links out to the NDIS's own guidance on home and living.",
+  ],
+  decisions: [
+    {
+      title: "Every unconfirmed fact flagged",
+      body: [
+        "Before the build, the content was drafted as one document for review, with every fact that wasn't confirmed marked for confirmation: the phone numbers, the email, the ABN and registration, the service areas, the hero video and the three steps. The document carries 23 of those flags.",
+        "Claims stayed out until they were verified. A care provider's site is read by people deciding whom to trust, so the featured personal-care tile makes no medication-management claim: that one could not be confirmed.",
+      ],
+    },
+    {
+      title: "A hero video that steps aside",
+      body: [
+        "The hero paints its poster image first, eagerly and at high priority, so the first view never waits on video. The video plays over it only when the visitor hasn't asked for reduced motion, hasn't turned on Save-Data, and the device doesn't report 2 GB of memory or less, or two cores or fewer. Otherwise it is hidden and the poster stays.",
+        "When it does play, it pauses whenever the tab is hidden or the hero scrolls out of view, to save battery and data on the phones most visitors will use.",
+      ],
+    },
+    {
+      title: "Motion that can be switched off",
+      body: [
+        "One script in the layout handles the page's motion. Each block marked to reveal fades up 24 pixels once, the first time it enters view, watched by a single IntersectionObserver that lets go of it afterwards. The line between the three steps draws itself once in the same way.",
+        "For a visitor who asks for reduced motion, the script shows every block at once and draws the line in full before returning, so nothing on the page is ever hidden behind an animation that won't run.",
+      ],
+    },
+  ],
+  outcome: [
+    "The site is not live yet. The enquiry form has labelled fields, required name and phone, and autofill hints, but nothing behind it: it posts to the page itself, and still needs a handler before it can take an enquiry.",
+  ],
+  differently: [
+    "I'd lock the copy down with the client before building. The content arrived late, and the layout had to bend around it.",
   ],
 };
 
@@ -471,6 +516,52 @@ export const projects: Project[] = [
       backend: ["Mock API over IndexedDB", "Supabase schema & RLS policies"],
     },
     tags: ["#react", "#operations", "#rostering", "#roles"],
+  },
+  {
+    slug: "care-ops-site",
+    // Care Ops' pair. The Archive keeps three seals, so this one has none
+    archive: false,
+    title: "Care Ops Website",
+    titleAccent: "Website",
+    subtitle: "The provider's public website, for participants and families",
+    category: "Website",
+    type: "Web design",
+    year: "2026",
+    roles: ["Design", "Frontend"],
+    description:
+      "The public half of the provider behind Care Ops: a one-page site, built alone in under a week, that replaced a poor one. It answers a family's questions in order: who the provider is and that it is registered, the six services, how getting started works, then an enquiry form beside the phone numbers. The provider's name and details are masked.",
+    summary:
+      "A one-page public website for the provider behind Care Ops, designed and built alone in under a week.",
+    overview:
+      "A static one-page site in Astro: a hero with a guarded background video, the provider's credentials, six NDIS services in an asymmetric grid, three steps to getting started, and an enquiry form.",
+    mainFeatures: [
+      "Credentials up front: registration, verified ABN, area covered",
+      "Six NDIS services in an asymmetric grid",
+      "A hero video that plays only when motion, data and the device allow",
+      "Reveals that switch off entirely for reduced motion",
+    ],
+    dreamDescription:
+      "The front door to the same house: plain words for a family deciding who to let in.",
+    link: "/project/care-ops-site",
+    caseStudy: CARE_OPS_SITE_CASE,
+    video: video(
+      "care-ops-site",
+      "Screen recording of the Care Ops website in five cuts: the hero, the credentials strip, the services grid, the three steps to getting started, then the enquiry form with a name being typed.",
+      "Captioned walkthrough of the Care Ops website: the hero, the credentials under it, the services, how getting started works, then the contact details and the enquiry form.",
+    ),
+    cover: cover("care-ops-site", "Care Ops Website", "ice chips refracting the Care Ops Website title"),
+    images: [
+      still("care-ops-site", "hero", "The hero: a badge, the headline, and buttons to the services and to call, over the background video."),
+      still("care-ops-site", "trust", "Under the hero, the provider's credentials and the area it covers."),
+      still("care-ops-site", "services", "The services, in an asymmetric grid with personal care featured."),
+      still("care-ops-site", "how-it-works", "How getting started works, in three steps."),
+      still("care-ops-site", "contact", "Contact: both phone numbers, the email and office hours, beside the enquiry form."),
+    ],
+    aspectRatio: "aspect-[16/10]",
+    stack: {
+      frontend: ["Astro", "TypeScript", "Tailwind CSS", "GSAP"],
+    },
+    tags: ["#astro", "#website", "#ndis", "#accessibility"],
   },
 ];
 

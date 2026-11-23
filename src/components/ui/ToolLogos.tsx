@@ -16,6 +16,7 @@ import {
   siThreedotjs,
   siVite,
   siReactrouter,
+  siAstro,
 } from "simple-icons";
 import type { Project } from "@/content/projects";
 
@@ -36,6 +37,7 @@ const ICONS: Record<string, { path: string; title: string }> = {
   "Three.js": siThreedotjs,
   Vite: siVite,
   "React Router": siReactrouter,
+  Astro: siAstro,
 };
 
 /** The project's tools that have a logo, in stack order, each once. */
