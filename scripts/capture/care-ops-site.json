@@ -1,6 +1,8 @@
 {
   "slug": "care-ops-site",
   "_comment": "The public website of the provider whose staff app is care-ops. Server, logo swap and masking rules name the client, so they live in care-ops-site.local.json (gitignored); without it the capture refuses to run. The testimonials section is removed from the page before anything is filmed: it names a participant, their diagnosis and two support workers. The About section is removed too: its copy explains where the provider's name comes from.",
+  "_imagery": "Decided 2026-11-24: the photos and the hero video are filmed as they are. They were generated for this build (Google C2PA credentials), not licensed stock. The site is not live and everything else is masked, so they are kept. Residual risk: if the client launches the site, a reverse image search could match these images to it.",
+  "_copy": "The client's own headlines and body copy are reworded in the local file (38 rules, approved 2026-11-24), so no frame carries a searchable sentence from the site. The six NDIS service names, the badge, the section kickers and the NDIS link are standard terms and stay as written.",
   "requiresLocal": true,
   "base": "http://localhost:4321",
   "viewport": [
