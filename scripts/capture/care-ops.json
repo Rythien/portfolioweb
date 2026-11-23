@@ -13,8 +13,9 @@
     "css": "html{scrollbar-width:none}"
   },
   "preview": {
-    "seconds": 8,
-    "posterAt": 0.6,
+    "seconds": 12,
+    "posterAt": 4,
+    "_comment": "Five beats, hard cuts between them (goto/jump/cut pause the recording); about 12 s of footage.",
     "setup": [
       {
         "do": "goto",
@@ -37,35 +38,82 @@
         "do": "click",
         "sel": "button:has-text('Sign In to Portal')",
         "ms": 1,
-        "after": 2500
-      },
-      {
-        "do": "goto",
-        "url": "/roster",
-        "wait": 2500
+        "after": 3500
       }
     ],
     "beats": [
       {
-        "do": "wait",
-        "ms": 900
+        "do": "scroll",
+        "by": 420,
+        "ms": 1900,
+        "settle": 250
       },
       {
-        "do": "scroll",
-        "by": 160,
-        "ms": 900,
-        "settle": 200
+        "do": "goto",
+        "url": "/roster",
+        "wait": 2200
+      },
+      {
+        "do": "jump",
+        "to": 160,
+        "settle": 600
       },
       {
         "do": "drag",
         "from": ".worker-drag-source",
         "to": "[data-roster-cell='true'] >> nth=2",
-        "ms": 1600,
-        "after": 2200
+        "ms": 1300,
+        "after": 900
       },
       {
-        "do": "wait",
-        "ms": 1300
+        "do": "goto",
+        "url": "/participants",
+        "wait": 1800
+      },
+      {
+        "do": "scroll",
+        "by": 300,
+        "ms": 1700,
+        "settle": 250
+      },
+      {
+        "do": "goto",
+        "url": "/dashboard",
+        "wait": 1000
+      },
+      {
+        "do": "cut"
+      },
+      {
+        "do": "click",
+        "sel": "header button:has-text('Worker'), button:text-is('Worker')",
+        "ms": 1,
+        "after": 800
+      },
+      {
+        "do": "eval",
+        "js": "(()=>{const s=document.createElement(\"style\");s.textContent=\"div[role=status].fixed{display:none!important}\";document.head.appendChild(s)})()",
+        "after": 900
+      },
+      {
+        "do": "cut",
+        "off": true
+      },
+      {
+        "do": "drag",
+        "from": "[role='slider'][aria-label='Slide to clock in'] > div:last-child",
+        "by": [
+          440,
+          0
+        ],
+        "ms": 1100,
+        "after": 800
+      },
+      {
+        "do": "scroll",
+        "by": 320,
+        "ms": 1400,
+        "settle": 250
       }
     ]
   },

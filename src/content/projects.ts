@@ -320,7 +320,7 @@ export const projects: Project[] = [
     caseStudy: NOVA_CASE,
     video: video(
       "nova-delivers",
-      "Screen recording of Nova Delivers: the video hero, a scroll into the burger anatomy, then the Momo filter on the menu.",
+      "Screen recording of Nova Delivers in five cuts: the video hero, the burger anatomy mid-scrub, the menu filtered to momo, the cart drawer, then an order accepted in the operations portal.",
       "Captioned walkthrough of Nova Delivers: the hero, the scroll-scrubbed anatomy, filtering and searching the menu, the cart drawer, then the operations portal accepting an order.",
     ),
     cover: cover("nova-delivers", "Nova Delivers", "ice chips refracting the Nova Delivers title"),
@@ -367,7 +367,7 @@ export const projects: Project[] = [
     caseStudy: ALVERONIUM_CASE,
     video: video(
       "alveronium",
-      "Screen recording of Alveronium Studio: the 3D specimen in the hero, a scroll into the statement, then hovering the services rows.",
+      "Screen recording of Alveronium Studio in five cuts: the 3D specimen in the hero, the camera moving into the statement, the services instrument panel changing as the rows scroll past, the process stages, then the contact globe.",
       "Captioned walkthrough of Alveronium Studio: the hero specimen, the particle statement, the services instrument panel, the process stages and the globe at the close.",
     ),
     cover: cover("alveronium", "Alveronium Studio", "ice chips refracting the Alveronium Studio title"),
@@ -414,7 +414,7 @@ export const projects: Project[] = [
     dataNote: "Seeded demo data, not results",
     video: video(
       "care-ops",
-      "Screen recording of Care Ops: the weekly roster, then a support worker dragged onto a participant's day.",
+      "Screen recording of Care Ops in five cuts: the admin console, a support worker dragged onto a participant's day and the clash it raises, participants, a support worker sliding to clock in, then the shift details.",
       "Captioned walkthrough of Care Ops: signing in as an admin, the admin console, rostering by drag and drop, participants, then the support worker's view and slide to clock in.",
     ),
     cover: cover("care-ops", "Care Ops", "ice chips refracting the Care Ops title"),

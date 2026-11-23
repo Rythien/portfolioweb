@@ -1,13 +1,21 @@
 {
   "slug": "alveronium",
   "base": "http://localhost:3300",
-  "viewport": [1600, 1000],
+  "viewport": [
+    1600,
+    1000
+  ],
   "colorScheme": "dark",
   "captionLabel": "Alveronium Studio",
   "server": [
     {
       "cmd": "npx",
-      "args": ["next", "dev", "-p", "3300"],
+      "args": [
+        "next",
+        "dev",
+        "-p",
+        "3300"
+      ],
       "cwd": "C:/Users/aluca/OneDrive/Desktop/Alveronium-Studios",
       "ready": "http://localhost:3300/",
       "timeout": 180000
@@ -17,57 +25,235 @@
     "css": "html{scrollbar-width:none} nextjs-portal{display:none!important}"
   },
   "preview": {
-    "seconds": 8,
+    "seconds": 12,
     "posterAt": 0.8,
+    "_comment": "Five beats, hard cuts between them (jump pauses the recording); about 12 s of footage.",
     "setup": [
-      { "do": "goto", "url": "/", "wait": 9000 }
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 9000
+      }
     ],
     "beats": [
-      { "do": "move", "to": [430, 545], "ms": 1400, "after": 300 },
-      { "do": "scroll", "by": 1300, "ms": 2800, "settle": 300 },
-      { "do": "jump", "to": "#services", "offset": -40, "settle": 1200 },
-      { "do": "hover", "sel": "[data-service-row='1']", "glide": 600, "ms": 900 },
-      { "do": "hover", "sel": "[data-service-row='2']", "glide": 500, "ms": 1000 }
+      {
+        "do": "move",
+        "to": [
+          430,
+          545
+        ],
+        "ms": 1400,
+        "after": 800
+      },
+      {
+        "do": "scroll",
+        "by": 1300,
+        "ms": 2300,
+        "settle": 250
+      },
+      {
+        "do": "jump",
+        "to": "#services",
+        "offset": -40,
+        "settle": 1200
+      },
+      {
+        "do": "scroll",
+        "by": 560,
+        "ms": 2600,
+        "settle": 250
+      },
+      {
+        "do": "jump",
+        "to": "#process",
+        "offset": 0,
+        "settle": 1200
+      },
+      {
+        "do": "scroll",
+        "by": 500,
+        "ms": 2000,
+        "settle": 250
+      },
+      {
+        "do": "jump",
+        "to": "#contact",
+        "offset": 0,
+        "settle": 1600
+      },
+      {
+        "do": "move",
+        "to": [
+          800,
+          500
+        ],
+        "ms": 900,
+        "after": 1100
+      }
     ]
   },
   "walkthrough": {
     "posterAt": 1.5,
     "setup": [
-      { "do": "goto", "url": "/", "wait": 9000 }
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 9000
+      }
     ],
     "beats": [
-      { "do": "caption", "text": "A one-page studio site drawn as a technical sheet, with a real-time 3D specimen in the hero.", "hold": 1500 },
-      { "do": "move", "to": [430, 545], "ms": 1600, "after": 1200 },
-      { "do": "caption", "text": "One shared WebGL stage: the camera rides a rail with a station per section." },
-      { "do": "scroll", "by": 1500, "ms": 5000, "settle": 800 },
-      { "do": "scroll", "by": 1000, "ms": 2500, "settle": 600 },
-      { "do": "caption", "text": "Services: each row drives a live instrument panel." },
-      { "do": "jump", "to": "#services", "offset": -40, "settle": 1400 },
-      { "do": "hover", "sel": "[data-service-row='0']", "glide": 600, "ms": 1400 },
-      { "do": "hover", "sel": "[data-service-row='1']", "glide": 500, "ms": 1600 },
-      { "do": "hover", "sel": "[data-service-row='2']", "glide": 500, "ms": 1600 },
-      { "do": "caption", "text": "The process, stage by stage, each with its own line drawing." },
-      { "do": "jump", "to": "#process", "offset": 0, "settle": 1400 },
-      { "do": "scroll", "by": 700, "ms": 3200, "settle": 600 },
-      { "do": "caption", "text": "Contact closes on a dotted-land globe that turns to the studio's city." },
-      { "do": "jump", "to": "#contact", "offset": 0, "settle": 1600 },
-      { "do": "wait", "ms": 3000 },
-      { "do": "caption", "text": null, "hold": 600 }
+      {
+        "do": "caption",
+        "text": "A one-page studio site drawn as a technical sheet, with a real-time 3D specimen in the hero.",
+        "hold": 1500
+      },
+      {
+        "do": "move",
+        "to": [
+          430,
+          545
+        ],
+        "ms": 1600,
+        "after": 1200
+      },
+      {
+        "do": "caption",
+        "text": "One shared WebGL stage: the camera rides a rail with a station per section."
+      },
+      {
+        "do": "scroll",
+        "by": 1500,
+        "ms": 5000,
+        "settle": 800
+      },
+      {
+        "do": "scroll",
+        "by": 1000,
+        "ms": 2500,
+        "settle": 600
+      },
+      {
+        "do": "caption",
+        "text": "Services: each row drives a live instrument panel."
+      },
+      {
+        "do": "jump",
+        "to": "#services",
+        "offset": -40,
+        "settle": 1400
+      },
+      {
+        "do": "hover",
+        "sel": "[data-service-row='0']",
+        "glide": 600,
+        "ms": 1400
+      },
+      {
+        "do": "hover",
+        "sel": "[data-service-row='1']",
+        "glide": 500,
+        "ms": 1600
+      },
+      {
+        "do": "hover",
+        "sel": "[data-service-row='2']",
+        "glide": 500,
+        "ms": 1600
+      },
+      {
+        "do": "caption",
+        "text": "The process, stage by stage, each with its own line drawing."
+      },
+      {
+        "do": "jump",
+        "to": "#process",
+        "offset": 0,
+        "settle": 1400
+      },
+      {
+        "do": "scroll",
+        "by": 700,
+        "ms": 3200,
+        "settle": 600
+      },
+      {
+        "do": "caption",
+        "text": "Contact closes on a dotted-land globe that turns to the studio's city."
+      },
+      {
+        "do": "jump",
+        "to": "#contact",
+        "offset": 0,
+        "settle": 1600
+      },
+      {
+        "do": "wait",
+        "ms": 3000
+      },
+      {
+        "do": "caption",
+        "text": null,
+        "hold": 600
+      }
     ]
   },
   "stills": {
     "beats": [
-      { "do": "goto", "url": "/", "wait": 9000 },
-      { "do": "still", "name": "hero" },
-      { "do": "scroll", "by": 1400, "ms": 2500, "settle": 2500 },
-      { "do": "still", "name": "statement" },
-      { "do": "jump", "to": "#services", "offset": -40, "settle": 1500 },
-      { "do": "hover", "sel": "[data-service-row='1']", "ms": 1200 },
-      { "do": "still", "name": "services", "settle": 200 },
-      { "do": "jump", "to": "#process", "offset": 0, "settle": 1800 },
-      { "do": "still", "name": "process" },
-      { "do": "jump", "to": "#contact", "offset": 0, "settle": 2500 },
-      { "do": "still", "name": "contact" }
+      {
+        "do": "goto",
+        "url": "/",
+        "wait": 9000
+      },
+      {
+        "do": "still",
+        "name": "hero"
+      },
+      {
+        "do": "scroll",
+        "by": 1400,
+        "ms": 2500,
+        "settle": 2500
+      },
+      {
+        "do": "still",
+        "name": "statement"
+      },
+      {
+        "do": "jump",
+        "to": "#services",
+        "offset": -40,
+        "settle": 1500
+      },
+      {
+        "do": "hover",
+        "sel": "[data-service-row='1']",
+        "ms": 1200
+      },
+      {
+        "do": "still",
+        "name": "services",
+        "settle": 200
+      },
+      {
+        "do": "jump",
+        "to": "#process",
+        "offset": 0,
+        "settle": 1800
+      },
+      {
+        "do": "still",
+        "name": "process"
+      },
+      {
+        "do": "jump",
+        "to": "#contact",
+        "offset": 0,
+        "settle": 2500
+      },
+      {
+        "do": "still",
+        "name": "contact"
+      }
     ]
   }
 }
