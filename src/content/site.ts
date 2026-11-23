@@ -63,13 +63,13 @@ export const SITE_DATA = {
         number: "02",
         title: "Creative Frontend Engineering",
         description:
-          "High-performance architecture built with Next.js, React 19, TypeScript, and fluid Tailwind CSS.",
+          "Interfaces built in Next.js, React 19, TypeScript and Tailwind CSS.",
       },
       {
         number: "03",
         title: "3D Modeling & Animation",
         description:
-          "Commercial product visualization, realistic fluid dynamics, studio lighting, and Blender pipelines.",
+          "Product and motion visuals in 3D: modeling, lighting and rendering in Blender.",
       },
       {
         number: "04",
@@ -85,9 +85,9 @@ export const SITE_DATA = {
       },
       {
         number: "06",
-        title: "Accessibility & Performance",
+        title: "Accessibility",
         description:
-          "Strict WCAG 2.2 AA standards, 60/120 FPS render targets, and reduced-motion graceful degradation.",
+          "Keyboard-navigable pages, visible focus, reduced-motion fallbacks and checked color contrast.",
       },
     ] as Discipline[],
   },

@@ -159,7 +159,7 @@ export default function CVPage() {
                 ["03 / Sketch", "Quick wireframes and flows."],
                 ["04 / Design", "Type, color, layout & clickable prototype."],
                 ["05 / Build", "Responsive React/Next.js/Tailwind code."],
-                ["06 / Test & Ship", "Speed, accessibility (WCAG AA), launch."],
+                ["06 / Test & Ship", "Speed and accessibility checks, then launch."],
               ].map(([label, desc]) => (
                 <div key={label} className="p-3 border border-rule">
                   <span className="text-ink-faint block mb-1">{label}</span>
