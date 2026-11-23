@@ -63,6 +63,9 @@ export interface Project {
   mainFeatures?: string[];
   technicalChallenges?: string[];
   caseStudy?: CaseStudy;
+  /** Shown on the panel and under the walkthrough when the recording shows
+   * seeded figures that could be read as results. */
+  dataNote?: string;
   placeholder?: boolean;
   link: string;
   /** Screen recordings: the panel loop and the captioned walkthrough. */
@@ -408,6 +411,7 @@ export const projects: Project[] = [
       "A week of care laid out like a loom: each shift a thread, checked and costed the moment it lands.",
     link: "/project/care-ops",
     caseStudy: CARE_OPS_CASE,
+    dataNote: "Seeded demo data, not results",
     video: video(
       "care-ops",
       "Screen recording of Care Ops: the weekly roster, then a support worker dragged onto a participant's day.",
@@ -419,7 +423,7 @@ export const projects: Project[] = [
       still("care-ops", "dashboard", "The admin console: who is on shift, unfilled shifts and live shift cards."),
       still("care-ops", "roster", "Rostering: a support worker dropped onto a participant's day."),
       still("care-ops", "participants", "Participants: support needs, plan type and budget used against total."),
-      still("care-ops", "reports", "Reports: staff hours split into ordinary, overtime and penalty rates."),
+      still("care-ops", "reports", "Reports: staff hours split into ordinary, overtime and penalty rates. Every figure here is seeded demo data, not a result."),
       still("care-ops", "worker", "The support worker's home: the next shift and slide to clock in."),
     ],
     aspectRatio: "aspect-[16/10]",

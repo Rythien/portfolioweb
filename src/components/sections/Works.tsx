@@ -308,6 +308,7 @@ export default function Works() {
               <p className="-mt-4 sm:-mt-8 lg:mt-0 lg:col-span-8 lg:row-start-3 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-label text-ink/80">
                 <span>Video preview</span>
                 <span>Code on request</span>
+                {project.dataNote && <span>{project.dataNote}</span>}
               </p>
 
               <div className="flex items-center justify-between font-mono text-label text-ink/80 lg:col-start-9 lg:col-span-4 lg:row-start-2 lg:self-end">
