@@ -12,7 +12,6 @@ import Hero from "@/components/sections/Hero";
 import About from "@/components/sections/About";
 import Disciplines from "@/components/sections/Disciplines";
 import Works from "@/components/sections/Works";
-import Recognition from "@/components/sections/Recognition";
 import Contact from "@/components/sections/Contact";
 import Footer from "@/components/sections/Footer";
 
@@ -37,7 +36,6 @@ export default function Home() {
         <About />
         <Disciplines />
         <Works />
-        <Recognition />
         <Contact />
       </main>
       <Footer />

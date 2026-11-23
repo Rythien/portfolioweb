@@ -18,7 +18,7 @@ const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k
 const base = arg("url", "http://localhost:3000");
 const widths = arg("widths", "1440,1024").split(",").map(Number);
 const modes = arg("modes", "wake,dream").split(",");
-const SECTIONS = ["about", "disciplines", "works", "recognition", "contact"];
+const SECTIONS = ["about", "disciplines", "works", "contact"];
 
 const browser = await firefox.launch({ headless: true, firefoxUserPrefs: { "webgl.force-enabled": true } });
 let failures = 0;

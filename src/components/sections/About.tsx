@@ -13,13 +13,14 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 export default function About() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const bodyRef = useRef<HTMLParagraphElement | null>(null);
+  const eduRef = useRef<HTMLParagraphElement | null>(null);
   const secondLangRef = useRef<HTMLDivElement | null>(null);
 
   // The statement reveals itself word by word (MaskWords); the body and
   // the second language follow as blocks
   useGSAP(
     () => {
-      revealBlock([bodyRef.current, secondLangRef.current], { trigger: bodyRef.current });
+      revealBlock([bodyRef.current, eduRef.current, secondLangRef.current], { trigger: bodyRef.current });
     },
     { scope: sectionRef }
   );
@@ -51,6 +52,14 @@ export default function About() {
             className="mt-10 sm:mt-14 font-[family-name:var(--font-sans)] text-body-lg text-ink/70 leading-relaxed max-w-[60ch] [text-wrap:pretty]"
           >
             {SITE_DATA.about.body}
+          </p>
+
+          <p
+            ref={eduRef}
+            className="mt-6 font-mono text-label text-ink/80"
+          >
+            <span className="sr-only">Education: </span>
+            {SITE_DATA.about.education}
           </p>
 
           <div

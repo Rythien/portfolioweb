@@ -67,7 +67,7 @@ const ghosts = (page) =>
   page.evaluate(() => {
     const out = [];
     const band = 108;
-    const sel = "main h1, main h2, main h3, main [data-word], main .text-display, main .recognition-row";
+    const sel = "main h1, main h2, main h3, main [data-word], main .text-display";
     for (const el of document.querySelectorAll(sel)) {
       const r = el.getBoundingClientRect();
       if (r.height === 0 || r.top < band || r.bottom > innerHeight) continue;
@@ -153,7 +153,7 @@ for (const mode of modes) {
       if (scenario === "flings") {
         await page.evaluate(() => window.scrollTo(0, 400));
         await page.waitForTimeout(400);
-        const ids = await page.evaluate(() => ["about", "disciplines", "works", "recognition", "contact", ...[...document.querySelectorAll(".discipline-row[id]")].map((e) => e.id)]);
+        const ids = await page.evaluate(() => ["about", "disciplines", "works", "contact", ...[...document.querySelectorAll(".discipline-row[id]")].map((e) => e.id)]);
         const low = [];
         for (const id of ids) {
           await page.evaluate((id) => document.getElementById(id).scrollIntoView(), id);

@@ -31,7 +31,6 @@ const STOPS = [
   ["disciplines-end", "#disciplines .discipline-row:last-child", "end"],
   ["works", "#works article:nth-child(1) .work-panel-wrap", -140],
   ["works-2", "#works article:nth-child(2) .work-panel-wrap", -140],
-  ["recognition", "#recognition", 40],
   ["contact", "#contact", -40],
   ["footer", "footer", "end"],
 ];

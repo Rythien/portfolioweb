@@ -4,13 +4,6 @@ export interface Discipline {
   description: string;
 }
 
-export interface RecognitionItem {
-  year: string;
-  project: string;
-  honor: string;
-  result: string;
-}
-
 export const SITE_DATA = {
   brand: {
     name: "Searon Maharjan",
@@ -46,6 +39,8 @@ export const SITE_DATA = {
     statementItalic: "contemplation,",
     statementSuffix: "crafting tactile interfaces designed to outlive the noise.",
     body: "Based in Kathmandu, I work at the intersection of graphic design, realtime frontend engineering, and 3D visualization. Every system begins with structural clarity: planning the journey, choosing the type, and choreographing responsive motion that communicates intent rather than ornamentation.",
+    // Stated as on the CV: no honours claim
+    education: "BICT, Asia e University, 2025",
     secondaryLanguage: {
       lang: "Nepali / नेपाली",
       quote: "काठमाडौँको ऐतिहासिक शिल्प र आधुनिक डिजिटल प्रविधिको संगम: स्पष्टता, सौन्दर्य र स्थायित्व।",
@@ -102,22 +97,8 @@ export const SITE_DATA = {
     title: "Selected Works",
   },
 
-  recognition: {
-    sectionNum: "(04)",
-    title: "Recognition",
-    accoladesLabel: "Total Distinctions & Milestones",
-    items: [
-      {
-        year: "2025",
-        project: "Asia e University",
-        honor: "Bachelor of Information & Communication Technology (BICT)",
-        result: "Graduated with Honors",
-      },
-    ] as RecognitionItem[],
-  },
-
   contact: {
-    sectionNum: "(05)",
+    sectionNum: "(04)",
     title: "Contact",
     headingPrefix: "Say",
     headingAccent: "hello.",

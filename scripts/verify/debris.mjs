@@ -6,7 +6,7 @@
  *
  * At 1440: hovering the hero crystal breaks it and the chips must show
  * (window.__debrisVisibility > 0.5); then at Works (where the crystal
- * breaks on scroll), mid-Works and Recognition they must be gone (< 0.01).
+ * breaks on scroll), mid-Works and Contact they must be gone (< 0.01).
  */
 import { firefox } from "playwright";
 
@@ -37,7 +37,7 @@ for (const mode of modes) {
   for (const [name, sel, at] of [
     ["Works start", "#works", 0],
     ["mid-Works", "#works", 0.5],
-    ["Recognition", "#recognition", 0],
+    ["Contact", "#contact", 0],
   ]) {
     await page.evaluate(([sel, at]) => {
       const r = document.querySelector(sel).getBoundingClientRect();

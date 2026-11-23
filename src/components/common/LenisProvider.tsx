@@ -23,7 +23,7 @@ const LenisContext = createContext<LenisContextValue>({
 
 export const useLenis = () => useContext(LenisContext);
 
-const SECTION_IDS = ["top", "about", "disciplines", "works", "recognition", "contact"];
+const SECTION_IDS = ["top", "about", "disciplines", "works", "contact"];
 
 export default function LenisProvider({
   children,

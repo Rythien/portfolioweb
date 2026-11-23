@@ -14,7 +14,6 @@ const SECTIONS: { id: string; label: string }[] = [
   { id: "about", label: "About" },
   { id: "disciplines", label: "Disciplines" },
   { id: "works", label: "Selected Works" },
-  { id: "recognition", label: "Recognition" },
   { id: "contact", label: "Contact" },
 ];
 
