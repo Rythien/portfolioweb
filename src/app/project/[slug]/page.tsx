@@ -156,7 +156,7 @@ export default async function ProjectDetailPage({
               <span>
                 <span className="font-mono text-label text-ink tabular-nums mr-2">Fig. 01</span>
                 Walkthrough, recorded running locally. The captions are part of the video.
-                {project.dataNote && ` ${project.dataNote}: the names, figures and budgets are placeholders.`}
+                {project.dataNoteDetail && ` ${project.dataNoteDetail}`}
               </span>
               <span className="font-mono text-label text-ink/80">Code on request</span>
             </figcaption>

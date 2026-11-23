@@ -66,6 +66,8 @@ export interface Project {
   /** Shown on the panel and under the walkthrough when the recording shows
    * seeded figures that could be read as results. */
   dataNote?: string;
+  /** The longer form under the case-study walkthrough. */
+  dataNoteDetail?: string;
   placeholder?: boolean;
   link: string;
   /** Screen recordings: the panel loop and the captioned walkthrough. */
@@ -318,14 +320,17 @@ export const projects: Project[] = [
       "A kitchen that never sleeps: a menu you scroll through like a film, and every order walking its way from the pass to the door.",
     link: "/project/nova-delivers",
     caseStudy: NOVA_CASE,
+    // Not yet confirmed by the author: say so rather than present them
+    dataNote: "On-screen stats unconfirmed",
+    dataNoteDetail: "The delivery time and on-time rate shown in the hero are not confirmed results.",
     video: video(
       "nova-delivers",
-      "Screen recording of Nova Delivers in five cuts: the video hero, the burger anatomy mid-scrub, the menu filtered to momo, the cart drawer, then an order accepted in the operations portal.",
+      "Screen recording of Nova Delivers in five cuts: the burger anatomy mid-scrub, the menu filtered to momo, the cart drawer, the video hero, then an order accepted in the operations portal.",
       "Captioned walkthrough of Nova Delivers: the hero, the scroll-scrubbed anatomy, filtering and searching the menu, the cart drawer, then the operations portal accepting an order.",
     ),
     cover: cover("nova-delivers", "Nova Delivers", "ice chips refracting the Nova Delivers title"),
     images: [
-      still("nova-delivers", "hero", "The customer site opens on a full-bleed video hero."),
+      still("nova-delivers", "hero", "The customer site opens on a full-bleed video hero. Its delivery stats are not confirmed results."),
       still("nova-delivers", "anatomy", "Scrolling scrubs a 120-frame burger anatomy drawn to a canvas."),
       still("nova-delivers", "menu", "The menu: category filters and search across 164 dishes."),
       still("nova-delivers", "cart", "The cart drawer: add-ons, a rider tip and a promo code field."),
@@ -412,6 +417,7 @@ export const projects: Project[] = [
     link: "/project/care-ops",
     caseStudy: CARE_OPS_CASE,
     dataNote: "Seeded demo data, not results",
+    dataNoteDetail: "Seeded demo data, not results: the names, figures and budgets are placeholders.",
     video: video(
       "care-ops",
       "Screen recording of Care Ops in five cuts: the admin console, a support worker dragged onto a participant's day and the clash it raises, participants, a support worker sliding to clock in, then the shift details.",
