@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
 @theme {
+  /* 1440: Works returns to its 4/8 split here (5/7 below keeps the
+     description short enough to clear the mode pill) */
+  --breakpoint-wide: 90rem;
+
   --font-display: var(--font-display), "Newsreader", Georgia, serif;
   --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, monospace;

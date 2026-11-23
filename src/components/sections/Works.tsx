@@ -210,8 +210,10 @@ export default function Works() {
       className="scroll-mt-[108px] lg:scroll-mt-24 pt-16 sm:pt-24 lg:pt-32 section-end border-t border-rule"
     >
       {/* Pinned viewport for the horizontal pan (data-h is set by the
-          script when the pan runs); otherwise a plain stacked column */}
-      <div ref={pinRef} className="work-pin group/works data-[h]:h-[100dvh] data-[h]:flex data-[h]:items-center data-[h]:overflow-hidden data-[h]:pt-20">
+          script when the pan runs); otherwise a plain stacked column. Its
+          bottom padding centres the slide above the floating mode pill,
+          not behind it */}
+      <div ref={pinRef} className="work-pin group/works data-[h]:h-[100dvh] data-[h]:flex data-[h]:items-center data-[h]:overflow-hidden data-[h]:pt-20 data-[h]:pb-24">
         <div
           ref={trackRef}
           className="work-track flex flex-col gap-24 sm:gap-32 max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full group-data-[h]/works:flex-row group-data-[h]/works:items-center group-data-[h]/works:w-max group-data-[h]/works:max-w-none group-data-[h]/works:mx-0 group-data-[h]/works:gap-[6vw] group-data-[h]/works:px-[calc((100vw-var(--slide-w))/2)]"
@@ -221,7 +223,7 @@ export default function Works() {
               key={project.slug}
               className="work-slide flex flex-col gap-8 sm:gap-12 lg:grid lg:grid-cols-12 lg:gap-x-10 lg:gap-y-6 lg:items-start group-data-[h]/works:w-[var(--slide-w)] group-data-[h]/works:shrink-0"
             >
-              <div className="work-head flex flex-col gap-8 sm:gap-12 lg:gap-6 lg:col-start-9 lg:col-span-4 lg:row-start-1">
+              <div className="work-head flex flex-col gap-8 sm:gap-12 lg:gap-6 lg:col-start-8 lg:col-span-5 wide:col-start-9 wide:col-span-4 lg:row-start-1">
                 <div className="flex items-baseline justify-between border-b border-rule pb-4 font-mono text-label text-ink/80">
                   <div className="flex items-center gap-4">
                     <span className="text-ink font-medium tabular-nums">
@@ -276,7 +278,7 @@ export default function Works() {
 
               {/* Panel: slides in from the right, tilts on hover, chip
                   refracts it, click opens the case study */}
-              <div className="work-panel-wrap relative lg:col-span-8 lg:row-start-1 lg:row-span-2">
+              <div className="work-panel-wrap relative lg:col-span-7 wide:col-span-8 lg:row-start-1 lg:row-span-2">
                 <div className="work-panel-tilt relative will-change-transform">
                   {/* Frame: a 1px rule around a mat of the elevated
                       surface, the art inset in it behind a hairline */}
@@ -302,16 +304,18 @@ export default function Works() {
                     className="absolute inset-0 z-10"
                   />
                 </div>
+                {/* Private builds: a recording, never a live site or a repo.
+                    Plain text on purpose, nothing here is a link. It sits
+                    under the panel in the panel's own column, so a long
+                    description beside it can't push it down onto the pill */}
+                <p className="mt-4 sm:mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-label text-ink/80">
+                  <span>Video preview</span>
+                  <span>Code on request</span>
+                  {project.dataNote && <span>{project.dataNote}</span>}
+                </p>
               </div>
-              {/* Private builds: a recording, never a live site or a repo.
-                  Plain text on purpose, nothing here is a link. */}
-              <p className="-mt-4 sm:-mt-8 lg:mt-0 lg:col-span-8 lg:row-start-3 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-label text-ink/80">
-                <span>Video preview</span>
-                <span>Code on request</span>
-                {project.dataNote && <span>{project.dataNote}</span>}
-              </p>
 
-              <div className="flex items-center justify-between font-mono text-label text-ink/80 lg:col-start-9 lg:col-span-4 lg:row-start-2 lg:self-end">
+              <div className="flex items-center justify-between font-mono text-label text-ink/80 lg:col-start-8 lg:col-span-5 wide:col-start-9 wide:col-span-4 lg:row-start-2 lg:self-end">
                 {/* One tab stop per slide (the title link): this one and the
                     panel duplicate it */}
                 <Link
