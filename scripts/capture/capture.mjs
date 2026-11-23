@@ -229,6 +229,20 @@ class Recorder {
     this.resumedAt = Date.now();
     this.frames.push({ resume: this.resumedAt });
     this.paused = false;
+    // The screencast only sends a frame when something paints. A still page
+    // after a cut would send none, and the whole beat would be dropped, so
+    // repaint one invisible pixel to get a fresh frame of the new state
+    await this.page.evaluate(() => {
+      let d = document.getElementById("__cap_nudge");
+      if (!d) {
+        d = document.createElement("div");
+        d.id = "__cap_nudge";
+        d.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;pointer-events:none;z-index:2147483647";
+        document.documentElement.appendChild(d);
+      }
+      d.style.background = d.dataset.on ? "rgba(0,0,0,0.01)" : "rgba(0,0,0,0.02)";
+      d.dataset.on = d.dataset.on ? "" : "1";
+    });
     await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   }
   async stop() {
