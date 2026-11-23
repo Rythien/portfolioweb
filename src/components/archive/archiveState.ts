@@ -5,7 +5,7 @@
  */
 import { SEAL, SEALS } from "./layout";
 import { CHARGE_FULL, HITS_TO_FREE, WALL, type V3 } from "./game";
-import { projects } from "@/content/projects";
+import { archiveProjects } from "@/content/projects";
 
 export { CHARGE_FULL, HITS_TO_FREE };
 
@@ -39,7 +39,7 @@ export interface ArchiveState {
 
 /** Project slug held by seal i. */
 export function sealSlug(i: number): string {
-  return projects[SEALS[i].project]?.slug ?? String(i);
+  return archiveProjects[SEALS[i].project]?.slug ?? String(i);
 }
 
 /** freed: slugs freed on earlier visits (they arrive already open). */

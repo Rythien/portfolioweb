@@ -17,7 +17,7 @@ import {
 } from "@/lib/motion";
 import { getLenis } from "@/lib/scroll";
 import Swap from "@/components/ui/Swap";
-import { projects, type Project } from "@/content/projects";
+import { projects, projectCounter, type Project } from "@/content/projects";
 import ProjectVideo from "@/components/ui/ProjectVideo";
 import ToolLogos from "@/components/ui/ToolLogos";
 import { useThemeStore } from "@/store/useThemeStore";
@@ -227,7 +227,7 @@ export default function Works() {
                 <div className="flex items-baseline justify-between border-b border-rule pb-4 font-mono text-label text-ink/80">
                   <div className="flex items-center gap-4">
                     <span className="text-ink font-medium tabular-nums">
-                      {project.counter}
+                      {projectCounter(project)}
                     </span>
                     <span>{project.category}</span>
                   </div>

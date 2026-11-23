@@ -19,7 +19,7 @@ import { ENDING } from "./game";
 import Reassembly from "./Reassembly";
 import StudioEnvironment from "@/components/crystal/StudioEnvironment";
 import { timed } from "@/components/scene/costs";
-import { projects } from "@/content/projects";
+import { archiveProjects } from "@/content/projects";
 import { isReadyOnScreen } from "@/components/scene/warm";
 
 /**
@@ -774,7 +774,7 @@ export default function ArchiveScene({ input, reduced, lowPower, game, hud }: Ar
         <meshPhysicalMaterial {...cheapProps} flatShading ref={holdCheapShard} />
       </instancedMesh>
       {sealGlass && shardGlass && cheapSeal && cheapShard && SEALS.map((spot, i) => {
-        const pr = projects[spot.project];
+        const pr = archiveProjects[spot.project];
         return (
           <Seal
             key={spot.project}

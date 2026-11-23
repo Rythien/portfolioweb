@@ -56,7 +56,9 @@ export interface PhoneClip {
 
 export interface Project {
   slug: string;
-  counter: string;
+  /** Has a seal in THE ARCHIVE (default true). The Archive has exactly three
+   * seals: a project beyond those three must say archive: false. */
+  archive?: boolean;
   title: string;
   /** The one word of the title set in Newsreader italic lowercase. */
   titleAccent?: string;
@@ -307,7 +309,6 @@ const CARE_OPS_CASE: CaseStudy = {
 export const projects: Project[] = [
   {
     slug: "nova-delivers",
-    counter: "01 / 03",
     title: "Nova Delivers",
     titleAccent: "Delivers",
     subtitle: "A food delivery storefront and its operations portal",
@@ -357,7 +358,6 @@ export const projects: Project[] = [
   },
   {
     slug: "alveronium",
-    counter: "02 / 03",
     title: "Alveronium Studio",
     titleAccent: "Studio",
     subtitle: "A studio website on a single real-time 3D stage",
@@ -403,7 +403,6 @@ export const projects: Project[] = [
   },
   {
     slug: "care-ops",
-    counter: "03 / 03",
     title: "Care Ops",
     titleAccent: "Ops",
     subtitle: "Rostering, clock-in and care notes for NDIS disability support",
@@ -464,6 +463,15 @@ export const projects: Project[] = [
     tags: ["#react", "#operations", "#rostering", "#roles"],
   },
 ];
+
+/** The projects that hold THE ARCHIVE's seals, in seal order. */
+export const archiveProjects: Project[] = projects.filter((p) => p.archive !== false);
+
+/** "02 / 04": the project's place in the list, counted from the data. */
+export function projectCounter(p: Project): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(projects.indexOf(p) + 1)} / ${pad(projects.length)}`;
+}
 
 export function getProjects(): Project[] {
   return projects;

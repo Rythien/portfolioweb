@@ -9,7 +9,7 @@ import {
   ENDING, FREE, WALL, bodyRot, gapAzimuth, wallShardOffset, wallSlotOpen, wallSlots, SHARD_HIT,
   type SealTarget, type V3, type WallSlot,
 } from "./game";
-import type { Project } from "@/content/projects";
+import { projectCounter, type Project } from "@/content/projects";
 import { useArchiveProgress } from "@/store/useArchiveProgress";
 import { timed } from "@/components/scene/costs";
 import { OVERSHOOT, ease } from "@/lib/motion";
@@ -352,7 +352,7 @@ function panelTextTexture(p: Project): THREE.CanvasTexture {
   x.font = `500 46px ${mono}`;
   ls("6px");
   x.fillStyle = "rgba(244,240,255,0.78)";
-  x.fillText(`${p.counter}   ${p.category}`.toUpperCase(), 0, 84);
+  x.fillText(`${projectCounter(p)}   ${p.category}`.toUpperCase(), 0, 84);
   x.textAlign = "right";
   x.fillText(p.year, c.width, 84);
   x.textAlign = "left";
