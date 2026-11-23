@@ -55,3 +55,7 @@ next-env.d.ts
 
 # Capture configs: client-identifying masking rules and paths stay local
 scripts/capture/*.local.json
+
+# Other tools / local scratch
+.gemini/
+scripts/_support*.mjs
