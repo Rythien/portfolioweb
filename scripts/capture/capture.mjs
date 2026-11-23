@@ -7,7 +7,7 @@
 // Everything about a project lives in its JSON: how to start the server,
 // files to restore afterwards, page set-up (storage, CSS, text masking,
 // image swaps) and three beat lists. Output goes to public/projects/<slug>/:
-//   preview.mp4 / .webm / -poster.webp      8 s panel loop      (< 2 MB)
+//   preview.mp4 / .webm / -poster.webp      panel loop, seconds from the config (< 2 MB)
 //   walkthrough.mp4 / .webm / -poster.webp  captioned, 25-40 s  (< 8 MB)
 //   still-<name>.webp                       gallery stills
 //
@@ -327,7 +327,33 @@ async function beat(page, b, ctx) {
       case "jump": {
         ctx.rec?.pause();
         const y = await scrollTarget(page, b);
-        await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), y);
+        // A smooth-scroll library keeps its own target and eases back to
+        // it after a bare scrollTo (while a wheel scroll is still easing,
+        // it ignores native scrolls). Move it directly when the page
+        // exposes it, and re-apply until the position holds: the recording
+        // is paused, so none of this is seen
+        const place = () =>
+          page.evaluate((y) => {
+            const lenis = window.__novaLenis ?? window.lenis ?? window.__lenis;
+            if (lenis?.scrollTo) lenis.scrollTo(y, { immediate: true, force: true });
+            else window.scrollTo({ top: y, behavior: "instant" });
+            return Math.round(window.scrollY);
+          }, y);
+        // The page can't scroll past its end, so hold against the reachable y
+        const want = await page.evaluate((y) => Math.round(Math.min(y, document.documentElement.scrollHeight - innerHeight)), y);
+        const t0 = Date.now();
+        let held = 0;
+        await place();
+        while (held < 3 && Date.now() - t0 < 4000) {
+          await sleep(120);
+          const at = await page.evaluate(() => Math.round(window.scrollY));
+          if (Math.abs(at - want) <= 2) held++;
+          else {
+            held = 0;
+            await place();
+          }
+        }
+        if (held < 3) log(`WARNING jump to ${b.to} did not hold at ${want}`);
         await sleep(b.settle ?? 900);
         await ctx.rec?.resume();
         break;
@@ -410,29 +436,55 @@ function ff(a) {
   execFileSync("ffmpeg", ["-v", "error", "-y", ...a], { stdio: ["ignore", "inherit", "inherit"] });
 }
 
-function encode(name, list, { seconds, exact, budget, posterAt = 0.6 }) {
+// Panel loops hold quality and give up resolution: CRF 26 (VP9 38) at
+// full size first, then smaller steps of the frame until under budget.
+// Walkthroughs keep the old ladder (raise CRF, full size).
+const PREVIEW_SCALES = [1, 0.9, 0.8, 0.7, 0.6];
+
+function encode(name, list, { seconds, exact, budget, posterAt = 0.6, preview = false }) {
   const mp4 = join(OUT, `${name}.mp4`);
   const webm = join(OUT, `${name}.webm`);
   const poster = join(OUT, `${name}-poster.webp`);
   const fit = exact ? `,tpad=stop_mode=clone:stop_duration=${exact},trim=duration=${exact}` : "";
-  const vf = `fps=${FPS},scale=${W}:${H}:flags=lanczos${fit},format=yuv420p`;
+  const vf = (k = 1) => {
+    const w = Math.round((W * k) / 2) * 2, h = Math.round((H * k) / 2) * 2;
+    return `fps=${FPS},scale=${w}:${h}:flags=lanczos${fit},format=yuv420p`;
+  };
   const src = ["-f", "concat", "-safe", "0", "-i", list];
-  let crf = 24;
-  for (;;) {
-    ff([...src, "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", String(crf), "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", mp4]);
-    if (statSync(mp4).size <= budget || crf >= 32) break;
-    crf += 2;
-    log(`${name}.mp4 over ${(budget / 1e6).toFixed(0)} MB, retrying at CRF ${crf}`);
-  }
-  let vcrf = 38;
-  for (;;) {
-    ff([...src, "-vf", vf, "-c:v", "libvpx-vp9", "-crf", String(vcrf), "-b:v", "0", "-deadline", "good", "-cpu-used", "3", "-row-mt", "1", "-pix_fmt", "yuv420p", "-an", webm]);
-    if (statSync(webm).size <= budget || vcrf >= 50) break;
-    vcrf += 4;
+  const x264 = (crf, k) => ff([...src, "-vf", vf(k), "-c:v", "libx264", "-preset", "veryfast", "-crf", String(crf), "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", mp4]);
+  const vp9 = (crf, k) => ff([...src, "-vf", vf(k), "-c:v", "libvpx-vp9", "-crf", String(crf), "-b:v", "0", "-deadline", "good", "-cpu-used", "3", "-row-mt", "1", "-pix_fmt", "yuv420p", "-an", webm]);
+  let crf, vcrf, k = 1, vk = 1;
+  if (preview) {
+    crf = 26;
+    vcrf = 38;
+    for (k of PREVIEW_SCALES) {
+      x264(crf, k);
+      if (statSync(mp4).size <= budget) break;
+      log(`${name}.mp4 over ${(budget / 1e6).toFixed(0)} MB at ${Math.round(W * k)} px, trying smaller`);
+    }
+    for (vk of PREVIEW_SCALES) {
+      vp9(vcrf, vk);
+      if (statSync(webm).size <= budget) break;
+    }
+  } else {
+    crf = 24;
+    for (;;) {
+      x264(crf);
+      if (statSync(mp4).size <= budget || crf >= 32) break;
+      crf += 2;
+      log(`${name}.mp4 over ${(budget / 1e6).toFixed(0)} MB, retrying at CRF ${crf}`);
+    }
+    vcrf = 38;
+    for (;;) {
+      vp9(vcrf);
+      if (statSync(webm).size <= budget || vcrf >= 50) break;
+      vcrf += 4;
+    }
   }
   ff(["-ss", String(posterAt), "-i", mp4, "-frames:v", "1", "-c:v", "libwebp", "-quality", "82", poster]);
   const mb = (f) => (statSync(f).size / 1e6).toFixed(2);
-  log(`${name}: ${(exact ?? seconds).toFixed(1)} s  mp4 ${mb(mp4)} MB (crf ${crf})  webm ${mb(webm)} MB (crf ${vcrf})  poster ${mb(poster)} MB`);
+  log(`${name}: ${(exact ?? seconds).toFixed(1)} s  mp4 ${mb(mp4)} MB (crf ${crf}, ${Math.round(W * k)} px)  webm ${mb(webm)} MB (crf ${vcrf}, ${Math.round(W * vk)} px)  poster ${mb(poster)} MB`);
+  for (const f of [mp4, webm]) if (statSync(f).size > budget) log(`WARNING ${f.slice(OUT.length + 1)} still over budget`);
   return [mp4, webm, poster];
 }
 
@@ -494,7 +546,9 @@ try {
       const exact = kind === "preview" ? spec.seconds ?? 8 : undefined;
       if (kind === "walkthrough" && (seconds < 25 || seconds > 40)) log(`WARNING walkthrough runs ${seconds.toFixed(1)} s (want 25-40)`);
       if (kind === "preview" && seconds + 0.25 < exact) log(`WARNING preview has ${seconds.toFixed(1)} s of footage, padded to ${exact}`);
-      made.push(...encode(kind, list, { seconds, exact, budget: kind === "preview" ? 2e6 : 8e6, posterAt: spec.posterAt }));
+      if (kind === "preview" && seconds > exact + 0.25) log(`WARNING preview has ${seconds.toFixed(1)} s of footage, trimmed to ${exact}: the last beat is cut short`);
+      if (kind === "preview") log(`preview footage ${seconds.toFixed(2)} s (target ${exact})`);
+      made.push(...encode(kind, list, { seconds, exact, budget: kind === "preview" ? 2e6 : 8e6, posterAt: spec.posterAt, preview: kind === "preview" }));
       if (!keepFrames) rmSync(join(WORK, kind), { recursive: true, force: true });
     }
     if (errors.length) log("page errors:", errors.slice(0, 4).join(" | "));
