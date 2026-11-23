@@ -45,6 +45,15 @@ export interface CaseStudy {
   excerpts?: Excerpt[];
 }
 
+/** A portrait recording at phone size (scripts/capture/<slug>-phone.json). */
+export interface PhoneClip {
+  /** Path without extension. */
+  src: string;
+  /** What the clip shows, for screen readers. */
+  label: string;
+  caption: string;
+}
+
 export interface Project {
   slug: string;
   counter: string;
@@ -68,6 +77,8 @@ export interface Project {
   dataNote?: string;
   /** The longer form under the case-study walkthrough. */
   dataNoteDetail?: string;
+  /** Portrait clips of a phone-first app, shown in device frames in the case study. */
+  phoneClips?: PhoneClip[];
   placeholder?: boolean;
   link: string;
   /** Screen recordings: the panel loop and the captioned walkthrough. */
@@ -246,6 +257,7 @@ const CARE_OPS_CASE: CaseStudy = {
   ],
   approach: [
     "React 19 and TypeScript on Vite, React Router for role-aware routes, Tailwind 4, GSAP for motion including the roster's drag and drop, and date-fns for the calendar.",
+    "It is built phone-first: it asks to open in portrait, and the coordinator's roster opens out to the width of a desktop.",
     "Sign-in is split by role. Support workers ask for a magic link and a six-digit code; admins and coordinators use a password. Routes check the role, and a support worker who lands on an admin page is sent back to their shifts with a message saying why.",
     "Coordinators get live shifts, a weekly roster (with daily and fortnightly views, times snapped to 15 minutes, draft, published and archived states, and tools to copy last week or save a week as a template), participants with their plan type and budget used, staff, timesheets, and reports that split hours into ordinary, overtime and penalty rates, exportable as CSV or PDF. Support workers get their next shift, a slide to clock in that records the device's GPS position, the shift with its checklist, a ten-section care-note form and an incident report.",
     "Every screen talks to one typed API client. Behind it today is a mock backend that persists to IndexedDB in the browser and seeds itself on first run. A Postgres schema of fourteen tables, row-level security policies and seed data for Supabase sit alongside it; the app is not connected to them yet. The roster engine and the API's role checks each have their own test script, and the app installs as a web app that opens on the worker's shifts.",
@@ -418,6 +430,18 @@ export const projects: Project[] = [
     caseStudy: CARE_OPS_CASE,
     dataNote: "Seeded demo data, not results",
     dataNoteDetail: "Seeded demo data, not results: the names, figures and budgets are placeholders.",
+    phoneClips: [
+      {
+        src: "/projects/care-ops/phone-clock-in",
+        label: "Screen recording of Care Ops on a phone: a support worker slides to clock in, the shift opens with visit verification, and a checklist item is ticked.",
+        caption: "Slide to clock in; the shift opens on its checklist.",
+      },
+      {
+        src: "/projects/care-ops/phone-care-note",
+        label: "Screen recording of Care Ops on a phone: the care-note form and its sections, then the incident report with severity grading.",
+        caption: "The care-note form, then the incident report.",
+      },
+    ],
     video: video(
       "care-ops",
       "Screen recording of Care Ops in five cuts: the admin console, a support worker dragged onto a participant's day and the clash it raises, participants, a support worker sliding to clock in, then the shift details.",

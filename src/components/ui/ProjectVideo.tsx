@@ -16,15 +16,18 @@ interface ProjectVideoProps {
   /** Loop silently while on screen (panels), or play with controls (case study). */
   variant: "loop" | "player";
   className?: string;
+  /** Box shape: a Tailwind aspect class. Desktop recordings are 16:10;
+   * phone clips pass their own portrait ratio. */
+  aspect?: string;
 }
 
 /**
- * A 16:10 screen recording. The loop variant plays muted only while at
+ * A screen recording (16:10 unless told otherwise). The loop variant plays muted only while at
  * least a third of it is on screen, never while THE ARCHIVE covers the
  * page, and not at all under reduced motion (the poster stays). Nothing
  * is fetched until it first comes into view.
  */
-export default function ProjectVideo({ src, label, dreamSrc, sizes, variant, className = "" }: ProjectVideoProps) {
+export default function ProjectVideo({ src, label, dreamSrc, sizes, variant, className = "", aspect = "aspect-[16/10]" }: ProjectVideoProps) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const archiveOpen = useArchiveStore((s) => s.open);
 
@@ -75,7 +78,7 @@ export default function ProjectVideo({ src, label, dreamSrc, sizes, variant, cla
 
   const loop = variant === "loop";
   return (
-    <div className={`relative w-full aspect-[16/10] overflow-hidden bg-surface-elevated ${className}`}>
+    <div className={`relative w-full ${aspect} overflow-hidden bg-surface-elevated ${className}`}>
       {/* suppressHydrationWarning: browser extensions inject data-vc-*
           attributes into <video> before hydration. It covers this element's
           own attributes only, not its children. */}

@@ -8,6 +8,7 @@ import LenisProvider from "@/components/common/LenisProvider";
 import ProjectArt from "@/components/ui/ProjectArt";
 import ProjectVideo from "@/components/ui/ProjectVideo";
 import Architecture, { hasArchitecture } from "@/components/case-study/Architecture";
+import PhoneClips from "@/components/case-study/PhoneClips";
 import CodeExcerpt from "@/components/case-study/CodeExcerpt";
 import RecoveredMark from "@/components/ui/RecoveredMark";
 import { projects, getProjectBySlug, type Project } from "@/content/projects";
@@ -183,6 +184,11 @@ export default async function ProjectDetailPage({
               <Part n={num()} label="The problem">{paras(cs.problem)}</Part>
               <Part n={num()} label="My role">{paras(cs.role)}</Part>
               <Part n={num()} label="Approach">{paras(cs.approach)}</Part>
+              {project.phoneClips && project.phoneClips.length > 0 && (
+                <Part n={num()} label="On a phone">
+                  <PhoneClips clips={project.phoneClips} />
+                </Part>
+              )}
               {hasArchitecture(project.slug) && (
                 <Part n={num()} label="Architecture">
                   <Architecture slug={project.slug} />

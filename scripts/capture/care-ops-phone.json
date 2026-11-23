@@ -1,0 +1,156 @@
+{
+  "slug": "care-ops",
+  "_comment": "The support worker side of Care Ops at phone size (the app is phone-first: its manifest asks for portrait). Shares care-ops.local.json for the server and masking. Clips go in the case study in a device frame; the panel keeps the desktop roster loop.",
+  "requiresLocal": true,
+  "local": "care-ops",
+  "base": "http://localhost:8443",
+  "viewport": [
+    390,
+    844
+  ],
+  "dpr": 2,
+  "colorScheme": "light",
+  "init": {
+    "css": "html{scrollbar-width:none}"
+  },
+  "clips": [
+    {
+      "name": "phone-clock-in",
+      "seconds": 10,
+      "posterAt": 0.3,
+      "setup": [
+        {
+          "do": "goto",
+          "url": "/login",
+          "wait": 3000
+        },
+        {
+          "do": "click",
+          "sel": "button:has-text('Send Magic Link')",
+          "ms": 1,
+          "after": 1500
+        },
+        {
+          "do": "click",
+          "sel": "button:has-text('Quick Demo')",
+          "ms": 1,
+          "after": 3500
+        },
+        {
+          "do": "eval",
+          "js": "(()=>{const s=document.createElement(\"style\");s.textContent=\"div[role=status].fixed{display:none!important}\";document.head.appendChild(s)})()",
+          "after": 600
+        }
+      ],
+      "beats": [
+        {
+          "do": "move",
+          "to": "[role='slider'][aria-label='Slide to clock in'] > div:last-child",
+          "ms": 700,
+          "after": 300
+        },
+        {
+          "do": "drag",
+          "from": "[role='slider'][aria-label='Slide to clock in'] > div:last-child",
+          "by": [
+            300,
+            0
+          ],
+          "ms": 1000,
+          "after": 1400
+        },
+        {
+          "do": "scroll",
+          "by": 560,
+          "ms": 1800,
+          "settle": 300
+        },
+        {
+          "do": "click",
+          "sel": "text=Assist with safe bathroom routine",
+          "ms": 500,
+          "after": 800
+        },
+        {
+          "do": "scroll",
+          "by": 420,
+          "ms": 1500,
+          "settle": 300
+        }
+      ]
+    },
+    {
+      "name": "phone-care-note",
+      "seconds": 10,
+      "posterAt": 1.5,
+      "setup": [
+        {
+          "do": "goto",
+          "url": "/login",
+          "wait": 3000
+        },
+        {
+          "do": "click",
+          "sel": "button:has-text('Send Magic Link')",
+          "ms": 1,
+          "after": 1500
+        },
+        {
+          "do": "click",
+          "sel": "button:has-text('Quick Demo')",
+          "ms": 1,
+          "after": 3500
+        },
+        {
+          "do": "eval",
+          "js": "(()=>{const s=document.createElement(\"style\");s.textContent=\"div[role=status].fixed{display:none!important}\";document.head.appendChild(s)})()",
+          "after": 600
+        }
+      ],
+      "beats": [
+        {
+          "do": "click",
+          "sel": "nav >> text=Care Note",
+          "ms": 500,
+          "after": 1000
+        },
+        {
+          "do": "scroll",
+          "by": 700,
+          "ms": 2000,
+          "settle": 300
+        },
+        {
+          "do": "scroll",
+          "by": 700,
+          "ms": 1900,
+          "settle": 300
+        },
+        {
+          "do": "cut"
+        },
+        {
+          "do": "eval",
+          "js": "history.back()",
+          "after": 1500
+        },
+        {
+          "do": "cut",
+          "off": true
+        },
+        {
+          "do": "click",
+          "sel": "nav >> text=Incident",
+          "ms": 500,
+          "after": 1200
+        },
+        {
+          "do": "scroll",
+          "by": 400,
+          "ms": 1500,
+          "settle": 300
+        }
+      ]
+    }
+  ]
+}
