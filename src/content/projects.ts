@@ -334,8 +334,8 @@ export const projects: Project[] = [
     link: "/project/nova-delivers",
     caseStudy: NOVA_CASE,
     // Not yet confirmed by the author: say so rather than present them
-    dataNote: "On-screen stats unconfirmed",
-    dataNoteDetail: "The delivery time and on-time rate shown in the hero are not confirmed results.",
+    dataNote: "Placeholder copy, not results",
+    dataNoteDetail: "Placeholder copy, not results: the delivery time and on-time rate in the hero were written as placeholders.",
     video: video(
       "nova-delivers",
       "Screen recording of Nova Delivers in five cuts: the burger anatomy mid-scrub, the menu filtered to momo, the cart drawer, the video hero, then an order accepted in the operations portal.",
@@ -343,7 +343,7 @@ export const projects: Project[] = [
     ),
     cover: cover("nova-delivers", "Nova Delivers", "ice chips refracting the Nova Delivers title"),
     images: [
-      still("nova-delivers", "hero", "The customer site opens on a full-bleed video hero. Its delivery stats are not confirmed results."),
+      still("nova-delivers", "hero", "The customer site opens on a full-bleed video hero. Its delivery stats are placeholder copy, not results."),
       still("nova-delivers", "anatomy", "Scrolling scrubs a 120-frame burger anatomy drawn to a canvas."),
       still("nova-delivers", "menu", "The menu: category filters and search across 164 dishes."),
       still("nova-delivers", "cart", "The cart drawer: add-ons, a rider tip and a promo code field."),
