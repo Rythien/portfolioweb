@@ -25,6 +25,10 @@
 //   drag   from to|by [ms]          press, glide, release (selectors or [x,y])
 //   caption text|null [label]       walkthrough overlay; null hides it
 //   still  name [hide]              stills run: save still-<name>.webp
+//
+// Config extras: "dpr" (device pixel ratio, default 1); "local" (share
+// another config's .local.json); "clips": [{ name, seconds, setup, beats,
+// posterAt }] recorded like the preview into <name>.mp4 (--only=clips)
 //   eval   js                       escape hatch, runs in the page
 import { chromium } from "playwright";
 import { spawn, execFileSync } from "node:child_process";
@@ -44,7 +48,11 @@ const cfg = JSON.parse(readFileSync(resolve(cfgPath), "utf8"));
 // local path) lives in <config>.local.json beside it, which is gitignored.
 // Its server list replaces the config's; its routes and replace rules run
 // before the config's own.
-const localPath = resolve(cfgPath).replace(/\.json$/, ".local.json");
+// cfg.local names another config whose .local.json to share (a phone run
+// of the same project uses the same masking rules, kept in one place)
+const localPath = cfg.local
+  ? resolve(dirname(resolve(cfgPath)), `${cfg.local}.local.json`)
+  : resolve(cfgPath).replace(/\.json$/, ".local.json");
 if (existsSync(localPath)) {
   const local = JSON.parse(readFileSync(localPath, "utf8"));
   if (local.server) cfg.server = local.server;
@@ -56,6 +64,9 @@ if (existsSync(localPath)) {
   throw new Error(`${cfg.slug} needs ${localPath} (client masking rules, kept out of git)`);
 }
 const [W, H] = cfg.viewport ?? [1600, 1000];
+// Device pixel ratio: a phone viewport (390x844) records at 2x so its
+// frames stay sharp; videos and stills come out at W*DPR x H*DPR
+const DPR = cfg.dpr ?? 1;
 const FPS = cfg.fps ?? 30;
 const OUT = resolve(ROOT, cfg.out ?? `public/projects/${cfg.slug}`);
 const WORK = join(tmpdir(), `capture-${cfg.slug}`);
@@ -204,7 +215,7 @@ class Recorder {
       writeFileSync(file, Buffer.from(data, "base64"));
       this.frames.push({ file, t });
     });
-    await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: W, maxHeight: H, everyNthFrame: 1 });
+    await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: W * DPR, maxHeight: H * DPR, everyNthFrame: 1 });
     this.t0 = Date.now();
   }
   pause() {
@@ -447,7 +458,7 @@ function encode(name, list, { seconds, exact, budget, posterAt = 0.6, preview = 
   const poster = join(OUT, `${name}-poster.webp`);
   const fit = exact ? `,tpad=stop_mode=clone:stop_duration=${exact},trim=duration=${exact}` : "";
   const vf = (k = 1) => {
-    const w = Math.round((W * k) / 2) * 2, h = Math.round((H * k) / 2) * 2;
+    const w = Math.round((W * DPR * k) / 2) * 2, h = Math.round((H * DPR * k) / 2) * 2;
     return `fps=${FPS},scale=${w}:${h}:flags=lanczos${fit},format=yuv420p`;
   };
   const src = ["-f", "concat", "-safe", "0", "-i", list];
@@ -483,7 +494,7 @@ function encode(name, list, { seconds, exact, budget, posterAt = 0.6, preview = 
   }
   ff(["-ss", String(posterAt), "-i", mp4, "-frames:v", "1", "-c:v", "libwebp", "-quality", "82", poster]);
   const mb = (f) => (statSync(f).size / 1e6).toFixed(2);
-  log(`${name}: ${(exact ?? seconds).toFixed(1)} s  mp4 ${mb(mp4)} MB (crf ${crf}, ${Math.round(W * k)} px)  webm ${mb(webm)} MB (crf ${vcrf}, ${Math.round(W * vk)} px)  poster ${mb(poster)} MB`);
+  log(`${name}: ${(exact ?? seconds).toFixed(1)} s  mp4 ${mb(mp4)} MB (crf ${crf}, ${Math.round(W * DPR * k)} px)  webm ${mb(webm)} MB (crf ${vcrf}, ${Math.round(W * DPR * vk)} px)  poster ${mb(poster)} MB`);
   for (const f of [mp4, webm]) if (statSync(f).size > budget) log(`WARNING ${f.slice(OUT.length + 1)} still over budget`);
   return [mp4, webm, poster];
 }
@@ -517,10 +528,16 @@ try {
     args: ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist", "--hide-scrollbars", "--autoplay-policy=no-user-gesture-required"],
   });
 
-  for (const kind of ["preview", "walkthrough", "stills"]) {
-    if (!only.includes(kind) || !cfg[kind]) continue;
-    const spec = cfg[kind];
-    const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, colorScheme: cfg.colorScheme ?? "light", reducedMotion: "no-preference" });
+  // Named clips (cfg.clips) record like a preview: exact length, 2 MB
+  // budget, no captions, written as <name>.mp4 / .webm / -poster.webp
+  const jobs = [
+    ...["preview", "walkthrough", "stills"].filter((k) => cfg[k] && only.includes(k)).map((k) => ({ kind: k, spec: cfg[k], name: k })),
+    ...(only.includes("clips") ? cfg.clips ?? [] : []).map((c) => ({ kind: "clip", spec: c, name: c.name })),
+  ];
+  for (const { kind: jobKind, spec, name } of jobs) {
+    // A clip is a preview in everything but its file name
+    const kind = jobKind === "clip" ? "preview" : jobKind;
+    const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: DPR, colorScheme: cfg.colorScheme ?? "light", reducedMotion: "no-preference" });
     for (const r of cfg.init?.routes ?? []) {
       await context.route(r.match, (route) => route.fulfill({ path: resolve(ROOT, r.file), contentType: r.contentType }));
     }
@@ -537,7 +554,7 @@ try {
       // Set-up beats run unrecorded (first load, logins, warm-up).
       await run(page, spec.setup ?? [], ctx);
       await page.mouse.move(mouse.x, mouse.y);
-      ctx.rec = new Recorder(page, join(WORK, kind));
+      ctx.rec = new Recorder(page, join(WORK, name));
       await ctx.rec.start();
       ctx.started = true;
       await run(page, spec.beats, ctx);
@@ -548,8 +565,8 @@ try {
       if (kind === "preview" && seconds + 0.25 < exact) log(`WARNING preview has ${seconds.toFixed(1)} s of footage, padded to ${exact}`);
       if (kind === "preview" && seconds > exact + 0.25) log(`WARNING preview has ${seconds.toFixed(1)} s of footage, trimmed to ${exact}: the last beat is cut short`);
       if (kind === "preview") log(`preview footage ${seconds.toFixed(2)} s (target ${exact})`);
-      made.push(...encode(kind, list, { seconds, exact, budget: kind === "preview" ? 2e6 : 8e6, posterAt: spec.posterAt, preview: kind === "preview" }));
-      if (!keepFrames) rmSync(join(WORK, kind), { recursive: true, force: true });
+      made.push(...encode(name, list, { seconds, exact, budget: kind === "preview" ? 2e6 : 8e6, posterAt: spec.posterAt, preview: kind === "preview" }));
+      if (!keepFrames) rmSync(join(WORK, name), { recursive: true, force: true });
     }
     if (errors.length) log("page errors:", errors.slice(0, 4).join(" | "));
     await context.close();
