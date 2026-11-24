@@ -70,8 +70,22 @@ in-flight program, dropped pre-warm, slow issues), and the timestamps
 `scripts/perf/slow.mjs` reads: `__screenDrawnAt` (composite on screen),
 `__heroDrawnAt` (headline drawn with its real program),
 `__crystalDrawnAt` / `__archiveGlassDrawnAt` (glass first drawn, stand-in
-or real), `__archiveFirstFrameAt` (the void), `__floodStartedAt`,
+or real; the intact hero glass has its own stand-in, so for it this is the
+real glass), `__archiveFirstFrameAt` (the void), `__floodStartedAt`,
 `__marqueeSyncedAt` (troika laid the headline out).
+
+Hero arrival (`scripts/perf/arrival.mjs [base] [--software] [--runs=3]`
+reads them): `__crystalStandInAt` (the intact crystal's own stand-in first
+drew), `__crystalRealAt` (its real glass first drew), `__crystalArrival`
+(`{ at, faded }`: when the glass took over, and whether it cross-faded over
+the stand-in or was linked before it was first shown), `__introDoneAt`
+(the preloader handed over), `__marqueeShownAt` (the marquee's first
+visible frame), `__marqueeSpan` (every frame: the tiles' extent against
+the view's half-width, the speed and the fade; read by
+`scripts/shot/marquee-arrival.mjs`, which also screenshots the first
+visible frame and +0.5 s at 1440 and 390, in Edge by default because
+headless Firefox hands screenshots a stale WebGL frame while a link is in
+flight).
 
 `node scripts/perf/slow.mjs [--software] [--runs=2]` reports, per
 scenario, time to visible content, frame-time percentiles and the longest

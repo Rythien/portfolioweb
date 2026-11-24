@@ -7,7 +7,7 @@ import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getCrystalPose } from "@/hooks/useCrystalPose";
-import { setCrystalBoundRadius, setCrystalTimeOverride } from "@/hooks/crystalState";
+import { crystalEvents, setCrystalBoundRadius, setCrystalTimeOverride } from "@/hooks/crystalState";
 import { useCrystalSound } from "@/hooks/useCrystalSound";
 import { initAudioContext } from "@/hooks/crystalAudio";
 import { useSoundStore } from "@/store/useSoundStore";
@@ -22,7 +22,7 @@ import {
   intactResolution,
   thicknessFor,
 } from "./crystalMaterial";
-import { useGfxProfile } from "@/components/scene/warm";
+import { useGfxProfile, warmObject } from "@/components/scene/warm";
 import { timed } from "@/components/scene/costs";
 import { HERO_LOGO_FILL, useHeroLogos, useUnitLogos } from "./logoGeometry";
 
@@ -382,6 +382,18 @@ function buildInclusions(seed: number, count: number, maxR: number): InclusionDa
 
 const _inclusionGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 4, 1);
 const CLOUD = CRYSTAL_MATERIAL.cloud;
+
+/**
+ * Arrival of the intact crystal. Its glass is asked for as needed work as
+ * soon as the crystal mounts (hidden during the preloader's gather too), so
+ * it is usually linked before it is first shown and simply appears. If it
+ * is not, the crystal's own stand-in (a pale see-through tint of the same
+ * mesh, a tiny program linked first) is drawn instead, never an empty
+ * hero, and the real glass cross-fades in over it in ms while the whole
+ * intact crystal grows from `from` to full size: arrival as motion, not
+ * a pop. (scene/warm.ts holds the glass back meanwhile: warmOwnStandIn.)
+ */
+const ARRIVAL = { ms: 500, from: 0.96, standInOpacity: 0.35 } as const;
 const SMALL = CRYSTAL_MATERIAL.small;
 /** The intact crystal's radius in its own units (TARGET_SIZE is its largest side). */
 const SMALL_BASE_RADIUS = TARGET_SIZE / 2;
@@ -441,7 +453,15 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         ...timed("crystal: intact glass props (textures)", () => crystalGlassProps(variant, "intact", gfx)),
         ...(DEBUG?.freeze != null ? { temporalDistortion: 0 } : {}),
         // Rim + streak shading chained onto drei's own shader patch
-        ref: (m: unknown) => applyCrystalShader(m as THREE.Material | null),
+        ref: (m: unknown) => {
+          applyCrystalShader(m as THREE.Material | null);
+          // For scene/warm.ts: the intact glass (arrival test hook), which
+          // draws its own stand-in (ARRIVAL)
+          if (m) {
+            (m as THREE.Material).userData.warmIntact = variant;
+            (m as THREE.Material).userData.warmOwnStandIn = true;
+          }
+        },
       }),
       [variant, gfx],
     );
@@ -550,6 +570,11 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
     const { scene: portalScene, camera: portalCamera } = useThree();
     const mergedRef = useRef<THREE.Mesh>(null);
+    /** The intact crystal's stand-in until its glass is linked (ARRIVAL). */
+    const standInRef = useRef<THREE.Mesh>(null);
+    /** at: when the real glass took over (-Infinity: before it was ever
+     * seen, so no fade); seen: the stand-in has been on screen. */
+    const arrivalRef = useRef<{ at: number | null; seen: boolean }>({ at: null, seen: false });
     const heroLogoRef = useRef<THREE.Mesh>(null);
     const heroRimRef = useRef<THREE.Mesh>(null);
     const shardLogoRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -602,6 +627,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       }
       if (!active || fade < 0.01 || DEBUG?.hidden) {
         if (mergedRef.current) mergedRef.current.visible = false;
+        if (standInRef.current) standInRef.current.visible = false;
+        // The live crystal is faded out (scrolled past): nothing to wait for
+        if (active) crystalEvents.crystalDrawable = true;
         if (heroLogoRef.current) heroLogoRef.current.visible = false;
         if (heroRimRef.current) heroRimRef.current.visible = false;
         if (inclusionRef.current) inclusionRef.current.visible = false;
@@ -632,6 +660,41 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       // Inclusion + glow visibility follows merged mesh
       const crossfade = assembled ? 1 : showShards ? smoothstep(0.05, 0.15, breakVal) : 0;
       const mergedHidden = crossfade >= 1;
+
+      // ── Arrival (ARRIVAL): stand-in until the glass is linked, then a
+      // cross-fade and a slight growth, unless it was ready before it showed
+      const arr = arrivalRef.current;
+      const nowMs = performance.now();
+      const standIn = standInRef.current;
+      // Needed work, in this order: the composite (2), the stand-in (3)
+      // and the marquee (4); then the glass, right behind them while the
+      // intact crystal is what shows (9.5), or behind the shards while they
+      // are (the preloader's gather: 10.6). The rest of the hero (logo,
+      // cloud, debris) follows at 10.
+      const standInLinked = !!standIn && warmObject(state.gl, standIn, portalScene, portalCamera, { priority: 3 });
+      if (mergedRef.current && arr.at === null && warmObject(state.gl, mergedRef.current, portalScene, portalCamera, { priority: mergedHidden ? 10.6 : 9.5 })) {
+        arr.at = arr.seen ? nowMs : -Infinity;
+        // Test hook (scripts/perf/arrival.mjs)
+        if (active && variant === "wake") (window as unknown as { __crystalArrival?: object }).__crystalArrival = { at: nowMs, faded: arr.seen };
+      }
+      const arriveK = arr.at === null ? 0 : smoothstep(0, 1, (nowMs - arr.at) / ARRIVAL.ms);
+      const arriveS = reducedMotion ? 1 : ARRIVAL.from + (1 - ARRIVAL.from) * arriveK;
+      // The Compositor shows the scene once the crystal can be drawn at all
+      if (active && (standInLinked || arr.at !== null)) crystalEvents.crystalDrawable = true;
+      if (standIn) {
+        const o = ARRIVAL.standInOpacity * (1 - arriveK) * (1 - crossfade) * fade;
+        standIn.visible = !mergedHidden && standInLinked && o > 0.001;
+        standIn.scale.setScalar(arriveS);
+        (standIn.material as THREE.MeshBasicMaterial).opacity = o;
+        if (standIn.visible) {
+          arr.seen = true;
+          // Test hook (scripts/perf/arrival.mjs): the stand-in first drew
+          if (active && variant === "wake") (window as unknown as { __crystalStandInAt?: number }).__crystalStandInAt ??= nowMs;
+        }
+      }
+      if (inclusionRef.current) inclusionRef.current.scale.setScalar(arriveS);
+      if (intactCloudRef.current) intactCloudRef.current.scale.setScalar(CLOUD.scale * arriveS);
+      if (mergedRef.current) mergedRef.current.scale.setScalar(arriveS);
 
       if (inclusionRef.current) {
         inclusionRef.current.visible = !mergedHidden || assembled;
@@ -741,7 +804,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         else _parentInvQ.identity();
         heroMesh.quaternion.multiplyQuaternions(_parentInvQ, _swayQ);
         heroMesh.position.set(0, 0, 0);
-        heroMesh.scale.setScalar(Math.max(heroScale, 1e-4));
+        heroMesh.scale.setScalar(Math.max(heroScale, 1e-4) * arriveS);
 
         heroMesh.visible = (!mergedHidden || assembled) && !DEBUG?.noLogo;
         const heroOpacity = (assembled ? 1 : 1 - crossfade) * fade * heroAlpha;
@@ -759,12 +822,13 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       }
 
       if (mergedRef.current) {
-        mergedRef.current.visible = !mergedHidden;
+        // Not drawn at all until linked: no backdrop pass for it either
+        mergedRef.current.visible = !mergedHidden && arr.at !== null;
         const mat = mergedRef.current.material as THREE.MeshPhysicalMaterial;
         if (mat) {
           mat.visible = !mergedHidden;
           if (!mergedHidden) {
-            mat.opacity = (1 - crossfade) * fade;
+            mat.opacity = (1 - crossfade) * fade * arriveK;
             // Always transparent (see applyCrystalShader): at opacity 1 it
             // draws exactly as opaque, and one program variant means no
             // second shader to compile mid-fade
@@ -799,6 +863,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       const bl = backlightRef.current;
       if (mergedRef.current?.visible) {
         mergedRef.current.visible = false;
+        const standInWas = standIn?.visible ?? false;
+        if (standIn) standIn.visible = false;
         if (bl) {
           if (bl.parent) _blInvQ.copy(bl.parent.quaternion).invert();
           else _blInvQ.identity();
@@ -813,6 +879,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         state.gl.setRenderTarget(null);
         if (bl) bl.visible = false;
         mergedRef.current.visible = true;
+        if (standIn) standIn.visible = standInWas;
       } else if (bl) {
         bl.visible = false;
       }
@@ -1105,6 +1172,16 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
             buffer={mergedFbo.texture}
             thickness={thicknessFor(TARGET_SIZE)}
             resolution={UNUSED_FBO}
+          />
+        </mesh>
+
+        {/* The intact crystal's own stand-in (ARRIVAL): same mesh, pale tint */}
+        <mesh ref={standInRef} geometry={intactGeo} visible={false}>
+          <meshBasicMaterial
+            color={(glass as { color?: THREE.ColorRepresentation }).color ?? "#ffffff"}
+            transparent
+            opacity={0}
+            depthWrite={false}
           />
         </mesh>
 

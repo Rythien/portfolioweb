@@ -329,6 +329,10 @@ export const crystalEvents = {
   flashOpacity: 0,
   /** True once the scene has produced its first rendered frame. */
   sceneReady: false,
+  /** The live crystal can be drawn (its stand-in or its glass is linked),
+   * or there is nothing to wait for. Written by GlassCrystal; the
+   * Compositor holds the scene (and sceneReady) back until then. */
+  crystalDrawable: false,
   /** Flood progress 0 (wake) → 1 (dream), written by the Compositor. */
   dreamLevel: 0,
   /** True while the flood is animating; floodTarget is where it is heading. */

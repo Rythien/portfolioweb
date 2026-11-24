@@ -10,7 +10,7 @@ import { useThemeStore, type Mode } from "@/store/useThemeStore";
 import { useFractureStore } from "@/store/useFractureStore";
 import { getSectionProgress } from "@/store/useScrollStore";
 import { crystalEvents } from "@/hooks/useCrystalPose";
-import { guardScene, prewarmScene } from "./warm";
+import { guardScene, prewarmScene, warmObject } from "./warm";
 import { MODE, ease } from "@/lib/motion";
 
 /* ── Brush tuning ─────────────────────────────────────────────── */
@@ -588,7 +588,18 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
 
   useFrame((state, delta) => {
     const time = state.clock.elapsedTime;
-    crystalEvents.sceneReady = true;
+    // The scene shows once the crystal can be drawn (its stand-in or its
+    // glass): never a hero with an empty space where the crystal will be.
+    // Capped at 4 s for a device that cannot link even the stand-in. The
+    // preloader waits for sceneReady before the gather starts.
+    const drawable = crystalEvents.crystalDrawable || time > 4;
+    crystalEvents.sceneReady = drawable;
+    const quad = compositeQuadRef.current;
+    if (quad) {
+      quad.visible = drawable;
+      // Hidden, the guard would not ask for its program: ask now
+      if (!drawable) warmObject(gl, quad, state.scene, state.camera, { kind: "screen", priority: 2 });
+    }
 
     const lerpFactor = 0.15;
     smoothMouseRef.current.x +=
@@ -794,7 +805,7 @@ export default function Compositor({ reducedMotion, isMobile }: CompositorProps)
         { camera: fboCamera }
       )}
 
-      <mesh ref={compositeQuadRef} frustumCulled={false}>
+      <mesh ref={compositeQuadRef} frustumCulled={false} visible={false}>
         <planeGeometry args={[2, 2]} />
         <primitive object={compositeMaterial} attach="material" />
       </mesh>
