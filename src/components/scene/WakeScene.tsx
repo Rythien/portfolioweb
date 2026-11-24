@@ -335,7 +335,7 @@ export default function WakeScene({
     <>
       <color attach="background" args={["#E9E7E2"]} />
       <StudioEnvironment variant="wake" />
-      <Marquee color="#1a1a1e" isMobile={isMobile} reducedMotion={reducedMotion} />
+      <Marquee color="#1a1a1e" isMobile={isMobile} reducedMotion={reducedMotion} testHooks />
       <WakeCrystal />
       <CrystalHover />
       <Debris seed={42} />

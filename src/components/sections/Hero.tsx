@@ -13,9 +13,10 @@ gsap.registerPlugin(useGSAP);
 /**
  * Moment 1: the hero arrives line by line after the preloader. Each line
  * wipes up from below its own mask, 0.08 s apart, top to bottom: the meta
- * row, the marquee headline (WebGL, already scrolling while it was hidden,
- * so it never starts from still), the disciplines, the footer row.
- * Reduced motion: every line, marquee included, simply fades in.
+ * row, the marquee headline, the disciplines, the footer row. The marquee
+ * (WebGL) is only told when: it fades itself in over 0.4 s, already
+ * running at full speed (Marquee.tsx). Reduced motion: every line simply
+ * fades in.
  */
 export default function Hero() {
   const containerRef = useRef<HTMLElement | null>(null);
@@ -44,7 +45,7 @@ export default function Hero() {
         const [meta, ...rest] = lines;
         const at = (i: number) => i * STAGGER.standard;
         tl.to(meta, enter, at(0))
-          .to(introReveal, { marquee: 1, ...(reduced ? { duration: DURATION.quick, ease: EASE.entrance } : ENTRANCE) }, at(1))
+          .set(introReveal, { marquee: 1 }, at(1))
           .to(rest, { ...enter, stagger: STAGGER.standard }, at(2));
       });
 

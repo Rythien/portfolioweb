@@ -9,13 +9,13 @@ import { SITE_DATA } from "@/content/site";
 import { getSectionProgress, useScrollStore } from "@/store/useScrollStore";
 import { patchVeilMaterial, updateVeil } from "./marqueeVeil";
 import { introReveal } from "@/store/useIntroStore";
+import { markHeroReady, warmObject } from "./warm";
 import {
   TEXT_Z,
   VIS_HEIGHT,
   MOBILE_TEXT_Y,
   MOBILE_FONT_SHARE,
   DESKTOP_FONT_SHARE,
-  LINE_HALF,
 } from "./marqueeLayout";
 
 const FREEZE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("crystalfreeze");
@@ -26,22 +26,55 @@ const FONT_URL = "/fonts/inter-tight-bold-subset.woff";
 
 // Camera, plane and sizes: marqueeLayout.ts (the phone crystal reads them
 // to stay above the type)
-/** The entrance clip window, reused every frame: [x0, y0, x1, y1]. */
-const clipBox = [-1e5, 0, 1e5, 0];
+
+/**
+ * Arrival: the line must look as if it had been running all along. It
+ * stays invisible until the fonts are in, the tile width is known and
+ * every tile has laid out and been placed. It then starts this fraction of
+ * a tile in (mid-word at both edges, neither a tile boundary nor the
+ * half-way point), at its steady speed, and fades in over FADE_IN_S while
+ * it moves. Nothing is ever seen arriving, spreading or speeding up.
+ */
+const START_PHASE = 0.37;
+const FADE_IN_S = 0.4;
+
+/** document.fonts.ready, once per page (troika fetches FONT_URL itself;
+ * this keeps the line back while the page's own fonts are still loading). */
+let fontsReady = typeof document === "undefined" || !document.fonts;
+if (!fontsReady) {
+  document.fonts.ready.then(
+    () => (fontsReady = true),
+    () => (fontsReady = true),
+  );
+}
+
+/** Ease-out: the type is there from the first frame and settles in (a
+ * smoothstep spent its first 50 ms under one 8-bit step of contrast). */
+const fadeCurve = (t: number) => 1 - (1 - t) * (1 - t);
+
+/** Test hook, written every frame (window.__marqueeSpan). */
+const span = { x0: 0, x1: 0, half: 0, speed: 0, fade: 0 };
+if (typeof window !== "undefined") (window as unknown as { __marqueeSpan?: typeof span }).__marqueeSpan = span;
 
 interface MarqueeProps {
   color: string;
   isMobile: boolean;
   reducedMotion: boolean;
+  /** Writes the test hooks (__marqueeShownAt, __marqueeSpan): the WAKE line. */
+  testHooks?: boolean;
 }
 
-export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps) {
+export default function Marquee({ color, isMobile, reducedMotion, testHooks = false }: MarqueeProps) {
   const groupRef = useRef<THREE.Group>(null);
   const tileRefs = useRef<(THREE.Mesh | null)[]>([]);
   const offsetRef = useRef(0);
   const tileWidthRef = useRef(0);
+  /** Tiles troika has laid out (onSync), by index. */
+  const syncedRef = useRef(new Set<number>());
+  /** Arrival: placed once (phase set), then the fade-in, 0..1. */
+  const arrivalRef = useRef({ placed: false, shown: 0 });
   const dampState = useRef({ vel: 0 });
-  const { size, camera } = useThree();
+  const { size, camera, gl, scene } = useThree();
 
   const visHeight = VIS_HEIGHT;
   const visWidth = visHeight * (size.width / size.height);
@@ -82,6 +115,14 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
     }
   }, [visWidth]);
 
+  const onTileSync = useCallback(
+    (i: number) => {
+      syncedRef.current.add(i);
+      if (i === 0 && !reducedMotion) measureTile();
+    },
+    [measureTile, reducedMotion],
+  );
+
   // Recompute tile count on resize
   useEffect(() => {
     if (tileWidthRef.current > 0) {
@@ -89,60 +130,65 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
     }
   }, [visWidth]);
 
-  useFrame((_, delta) => {
+  useFrame((_, rawDelta) => {
     updateVeil(camera, reducedMotion);
-    if (!groupRef.current) return;
+    const group = groupRef.current;
+    if (!group) return;
+    // A long frame (tab switch, a stall) must not jump the line
+    const delta = Math.min(rawDelta, 0.1);
+    const children = group.children;
+    const a = arrivalRef.current;
 
-    const heroP = getSectionProgress("top");
-    const heroScroll = Math.max(0, (heroP - 0.5) / 0.5);
-
-    // Fully gone by heroScroll 0.5 (half a screen), before About heading arrives
-    if (heroScroll >= 0.5) {
-      groupRef.current.visible = false;
-      return;
+    // Not placed yet: hidden until the fonts are in, the tile width is
+    // known and every tile has laid out. Nothing can be seen stacked at
+    // the centre or spreading out.
+    if (!a.placed) {
+      const want = reducedMotion ? 1 : tileCount;
+      let ready = fontsReady && children.length === want && (reducedMotion || tileWidthRef.current > 0);
+      for (let i = 0; ready && i < want; i++) if (!syncedRef.current.has(i)) ready = false;
+      // ...and its program is linked (asked for here, ahead of the rest:
+      // hidden, the warm-up would only pre-warm it), so the first visible
+      // frame draws the type and the fade is never spent on nothing
+      for (let i = 0; ready && i < want; i++) if (!warmObject(gl, children[i], scene, camera, { priority: 4 })) ready = false;
+      if (!ready) {
+        group.visible = false;
+        return;
+      }
+      a.placed = true;
+      markHeroReady();
+      // Already some way along, as after a while of running
+      offsetRef.current = START_PHASE * tileWidthRef.current;
     }
 
-    // Hero entrance (moment 1): reduced motion fades the line in; otherwise
-    // it rises from behind a fixed mask line at the bottom of its line box
-    const reveal = introReveal.marquee;
-    const fade = (1 - heroScroll / 0.5) * (reducedMotion ? reveal : 1);
-    // Hidden tiles skip drawing, but the offset below still advances, so
-    // the line is already moving when it appears
-    groupRef.current.visible = reducedMotion || reveal > 0;
-
-    // troika clipRect is in each tile's own space: drop the tile by `rise`
-    // and raise its clip window by the same amount, so the window stays put
-    const half = fontSize * LINE_HALF;
-    const rise = reducedMotion ? 0 : 2 * half * (1 - reveal);
-    let clip: number[] | null = null;
-    if (reveal < 1 && !reducedMotion) {
-      clipBox[1] = -half + rise;
-      clipBox[3] = half + rise;
-      clip = clipBox;
+    // The hero timeline says when (introReveal); the fade is ours, over a
+    // line that is already moving
+    if (introReveal.marquee > 0 && a.shown < 1) {
+      if (a.shown === 0 && testHooks) {
+        // Test hook (scripts/perf/arrival.mjs, scripts/shot/marquee-arrival.mjs)
+        (window as unknown as { __marqueeShownAt?: number }).__marqueeShownAt ??= performance.now();
+      }
+      a.shown = FREEZE ? 1 : Math.min(1, a.shown + delta / FADE_IN_S);
     }
+
+    // Fully gone by heroScroll 0.5 (half a screen), before About heading
+    // arrives. Hidden tiles skip drawing, but the offset below still
+    // advances, so the line is already moving when it appears
+    const heroScroll = Math.max(0, (getSectionProgress("top") - 0.5) / 0.5);
+    group.visible = heroScroll < 0.5 && a.shown > 0;
+    const fade = (1 - Math.min(heroScroll, 0.5) / 0.5) * fadeCurve(a.shown);
 
     // troika Text ignores material.opacity — must use fillOpacity
-    const children = groupRef.current.children;
     for (let i = 0; i < children.length; i++) {
-      const tile = children[i] as THREE.Mesh & {
-        fillOpacity?: number;
-        outlineOpacity?: number;
-        clipRect?: number[] | null;
-      };
+      const tile = children[i] as THREE.Mesh & { fillOpacity?: number; outlineOpacity?: number };
       tile.fillOpacity = fade;
       if (tile.outlineOpacity !== undefined) tile.outlineOpacity = fade;
-      tile.position.y = -rise;
-      tile.clipRect = clip;
     }
 
     if (reducedMotion) return;
 
+    // Steady speed from the first frame: the scroll kick starts at zero,
+    // so the base speed is all there is until the visitor scrolls
     const tw = tileWidthRef.current;
-    if (tw === 0) {
-      measureTile();
-      return;
-    }
-
     const { velocity, direction } = useScrollStore.getState();
     damp(dampState.current, "vel", velocity * 0.0004, 0.4, delta);
 
@@ -157,8 +203,25 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
     const totalWidth = tileCount * tw;
     offsetRef.current = ((offsetRef.current % totalWidth) + totalWidth) % totalWidth;
 
+    // Laid out from one tile left of the viewport's left edge: tileCount
+    // spans the view plus a tile either side, so no edge is ever empty
+    const left = -visWidth / 2 - tw;
+    let x0 = Infinity;
+    let x1 = -Infinity;
     for (let i = 0; i < children.length; i++) {
-      children[i].position.x = ((i * tw + offsetRef.current) % totalWidth) - tw;
+      const x = ((i * tw + offsetRef.current) % totalWidth) + left;
+      children[i].position.x = x;
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x + tw);
+    }
+    // Test hook (scripts/shot/marquee-arrival.mjs): what the tiles span
+    // against the view's half-width, in world units, and the speed
+    if (testHooks) {
+      span.x0 = x0;
+      span.x1 = x1;
+      span.half = visWidth / 2;
+      span.speed = speed;
+      span.fade = fade;
     }
   });
 
@@ -166,7 +229,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
 
   if (reducedMotion) {
     return (
-      <group ref={groupRef} position={[0, textY, TEXT_Z]}>
+      <group ref={groupRef} position={[0, textY, TEXT_Z]} visible={false}>
         <Text
           font={FONT_URL}
           fontSize={fontSize}
@@ -174,6 +237,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
           color={color}
           anchorX="center"
           anchorY="middle"
+          onSync={() => onTileSync(0)}
         >
           {SITE_DATA.hero.headlineLine1}
           <meshBasicMaterial ref={patchVeilMaterial} transparent />
@@ -183,7 +247,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
   }
 
   return (
-    <group ref={groupRef} position={[0, textY, TEXT_Z]}>
+    <group ref={groupRef} position={[0, textY, TEXT_Z]} visible={false}>
       {Array.from({ length: tileCount }, (_, i) => (
         <Text
           key={i}
@@ -194,7 +258,7 @@ export default function Marquee({ color, isMobile, reducedMotion }: MarqueeProps
           color={color}
           anchorX="left"
           anchorY="middle"
-          onSync={i === 0 ? measureTile : undefined}
+          onSync={() => onTileSync(i)}
         >
           {HEADLINE_TILE}
           <meshBasicMaterial ref={patchVeilMaterial} transparent />
