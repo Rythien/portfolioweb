@@ -140,8 +140,19 @@ export function setPhasePaused(phase: Phase, paused: boolean): void {
     if (queue.length) pump();
   }
 }
-/** The marquee has drawn real glyphs with its real program (see guardScene). */
+/** The marquee has drawn real glyphs with its real program (see guardScene),
+ * or has laid out and linked while held back (markHeroReady). */
 let heroDrawn = false;
+/**
+ * The marquee has laid out its glyphs (troika's synchronous WebGL read is
+ * done) and its program is linked, though it may still be held back (by
+ * the preloader). Large links no longer have anything to wait for.
+ */
+export function markHeroReady(): void {
+  if (heroDrawn) return;
+  heroDrawn = true;
+  if (queue.length) pump();
+}
 let inFlight: { task: Task; done: Completion } | null = null;
 let pumping = false;
 const phaseStart: Partial<Record<Phase, number>> = {};
@@ -181,31 +192,48 @@ function pump() {
       notifyPhases();
       return;
     }
-    queue.sort((a, b) => a.priority - b.priority);
-    // Large links wait until the hero's text has drawn (or the ceiling):
-    // troika builds its glyphs with WebGL and a synchronous read, which in
-    // Firefox queue behind any link in flight
-    const heroGate = !heroDrawn && performance.now() - (phaseStart.page ?? 0) < PREWARM_CEILING_MS;
-    const idx = queue.findIndex((t) => !pausedPhases.has(t.phase) && (!heroGate || !t.heavy || t.phase !== "page"));
-    if (idx < 0) {
+    const task = takeNext();
+    if (!task) {
       setTimeout(() => requestAnimationFrame(step), 100);
       return;
     }
-    const task = queue.splice(idx, 1)[0];
     idle(() => {
-      const t0 = performance.now();
-      try {
-        inFlight = { task, done: task.issue() };
-      } catch {
+      const slot = performance.now();
+      let next: Task | null = task;
+      while (next) {
+        const t0 = performance.now();
+        try {
+          inFlight = { task: next, done: next.issue() };
+        } catch {
+          inFlight = null;
+        }
+        const spent = performance.now() - t0;
+        if (spent > 50) slowIssues.push({ label: next.label, ms: Math.round(spent) });
+        // Finished at once (a program three already held linked, as for
+        // the marquee's tiles, one shader across six materials): take the
+        // next task in this same slot while the budget lasts, instead of
+        // waiting a frame and another idle slot for each
+        if (inFlight && !inFlight.done()) break;
         inFlight = null;
+        next = performance.now() - slot < FRAME_BUDGET_MS ? takeNext() : null;
       }
-      const spent = performance.now() - t0;
-      if (spent > 50) slowIssues.push({ label: task.label, ms: Math.round(spent) });
       notifyPhases();
       requestAnimationFrame(step);
     });
   };
   requestAnimationFrame(step);
+}
+
+/** The next task allowed to run now, taken off the queue; null if none. */
+function takeNext(): Task | null {
+  dropExpired();
+  queue.sort((a, b) => a.priority - b.priority);
+  // Large links wait until the hero's text has drawn (or the ceiling):
+  // troika builds its glyphs with WebGL and a synchronous read, which in
+  // Firefox queue behind any link in flight
+  const heroGate = !heroDrawn && performance.now() - (phaseStart.page ?? 0) < PREWARM_CEILING_MS;
+  const idx = queue.findIndex((t) => !pausedPhases.has(t.phase) && (!heroGate || !t.heavy || t.phase !== "page"));
+  return idx < 0 ? null : queue.splice(idx, 1)[0];
 }
 
 /** Test hook: any issue that itself took >50 ms on the main thread. */
@@ -318,6 +346,38 @@ export function isReadyOnScreen(m: THREE.Material, instanced: boolean): boolean 
  * and never dropped when the pre-warm budget runs out. */
 const EARLY = -40;
 
+/** True once the material's program for this target kind is linked. */
+export function isLinked(m: THREE.Material, kind: Kind, instanced = false): boolean {
+  return isReady(m, keyOf(m, kind, m.transparent, instanced));
+}
+
+/**
+ * Ask for an object's program now, visible or not, as needed work (never
+ * dropped with the pre-warm budget), at `priority` (lower first; the hero
+ * scene draws at 10, EARLY is -40). For things that hold themselves back
+ * until they can draw for real (the marquee, the crystal's arrival).
+ * Returns true once linked; calling it every frame until then is cheap.
+ */
+export function warmObject(
+  gl: THREE.WebGLRenderer,
+  object: THREE.Object3D,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  opts: { kind?: Kind; priority?: number } = {},
+): boolean {
+  const mat = (object as Drawable).material;
+  if (!mat) return true;
+  const kind = opts.kind ?? "fbo";
+  const inst = !!(object as THREE.InstancedMesh).isInstancedMesh;
+  let all = true;
+  for (const m of Array.isArray(mat) ? mat : [mat]) {
+    if (isReady(m, keyOf(m, kind, m.transparent, inst))) continue;
+    all = false;
+    queueMaterial({ gl, object, material: m, scene, camera, kind, transparent: m.transparent }, "page", opts.priority ?? EARLY, false);
+  }
+  return all;
+}
+
 function markReady(m: THREE.Material, key: string) {
   let s = ready.get(m);
   if (!s) ready.set(m, (s = new Set()));
@@ -412,6 +472,9 @@ function issueCompile(job: CompileJob): { done: Completion; program: ProgramRef 
     // Capture it now: a frame drawn while it links can point the material's
     // currentProgram at another variant before we get to touch this one
     const program = programOf(gl, material);
+    // three reused a program the queue already saw linked and touched
+    // (same shader, another material): nothing is linking
+    if (program && touched.has(program)) return { done: () => true, program };
     return { done: completionFor(gl), program };
   } finally {
     gl.setRenderTarget(prevRT);
@@ -448,8 +511,8 @@ function queueMaterial(job: CompileJob, phase: Phase, priority: number, pre: boo
   let q = queued.get(job.material);
   if (!q) queued.set(job.material, (q = new Set()));
   if (q.has(key)) {
-    // Already queued as pre-warm and now needed on screen: promote it
-    if (!pre) for (const t of queue) if (t.label === labelOf(job, key) && t.pre) {
+    // Already queued and now needed (sooner): promote it
+    if (!pre) for (const t of queue) if (t.label === labelOf(job, key) && (t.pre || t.priority > priority)) {
       t.pre = false;
       t.priority = Math.min(t.priority, priority);
     }
@@ -619,17 +682,26 @@ export function guardScene(scene: THREE.Scene, gl: THREE.WebGLRenderer, opts: Gu
             const tw = window as unknown as { __screenDrawnAt?: number };
             tw.__screenDrawnAt ??= performance.now();
           }
-          if (!heroDrawn && m.userData.warmFirst && glyphCount(o) > 0) {
+          // Test hook: the intact WAKE crystal first drew with its real glass
+          // (the hero scene renders into the composite's FBO, never to screen)
+          if (m.userData.warmIntact === "wake" && m.visible && m.opacity > 0) {
+            const tw = window as unknown as { __crystalRealAt?: number };
+            tw.__crystalRealAt ??= performance.now();
+          }
+          if (m.userData.warmFirst && glyphCount(o) > 0) {
             heroDrawn = true;
-            // Test hook (scripts/perf/slow.mjs): the hero's headline first drew
-            (window as unknown as { __heroDrawnAt?: number }).__heroDrawnAt = performance.now();
+            // Test hook (scripts/perf/slow.mjs, arrival.mjs): the hero's
+            // headline first drew (markHeroReady may have opened the gate first)
+            (window as unknown as { __heroDrawnAt?: number }).__heroDrawnAt ??= performance.now();
           }
           return m;
         }
         // userData.warmFirst (the marquee): the hero's main content, ahead of the rest
         const prio = m.userData.warmEarly ? EARLY : base - (m.userData.warmFirst ? 5 : 0);
         queueMaterial({ gl, object: o, material: m, scene, camera, kind, transparent: m.transparent }, opts.phase, prio + (isLit(m) ? 0.5 : 0), false);
-        if (isLit(m)) {
+        // userData.warmOwnStandIn: the owner draws its own stand-in and
+        // cross-fades it out (GlassCrystal); here it is simply held back
+        if (isLit(m) && !m.userData.warmOwnStandIn) {
           const s = standInFor(m);
           s.opacity = m.userData.warmAlpha ? 0.35 * m.opacity : m.opacity;
           const sk = keyOf(s, kind, true, inst);
