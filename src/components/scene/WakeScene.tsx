@@ -4,14 +4,14 @@ import { useRef, useMemo, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import StudioEnvironment from "@/components/crystal/StudioEnvironment";
 import * as THREE from "three";
-import { damp } from "maath/easing";
-import { useScrollStore } from "@/store/useScrollStore";
 import GlassCrystal from "@/components/crystal/GlassCrystal";
 import Debris from "@/components/crystal/Debris";
 import CrystalHover from "@/components/crystal/CrystalHover";
-import { useCrystalPose, getCrystalPose, getCrystalTimeOverride, crystalEvents } from "@/hooks/useCrystalPose";
+import { useCrystalPose, crystalEvents } from "@/hooks/useCrystalPose";
 import { useThemeStore } from "@/store/useThemeStore";
 import Marquee from "./Marquee";
+import OrbitRing from "./OrbitRing";
+import { PALETTE } from "@/lib/palette";
 
 /* ── Seeded PRNG (for pixel gem sparkles) ──────────────────────── */
 
@@ -113,97 +113,6 @@ function WakeCrystal() {
 
   const active = useThemeStore((s) => s.mode === "wake");
   return <GlassCrystal ref={groupRef} active={active} />;
-}
-
-/* ── Orbit ring (follows crystal pose) ──────────────────────────── */
-
-function createOrbitTexture() {
-  const w = 2048,
-    h = 64;
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext("2d")!;
-  ctx.fillStyle = "transparent";
-  ctx.fillRect(0, 0, w, h);
-  ctx.font = "bold 22px sans-serif";
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
-  ctx.textBaseline = "middle";
-  const label = "SELECTED WORK  ·  2026  ·  SEARON MAHARJAN  ·  ";
-  let x = 0;
-  while (x < w) {
-    ctx.fillText(label, x, h / 2);
-    x += ctx.measureText(label).width;
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  return tex;
-}
-
-function OrbitRing({ reducedMotion }: { reducedMotion: boolean }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const matRef = useRef<THREE.MeshBasicMaterial>(null);
-  const texRef = useRef<THREE.CanvasTexture | null>(null);
-  if (texRef.current === null) texRef.current = createOrbitTexture();
-  const dampedPos = useRef(new THREE.Vector3(0, 0, 0));
-  const dampedOpacity = useRef(0.45);
-
-  useEffect(() => {
-    if (matRef.current && texRef.current) {
-      matRef.current.map = texRef.current;
-      matRef.current.needsUpdate = true;
-    }
-  }, []);
-
-  useFrame((state, delta) => {
-    if (!meshRef.current || reducedMotion) return;
-    // A frozen crystal pose (crystalfreeze) pins the ring with it
-    const elapsed = getCrystalTimeOverride() ?? state.clock.elapsedTime;
-    const pose = getCrystalPose();
-
-    damp(dampedPos.current, "x", pose.x, 0.3, delta);
-    damp(dampedPos.current, "y", pose.y, 0.3, delta);
-    damp(dampedPos.current, "z", pose.z, 0.3, delta);
-
-    meshRef.current.position.copy(dampedPos.current);
-    // Ring shrinks with the parked crystal so it never circles the copy
-    meshRef.current.scale.setScalar(Math.max(pose.scale, 0.05));
-    meshRef.current.rotation.x = 0.5 + Math.sin(elapsed * 0.06) * 0.1;
-    meshRef.current.rotation.y = elapsed * 0.08;
-
-    const scrollP = useScrollStore.getState().progress;
-    meshRef.current.rotation.z = 0.2 + scrollP * 0.4;
-
-    texRef.current!.offset.x = elapsed * 0.02;
-
-    // Fade out as crystal breaks
-    const breakFade = Math.max(0, 1 - pose.breakVal * 3);
-    const scrollFade = scrollP < 0.6 ? 1 : 1 - (scrollP - 0.6) / 0.4;
-    // The ring is 2x the crystal's radius, so it would cross the copy the
-    // crystal is being kept off: it leaves as the copy clamp takes hold
-    const targetOpacity = 0.45 * Math.min(breakFade, scrollFade) * pose.fade * (1 - pose.clamp);
-    dampedOpacity.current = THREE.MathUtils.lerp(
-      dampedOpacity.current,
-      targetOpacity,
-      1 - Math.exp(-4 * delta),
-    );
-    (meshRef.current.material as THREE.MeshBasicMaterial).opacity =
-      dampedOpacity.current;
-  });
-
-  return (
-    <mesh ref={meshRef} rotation={[0.5, 0, 0.2]}>
-      <cylinderGeometry args={[2.6, 2.6, 0.08, 64, 1, true]} />
-      <meshBasicMaterial
-        ref={matRef}
-        transparent
-        opacity={0.45}
-        side={THREE.DoubleSide}
-        depthWrite={false}
-      />
-    </mesh>
-  );
 }
 
 /* ── Pixel gem cursor follower ───────────────────────────────────── */
@@ -333,13 +242,13 @@ export default function WakeScene({
 }) {
   return (
     <>
-      <color attach="background" args={["#E9E7E2"]} />
+      <color attach="background" args={[PALETTE.wake.paper]} />
       <StudioEnvironment variant="wake" />
-      <Marquee color="#1a1a1e" isMobile={isMobile} reducedMotion={reducedMotion} testHooks />
+      <Marquee color={PALETTE.wake.ink} isMobile={isMobile} reducedMotion={reducedMotion} testHooks />
       <WakeCrystal />
       <CrystalHover />
       <Debris seed={42} />
-      <OrbitRing reducedMotion={reducedMotion} />
+      <OrbitRing variant="wake" reducedMotion={reducedMotion} />
       <PixelGem reducedMotion={reducedMotion} isMobile={isMobile} />
     </>
   );

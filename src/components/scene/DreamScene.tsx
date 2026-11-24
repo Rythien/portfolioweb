@@ -13,6 +13,8 @@ import { useCrystalPose, getCrystalTimeOverride } from "@/hooks/useCrystalPose";
 const sceneTime = (state: { clock: THREE.Clock }) => getCrystalTimeOverride() ?? state.clock.elapsedTime;
 import { useThemeStore } from "@/store/useThemeStore";
 import Marquee from "./Marquee";
+import OrbitRing from "./OrbitRing";
+import { PALETTE } from "@/lib/palette";
 
 /* ── Seeded PRNG ───────────────────────────────────────────────── */
 
@@ -336,8 +338,9 @@ export default function DreamScene({
 
       <StudioEnvironment variant="dream" />
 
-      <Marquee color="#a8b4ff" isMobile={isMobile} reducedMotion={reducedMotion} />
+      <Marquee color={PALETTE.dream.label} isMobile={isMobile} reducedMotion={reducedMotion} />
       <DreamCrystal />
+      <OrbitRing variant="dream" reducedMotion={reducedMotion} />
       <Debris seed={42} />
 
       <DustParticles />
