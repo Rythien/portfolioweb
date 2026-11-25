@@ -88,9 +88,10 @@ export const CRYSTAL_MATERIAL = {
     /** Object-space direction they gather toward, and the falloff (dot). */
     side: [0.6, 0.35, 0.72] as [number, number, number],
     sideFalloff: [-0.2, 0.4] as [number, number],
-    brown: "#1a1009",
-    blue: "#08133a",
-    opacity: 0.96,
+    /** Near black: DREAM's render lifts blacks ~4 L* over WAKE's. */
+    brown: "#100904",
+    blue: "#040a26",
+    opacity: 0.99,
   },
   /**
    * Hard speculars: narrow lights fixed in view space (the camera is
