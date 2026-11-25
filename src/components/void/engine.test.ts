@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TUNE, createWorld, iceAt, isInvulnerable, restart, step, type Input, type World } from "./engine.ts";
+import { Charge, EnemyKind, TUNE, createWorld, iceAt, isInvulnerable, restart, step, type Input, type World } from "./engine.ts";
 
 const DT = 1 / 120;
 const idle = (): Input => ({ mx: 0, my: 0, dash: false, attack: false, aimX: 0, aimY: 0 });
@@ -9,8 +9,8 @@ const idle = (): Input => ({ mx: 0, my: 0, dash: false, attack: false, aimX: 0, 
  * still-telegraphing drifter stays alive so the arena never reads as cleared. */
 function empty(seed = 1): World {
   const w = createWorld(seed);
-  for (const d of w.drifters) d.alive = false;
-  Object.assign(w.drifters[w.drifters.length - 1], { alive: true, x: -500, y: -500, arrive: 1e9 });
+  for (const d of w.enemies) d.alive = false;
+  Object.assign(w.enemies[w.enemies.length - 1], { alive: true, x: -500, y: -500, arrive: 1e9 });
   return w;
 }
 
@@ -69,7 +69,7 @@ test("the gem never leaves the ice, walking or dashing", () => {
 });
 
 function oneDrifterAt(w: World, dx: number, dy: number) {
-  const d = w.drifters[0];
+  const d = w.enemies[0];
   Object.assign(d, { alive: true, x: w.player.x + dx, y: w.player.y + dy, arrive: 0, vx: 0, vy: 0 });
   return d;
 }
@@ -79,7 +79,7 @@ test("an attack kills a drifter in front, never one behind, and lands with a 60 
   w.player.faceX = 1;
   w.player.faceY = 0;
   const front = oneDrifterAt(w, 22, 0);
-  const back = w.drifters[1];
+  const back = w.enemies[1];
   Object.assign(back, { alive: true, x: w.player.x - 22, y: w.player.y, arrive: 0 });
   step(w, DT, { ...idle(), attack: true });
   assert.equal(front.alive, false);
@@ -128,7 +128,7 @@ test("a dash's i-frames pass through a drifter unharmed", () => {
   assert.equal(w.player.hearts, TUNE.hurt.hearts);
 });
 
-const alive = (w: World) => w.drifters.filter((d) => d.alive).length;
+const alive = (w: World) => w.enemies.filter((d) => d.alive).length;
 
 test("a room is ONE wave of 8: nobody trickles in, however long you wait", () => {
   const w = createWorld(1);
@@ -144,14 +144,14 @@ test("a room is ONE wave of 8: nobody trickles in, however long you wait", () =>
 test("the last heart ends the run: phase dead, arena frozen, never a running world with no gem", () => {
   const w = createWorld(1);
   w.player.hearts = 1;
-  const d = w.drifters.find((q) => q.alive)!;
+  const d = w.enemies.find((q) => q.alive)!;
   Object.assign(d, { x: w.player.x + 5, y: w.player.y, arrive: 0 });
   step(w, DT, idle());
   assert.equal(w.phase, "dead");
   assert.equal(w.hitStop, TUNE.death.hitStop);
-  const pos = w.drifters.filter((q) => q.alive).map((q) => q.x + "," + q.y).join(" ");
+  const pos = w.enemies.filter((q) => q.alive).map((q) => q.x + "," + q.y).join(" ");
   run(w, 3);
-  assert.equal(w.drifters.filter((q) => q.alive).map((q) => q.x + "," + q.y).join(" "), pos, "drifters moved after death");
+  assert.equal(w.enemies.filter((q) => q.alive).map((q) => q.x + "," + q.y).join(" "), pos, "drifters moved after death");
   assert.equal(w.phase, "dead", "death is a state, not a timer: it waits for R or Escape");
   assert.ok(w.endT > 2.5);
 });
@@ -169,10 +169,86 @@ test("R (restart) gives a fresh run: full hearts, a new wave of 8, phase play", 
 
 test("killing the whole wave clears the room", () => {
   const w = createWorld(1);
-  for (const d of w.drifters) if (d.alive) Object.assign(d, { x: w.player.x + 20, y: w.player.y, arrive: 0 });
+  for (const d of w.enemies) if (d.alive) Object.assign(d, { x: w.player.x + 20, y: w.player.y, arrive: 0 });
   w.player.faceX = 1;
   w.player.faceY = 0;
   step(w, DT, { ...idle(), attack: true });
   assert.equal(alive(w), 0);
   assert.equal(w.phase, "clear");
+});
+
+/* ── CHARGER ── */
+
+/** One charger at (dx, dy) from the gem, rested and arrived; nothing else near. */
+function oneCharger(w: World, dx: number, dy: number) {
+  const d = w.enemies[0];
+  Object.assign(d, { alive: true, kind: EnemyKind.Charger, hp: TUNE.charger.hp, x: w.player.x + dx, y: w.player.y + dy,
+    arrive: 0, state: Charge.Walk, t: 0, cool: 0, vx: 0, vy: 0, flash: 0 });
+  return d;
+}
+
+test("a charger stops and flashes 0.4 s before it moves, then charges the line it showed", () => {
+  const w = empty();
+  const d = oneCharger(w, -60, 0);
+  step(w, DT, idle());
+  assert.equal(d.state, Charge.Windup, "within reach it winds up");
+  const x0 = d.x, y0 = d.y;
+  // The gem steps aside during the tell
+  run(w, 0.35, { my: 1 });
+  assert.equal(d.state, Charge.Windup);
+  assert.ok(Math.abs(d.x - x0) < 1e-9 && Math.abs(d.y - y0) < 1e-9, "it holds still for the whole tell");
+  run(w, 0.15, { my: 1 });
+  assert.equal(d.state, Charge.Dash);
+  assert.ok(d.x - x0 > 20, `charged ${(d.x - x0).toFixed(1)} px along its line`);
+  assert.ok(Math.abs(d.y - y0) < 1e-6, "straight: it did not turn after the gem");
+});
+
+test("a charger takes two hits", () => {
+  const w = empty();
+  const d = oneCharger(w, 20, 0);
+  d.state = Charge.Recover;
+  d.t = 5;
+  w.player.faceX = 1;
+  w.player.faceY = 0;
+  step(w, DT, { ...idle(), attack: true });
+  assert.ok(d.alive && d.hp === 1 && d.flash > 0, "the first hit flashes it, it lives");
+  // past the cooldown (the hit-stop freezes the clock for its 60 ms first)
+  run(w, TUNE.attack.cooldown + TUNE.feel.hitStop + 0.05);
+  // shoved back a little: step in and hit again
+  d.x = w.player.x + 20;
+  d.y = w.player.y;
+  step(w, DT, { ...idle(), attack: true });
+  assert.equal(d.alive, false, "the second kills it");
+});
+
+test("a charge stops at the void and never leaves the ice", () => {
+  const w = empty();
+  // Aim one straight at the island's west edge, starting 25 px inside it
+  const d = oneCharger(w, 0, 0);
+  let edge = w.player.x;
+  while (iceAt(w.room, edge - 1, w.player.y)) edge--;
+  d.x = edge + 25;
+  d.y = w.player.y;
+  Object.assign(d, { state: Charge.Dash, t: TUNE.charger.chargeTime, ax: -1, ay: 0 });
+  w.player.x = 300; // far away
+  run(w, 0.6);
+  assert.ok(iceAt(w.room, d.x - 3, d.y) && iceAt(w.room, d.x + 3, d.y), `stopped on the ice at x ${d.x.toFixed(1)}`);
+  assert.notEqual(d.state, Charge.Dash);
+});
+
+test("a dash's i-frames pass through a charge", () => {
+  const w = empty();
+  const d = oneCharger(w, -40, 0);
+  Object.assign(d, { state: Charge.Dash, t: TUNE.charger.chargeTime, ax: 1, ay: 0 });
+  step(w, DT, { ...idle(), mx: -1, dash: true });
+  run(w, 0.1, { mx: -1 });
+  assert.equal(w.player.hearts, TUNE.hurt.hearts);
+});
+
+test("a charge that connects costs a heart", () => {
+  const w = empty();
+  const d = oneCharger(w, -40, 0);
+  Object.assign(d, { state: Charge.Dash, t: TUNE.charger.chargeTime, ax: 1, ay: 0 });
+  run(w, 0.2);
+  assert.equal(w.player.hearts, TUNE.hurt.hearts - 1);
 });

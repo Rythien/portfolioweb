@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { TUNE, VIEW, createWorld, restart, roomBounds, step, type Input, type Phase, type World } from "./engine";
+import {
+  ENEMY_NAMES, TUNE, VIEW, createWorld, restart, roomBounds, step,
+  type EnemyName, type Input, type Phase, type Wave, type World,
+} from "./engine";
 import { COLOR, buildAtlas, createAmbient, drawWorld } from "./render";
 
 /**
@@ -37,6 +40,21 @@ const MAX_DT = 1 / 20;
 const BUFFER = { attack: 150, dash: 120 } as const;
 /** Frame times kept for the test hook (scripts/shot/void-record.mjs). */
 const FRAME_LOG = 1200;
+
+/**
+ * Test hook (recordings, checks): ?voidwave=charger:4,drifter:2 replaces the
+ * room's wave. The UI never sets it.
+ */
+function waveFromUrl(): Wave | undefined {
+  const q = new URLSearchParams(window.location.search).get("voidwave");
+  if (!q) return undefined;
+  const wave: Wave = {};
+  for (const part of q.split(",")) {
+    const [name, n] = part.split(":");
+    if ((ENEMY_NAMES as readonly string[]).includes(name)) wave[name as EnemyName] = Math.max(0, Math.min(20, Number(n) || 0));
+  }
+  return wave;
+}
 
 const MOVE_KEYS: Record<string, [number, number]> = {
   KeyW: [0, -1], ArrowUp: [0, -1],
@@ -79,7 +97,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     const cvs = canvasRef.current;
     if (!cvs) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const world: World = createWorld(1, reduced);
+    const world: World = createWorld(1, reduced, waveFromUrl());
     worldRef.current = world;
     reducedRef.current = reduced;
     let lastPhase: Phase = "play";

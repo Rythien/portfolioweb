@@ -1,6 +1,6 @@
 /**
- * THE VOID, step 1: the rules. One room, the player (the pixel gem),
- * move / dash / attack, and DRIFTERS. Pure (no DOM): the shell feeds it
+ * THE VOID: the rules. The player (the pixel gem), move / dash / attack,
+ * and the enemies: DRIFTERS and CHARGERS. Pure (no DOM): the shell feeds it
  * input and a frame time, render.ts draws the state, engine.test.ts pins
  * the numbers. Everything lives in pre-allocated pools: nothing is
  * allocated per frame.
@@ -54,13 +54,46 @@ export const TUNE = {
     space: 11,
     flash: 0.05,
   },
-  /** Step 1: ONE fixed wave per room, cleared to finish it (no trickle). */
+  /**
+   * CHARGER: walks in, then stops and flashes for `windup` with its line
+   * drawn (the line is locked when the flash starts: what you see is where
+   * it goes), dashes straight along it, and is open while it recovers.
+   * Two hits. It walks on the ice and its charge stops at the void.
+   */
+  charger: {
+    speed: 22,
+    hp: 2,
+    /** Starts a windup from this far. */
+    reach: 95,
+    windup: 0.4,
+    chargeSpeed: 300,
+    chargeTime: 0.45,
+    recover: 0.7,
+    /** Before it may wind up again. */
+    rest: 0.5,
+    radius: 6,
+  },
+  /** A hit that does not kill: a white flash and a shove. */
+  hit: { flash: 0.08, shove: 7 },
+  /** ONE fixed wave per room, cleared to finish it (no trickle). */
   spawn: { wave: 8, minDist: 80 },
 } as const;
 
+/** Enemy kinds (plain object: node's type stripping has no enums). */
+export const EnemyKind = { Drifter: 0, Charger: 1 } as const;
+export type EnemyKind = (typeof EnemyKind)[keyof typeof EnemyKind];
+export const ENEMY_NAMES = ["drifter", "charger"] as const;
+export type EnemyName = (typeof ENEMY_NAMES)[number];
+
+/** A wave: how many of each kind. */
+export type Wave = Partial<Record<EnemyName, number>>;
+
+/** Charger states. */
+export const Charge = { Walk: 0, Windup: 1, Dash: 2, Recover: 3 } as const;
+
 /** The gem's collision: feet half-extents (px). */
 const FEET = { x: 4, y: 3 } as const;
-/** Distance at which a drifter touches the gem. */
+/** Distance at which an enemy touches the gem. */
 const TOUCH = 9;
 
 /* ── Seeded randomness (tests reproduce a run) ─────────────────── */
@@ -143,6 +176,11 @@ export function iceAt(room: Room, x: number, y: number): boolean {
   return room.ice[r * COLS + c] === 1;
 }
 
+/** A walker's feet stay on ice (a smaller box than the gem's). */
+function standsOnIce(room: Room, x: number, y: number): boolean {
+  return iceAt(room, x - 3, y - 2) && iceAt(room, x + 3, y - 2) && iceAt(room, x - 3, y + 2) && iceAt(room, x + 3, y + 2);
+}
+
 /** The gem's feet box stands wholly on ice. */
 function feetOnIce(room: Room, x: number, y: number): boolean {
   return (
@@ -168,16 +206,28 @@ export interface Input {
   aimY: number;
 }
 
-export interface Drifter {
+export interface Enemy {
   alive: boolean;
+  kind: EnemyKind;
+  hp: number;
   x: number;
   y: number;
   vx: number;
   vy: number;
   /** > 0: still telegraphing its arrival (cannot move or hurt). */
   arrive: number;
+  /** White hit flash. */
   flash: number;
+  /** Drifter sway; spitter strafe. */
   phase: number;
+  /** Behaviour state (Charge.*) and time left in it. */
+  state: number;
+  t: number;
+  /** A locked direction (the charge line). */
+  ax: number;
+  ay: number;
+  /** Time before it may act again (charger rest). */
+  cool: number;
 }
 
 /** Particle kinds (a plain object: node's type stripping has no enums). */
@@ -229,14 +279,16 @@ export interface Player {
 export type Phase = "play" | "dead" | "clear";
 
 export const TRAIL = 6;
-export const MAX_DRIFTERS = 40;
+export const MAX_ENEMIES = 40;
 export const MAX_PARTICLES = 320;
 
 export interface World {
   room: Room;
   t: number;
   player: Player;
-  drifters: Drifter[];
+  enemies: Enemy[];
+  /** The wave each room (re)starts with. */
+  wave: Wave;
   particles: Particle[];
   /** Ring buffer of past feet positions (x, y pairs), newest at trailHead. */
   trail: Float32Array;
@@ -264,13 +316,17 @@ function freshPlayer(room: Room): Player {
   };
 }
 
-export function createWorld(seed = 1, reduced = false): World {
+export function createWorld(seed = 1, reduced = false, wave: Wave = { drifter: TUNE.spawn.wave }): World {
   const room = buildRoom(seed);
   const w: World = {
     room,
     t: 0,
     player: freshPlayer(room),
-    drifters: Array.from({ length: MAX_DRIFTERS }, () => ({ alive: false, x: 0, y: 0, vx: 0, vy: 0, arrive: 0, flash: 0, phase: 0 })),
+    enemies: Array.from({ length: MAX_ENEMIES }, (): Enemy => ({
+      alive: false, kind: EnemyKind.Drifter, hp: 1, x: 0, y: 0, vx: 0, vy: 0, arrive: 0, flash: 0, phase: 0,
+      state: 0, t: 0, ax: 0, ay: 0, cool: 0,
+    })),
+    wave,
     particles: Array.from({ length: MAX_PARTICLES }, () => ({
       alive: false, kind: Kind.Chip, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, color: 0, friction: 0,
     })),
@@ -288,7 +344,7 @@ export function createWorld(seed = 1, reduced = false): World {
     reduced,
   };
   resetTrail(w);
-  spawnWave(w, TUNE.spawn.wave);
+  spawnWave(w, w.wave);
   return w;
 }
 
@@ -302,7 +358,7 @@ function resetTrail(w: World): void {
 /** R ("fall again"): a fresh run of the room, same world objects (no allocation churn). */
 export function restart(w: World): void {
   Object.assign(w.player, freshPlayer(w.room));
-  for (const d of w.drifters) d.alive = false;
+  for (const d of w.enemies) d.alive = false;
   for (const q of w.particles) q.alive = false;
   w.phase = "play";
   w.endT = 0;
@@ -311,7 +367,7 @@ export function restart(w: World): void {
   w.kills = 0;
   w.hits = 0;
   resetTrail(w);
-  spawnWave(w, TUNE.spawn.wave);
+  spawnWave(w, w.wave);
 }
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -348,33 +404,40 @@ function moveOnIce(w: World, dx: number, dy: number): void {
   }
 }
 
-export function spawnWave(w: World, count: number): void {
+/** Places a wave on the ice, away from the gem, each arriving behind a telegraph ring. */
+export function spawnWave(w: World, wave: Wave): void {
   const p = w.player;
   const tele = TUNE.drifter.telegraph * (w.reduced ? 1.5 : 1);
   let placed = 0;
-  for (let tries = 0; placed < count && tries < 200; tries++) {
-    const x = 30 + w.random() * (VIEW.w - 60);
-    const y = 30 + w.random() * (VIEW.h - 60);
-    if (!iceAt(w.room, x, y) || Math.hypot(x - p.x, y - p.y) < TUNE.spawn.minDist) continue;
-    const d = w.drifters.find((q) => !q.alive);
-    if (!d) return;
-    d.alive = true; d.x = x; d.y = y; d.vx = 0; d.vy = 0;
-    d.arrive = tele + placed * 0.08; // a ripple, not a pop
-    d.flash = 0; d.phase = w.random() * Math.PI * 2;
-    placed++;
-  }
+  ENEMY_NAMES.forEach((name, kind) => {
+    const count = wave[name] ?? 0;
+    for (let n = 0, tries = 0; n < count && tries < 400; tries++) {
+      const x = 30 + w.random() * (VIEW.w - 60);
+      const y = 30 + w.random() * (VIEW.h - 60);
+      if (!standsOnIce(w.room, x, y) || Math.hypot(x - p.x, y - p.y) < TUNE.spawn.minDist) continue;
+      const d = w.enemies.find((q) => !q.alive);
+      if (!d) return;
+      d.alive = true; d.kind = kind as EnemyKind; d.x = x; d.y = y; d.vx = 0; d.vy = 0;
+      d.hp = kind === EnemyKind.Charger ? TUNE.charger.hp : 1;
+      d.arrive = tele + placed * 0.08; // a ripple, not a pop
+      d.flash = 0; d.phase = w.random() * Math.PI * 2;
+      d.state = 0; d.t = 0; d.ax = 0; d.ay = 0; d.cool = 0.4 + w.random() * 0.8;
+      placed++;
+      n++;
+    }
+  });
 }
 
-function killDrifter(w: World, d: Drifter): void {
+function killEnemy(w: World, d: Enemy): void {
   d.alive = false;
   w.kills++;
   // The wave is the room: the last one down clears it
-  if (!w.drifters.some((o) => o.alive)) {
+  if (!w.enemies.some((o) => o.alive)) {
     w.phase = "clear";
     w.endT = 0;
   }
   // Chips: ice and energy, flung outward, slowed by friction
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < (d.kind === EnemyKind.Drifter ? 9 : 13); i++) {
     const a = w.random() * Math.PI * 2;
     const s = 60 + w.random() * 90;
     emit(w, Kind.Chip, d.x, d.y - 6, Math.cos(a) * s, Math.sin(a) * s - 20, 0.35 + w.random() * 0.25, i % 3, 7);
@@ -494,7 +557,7 @@ export function step(w: World, dt: number, input: Input): void {
   // Attack: a shard burst in the facing (or aimed) direction
   if (input.attack && p.atkCd <= 0) attack(w, input);
 
-  stepDrifters(w, dt);
+  stepEnemies(w, dt);
   stepParticles(w, dt);
 }
 
@@ -518,32 +581,65 @@ function attack(w: World, input: Input): void {
     const s = 230 + w.random() * 60;
     emit(w, Kind.Shard, p.x + ax * 4, p.y - 6 + ay * 4, Math.cos(a) * s, Math.sin(a) * s, TUNE.attack.show, 1, 16);
   }
-  // Hits: drifters whose body centre is in the cone and in reach
+  // Hits: enemies whose body centre is in the cone and in reach
   const cosHalf = Math.cos(TUNE.attack.halfAngle);
   let connected = false;
-  for (const d of w.drifters) {
+  for (const d of w.enemies) {
     if (!d.alive || d.arrive > 0) continue;
     const dx = d.x - p.x, dy = d.y - p.y;
     const dist = Math.hypot(dx, dy);
-    if (dist > TUNE.attack.range + TUNE.drifter.radius) continue;
+    const radius = d.kind === EnemyKind.Charger ? TUNE.charger.radius : TUNE.drifter.radius;
+    if (dist > TUNE.attack.range + radius) continue;
     // Point blank always counts; otherwise it must be in the cone
     if (dist > 8 && (dx * ax + dy * ay) / dist < cosHalf) continue;
-    d.flash = TUNE.drifter.flash;
     connected = true;
     w.hits++;
-    killDrifter(w, d);
+    d.hp--;
+    if (d.hp <= 0) {
+      d.flash = TUNE.drifter.flash;
+      killEnemy(w, d);
+    } else {
+      // Survives: flashes white and is shoved back along the burst
+      d.flash = TUNE.hit.flash;
+      shove(w, d, ax * TUNE.hit.shove, ay * TUNE.hit.shove);
+    }
   }
   if (connected) w.hitStop = TUNE.feel.hitStop;
 }
 
-function stepDrifters(w: World, dt: number): void {
+/** Moves an enemy; walkers (chargers) never step off the ice. Returns false if blocked. */
+function shove(w: World, d: Enemy, dx: number, dy: number): boolean {
+  if (d.kind === EnemyKind.Drifter) {
+    d.x += dx;
+    d.y += dy;
+    return true;
+  }
+  const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 2));
+  const sx = dx / n, sy = dy / n;
+  let moved = true;
+  for (let i = 0; i < n; i++) {
+    const okX = !sx || standsOnIce(w.room, d.x + sx, d.y);
+    const okY = !sy || standsOnIce(w.room, d.x, d.y + sy);
+    if (okX) d.x += sx;
+    if (okY) d.y += sy;
+    if (!okX || !okY) moved = false;
+  }
+  return moved;
+}
+
+function stepEnemies(w: World, dt: number): void {
   const p = w.player;
-  const speed = TUNE.drifter.speed * (w.reduced ? 0.75 : 1);
-  for (const d of w.drifters) {
+  const slow = w.reduced ? 0.75 : 1;
+  const speed = TUNE.drifter.speed * slow;
+  for (const d of w.enemies) {
     if (!d.alive) continue;
     d.flash = Math.max(0, d.flash - dt);
     if (d.arrive > 0) {
       d.arrive -= dt;
+      continue;
+    }
+    if (d.kind === EnemyKind.Charger) {
+      stepCharger(w, d, dt, slow);
       continue;
     }
     d.phase += dt * 2.2;
@@ -554,7 +650,7 @@ function stepDrifters(w: World, dt: number): void {
     let vx = (dx / l) * speed + (-dy / l) * sway;
     let vy = (dy / l) * speed + (dx / l) * sway;
     // Keep apart: a crowd, not a stack
-    for (const o of w.drifters) {
+    for (const o of w.enemies) {
       if (o === d || !o.alive || o.arrive > 0) continue;
       const ox = d.x - o.x, oy = d.y - o.y;
       const ol = Math.hypot(ox, oy);
@@ -573,6 +669,66 @@ function stepDrifters(w: World, dt: number): void {
       hurt(w, d.x, d.y);
       d.x -= (dx / l) * 10;
       d.y -= (dy / l) * 10;
+    }
+  }
+}
+
+function stepCharger(w: World, d: Enemy, dt: number, slow: number): void {
+  const p = w.player;
+  const C = TUNE.charger;
+  const dx = p.x - d.x, dy = p.y - d.y;
+  const l = Math.hypot(dx, dy) || 1;
+  d.t -= dt;
+  d.cool = Math.max(0, d.cool - dt);
+  switch (d.state) {
+    case Charge.Walk: {
+      // Walks in; within reach (and rested) it stops and winds up
+      if (l < C.reach && d.cool <= 0) {
+        d.state = Charge.Windup;
+        // Longer under reduced motion: every telegraph gets more time
+        d.t = C.windup * (w.reduced ? 1.5 : 1);
+        d.ax = dx / l;
+        d.ay = dy / l; // the line is locked NOW: the flash shows where it goes
+        d.vx = d.vy = 0;
+        break;
+      }
+      const s = C.speed * slow;
+      d.vx = (dx / l) * s;
+      d.vy = (dy / l) * s;
+      shove(w, d, d.vx * dt, d.vy * dt);
+      break;
+    }
+    case Charge.Windup:
+      if (d.t <= 0) {
+        d.state = Charge.Dash;
+        d.t = C.chargeTime;
+      }
+      break;
+    case Charge.Dash: {
+      const s = C.chargeSpeed * slow;
+      d.vx = d.ax * s;
+      d.vy = d.ay * s;
+      // Straight along the locked line; the void stops it dead
+      if (!shove(w, d, d.vx * dt, d.vy * dt) || d.t <= 0) {
+        d.state = Charge.Recover;
+        d.t = C.recover;
+        d.vx = d.vy = 0;
+      }
+      break;
+    }
+    case Charge.Recover:
+      if (d.t <= 0) {
+        d.state = Charge.Walk;
+        d.cool = C.rest;
+      }
+      break;
+  }
+  if (l < TOUCH + 1 && !isInvulnerable(p) && w.phase === "play") {
+    hurt(w, d.x, d.y);
+    // A charge that connects ends there
+    if (d.state === Charge.Dash) {
+      d.state = Charge.Recover;
+      d.t = C.recover;
     }
   }
 }

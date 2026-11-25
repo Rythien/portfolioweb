@@ -34,7 +34,7 @@ const check = (ok, msg) => {
 const stage = (dx, dy, face) =>
   page.evaluate(([dx, dy, face]) => {
     const w = window.__void.world, p = w.player;
-    w.drifters.forEach((d, i) => {
+    w.enemies.forEach((d, i) => {
       if (i === 0) Object.assign(d, { alive: true, x: p.x + dx, y: p.y + dy, arrive: 0, flash: 0, vx: 0, vy: 0 });
       else if (i === 1) Object.assign(d, { alive: true, x: -400, y: -400, arrive: 1e9 });
       else d.alive = false;
@@ -44,7 +44,7 @@ const stage = (dx, dy, face) =>
     p.atkCd = 0;
     return { kills: w.kills, x: p.x + dx, y: p.y + dy - 6 };
   }, [dx, dy, face]);
-const target = () => page.evaluate(() => window.__void.world.drifters[0].alive);
+const target = () => page.evaluate(() => window.__void.world.enemies[0].alive);
 const kills = () => page.evaluate(() => window.__void.world.kills);
 /** Logical -> CSS px through the game's own view. */
 const toScreen = (lx, ly) =>

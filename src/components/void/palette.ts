@@ -42,6 +42,8 @@ export const ENEMY_COLORS = {
   "drifter outline": COLOR.void0,
   "drifter eye": COLOR.danger,
   "drifter eye core": COLOR.dangerHot,
+  "charger horn / brow": COLOR.ice0,
+  "charger windup tell": COLOR.danger,
 } as const;
 
 /** The gem: its fill (darkest facet first) and its 1px outline. */

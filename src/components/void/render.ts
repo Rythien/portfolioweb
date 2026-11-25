@@ -10,8 +10,8 @@
  * enemies outlined dark, and the gem, white, the brightest thing there.
  */
 import {
-  COLS, Kind, ROWS, TILE, TRAIL, TUNE, VIEW, isDashing, shakeOffset,
-  type Room, type World,
+  COLS, Charge, EnemyKind, Kind, ROWS, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, shakeOffset,
+  type Enemy, type Room, type World,
 } from "./engine";
 import { COLOR } from "./palette";
 
@@ -83,6 +83,21 @@ const DRIFTER = [
   "..OsssssO..",
   "...OOOOO...",
 ];
+// Wider, horned, two danger eyes: reads apart from the round drifter by shape
+const CHARGER = [
+  "..O.......O..",
+  ".OiO.....OiO.",
+  ".OvvOOOOOvvO.",
+  "OvvvvvvvvvvvO",
+  "OvhhvvvvvvvsO",
+  "OvhpPvvvPpvsO",
+  "OvvppvvvppvsO",
+  "OvvvvvvvvvssO",
+  "OsvvvvvvvvssO",
+  ".OssvvvvvssO.",
+  "..OsssssssO..",
+  "...OOOOOOO...",
+];
 const HEART = [
   ".hh.hh.",
   "hHHhhhh",
@@ -98,6 +113,11 @@ export interface Atlas {
   gemGhost: HTMLCanvasElement;
   drifter: HTMLCanvasElement;
   drifterFlash: HTMLCanvasElement;
+  charger: HTMLCanvasElement;
+  chargerFlash: HTMLCanvasElement;
+  /** The windup tint: the charger in danger red. */
+  chargerTell: HTMLCanvasElement;
+  chargerGhost: HTMLCanvasElement;
   heart: HTMLCanvasElement;
   heartEmpty: HTMLCanvasElement;
   shadow: HTMLCanvasElement;
@@ -110,6 +130,9 @@ export function buildAtlas(room: Room): Atlas {
   // Violet body, shaded, a dark outline; the danger eye is the read
   const drifter = sprite(DRIFTER, {
     O: COLOR.void0, v: COLOR.energy1, s: COLOR.energy0, h: COLOR.energy1, p: COLOR.danger, P: COLOR.dangerHot,
+  });
+  const charger = sprite(CHARGER, {
+    O: COLOR.void0, v: COLOR.energy1, s: COLOR.energy0, h: COLOR.ice0, i: COLOR.ice0, p: COLOR.danger, P: COLOR.dangerHot,
   });
   const heart = sprite(HEART, { h: COLOR.danger, H: COLOR.dangerHot });
   const shadow = canvas(12, 4);
@@ -125,6 +148,10 @@ export function buildAtlas(room: Room): Atlas {
     gemGhost: silhouette(gem, COLOR.energy1),
     drifter,
     drifterFlash: silhouette(drifter, COLOR.white),
+    charger,
+    chargerFlash: silhouette(charger, COLOR.white),
+    chargerTell: silhouette(charger, COLOR.danger),
+    chargerGhost: silhouette(charger, COLOR.energy1),
     heart,
     heartEmpty: silhouette(heart, COLOR.energy0),
     shadow,
@@ -314,7 +341,7 @@ export function drawWorld(
   // Telegraphs: a danger ring contracting onto where a drifter will be
   x.fillStyle = COLOR.danger;
   const tele = TUNE.drifter.telegraph * (w.reduced ? 1.5 : 1);
-  for (const d of w.drifters) {
+  for (const d of w.enemies) {
     if (!d.alive || d.arrive <= 0) continue;
     const k = Math.min(1, d.arrive / tele);
     x.globalAlpha = 0.35 + 0.65 * (1 - k);
@@ -324,7 +351,24 @@ export function drawWorld(
   x.globalAlpha = 1;
 
   // Shadows under everything standing
-  for (const d of w.drifters) if (d.alive && d.arrive <= 0) x.drawImage(A.shadow, Math.round(d.x - 6), Math.round(d.y - 1));
+  for (const d of w.enemies) if (d.alive && d.arrive <= 0) x.drawImage(A.shadow, Math.round(d.x - 6), Math.round(d.y - 1));
+
+  // Charger telegraph: while it winds up, a dotted danger line shows the
+  // exact path of its charge (locked; cut where the void will stop it)
+  x.fillStyle = COLOR.danger;
+  for (const d of w.enemies) {
+    if (!d.alive || d.kind !== EnemyKind.Charger || d.state !== Charge.Windup) continue;
+    const total = TUNE.charger.windup * (w.reduced ? 1.5 : 1);
+    const k = 1 - Math.max(0, d.t) / total;
+    const len = TUNE.charger.chargeSpeed * TUNE.charger.chargeTime * (w.reduced ? 0.75 : 1);
+    x.globalAlpha = 0.45 + 0.55 * k;
+    for (let s = 8; s < len; s += 4) {
+      const px = d.x + d.ax * s, py = d.y + d.ay * s;
+      if (!iceAt(w.room, px, py)) break;
+      x.fillRect(Math.round(px), Math.round(py - 4), 1, 1);
+    }
+  }
+  x.globalAlpha = 1;
   if (w.phase !== "dead") x.drawImage(A.shadow, Math.round(p.x - 6), Math.round(p.y - 1));
 
   // Trail: fading diamonds at the gem's recent positions; afterimages in a dash
@@ -347,8 +391,8 @@ export function drawWorld(
   let n = 0;
   amb.order[n] = 0;
   amb.depth[n++] = p.y;
-  for (let k = 0; k < w.drifters.length; k++) {
-    const d = w.drifters[k];
+  for (let k = 0; k < w.enemies.length; k++) {
+    const d = w.enemies[k];
     if (!d.alive || d.arrive > 0) continue;
     let j = n++;
     while (j > 0 && amb.depth[j - 1] > d.y) {
@@ -362,11 +406,7 @@ export function drawWorld(
   for (let j = 0; j < n; j++) {
     const o = amb.order[j];
     if (o === 0) drawGem(x, w, A);
-    else {
-      const d = w.drifters[o - 1];
-      const bob = Math.round(Math.sin(d.phase * 1.7) * 1.5);
-      x.drawImage(d.flash > 0 ? A.drifterFlash : A.drifter, Math.round(d.x - 5.5), Math.round(d.y - 14 + bob));
-    }
+    else drawEnemy(x, w, A, w.enemies[o - 1]);
   }
 
   // The attack burst: a crescent of points sweeping out, ease-out
@@ -426,6 +466,34 @@ export function drawWorld(
 
   // Hearts (screen-fixed)
   for (let i = 0; i < TUNE.hurt.hearts; i++) x.drawImage(i < p.hearts ? A.heart : A.heartEmpty, hud.x + 8 + i * 9, hud.y + 8);
+}
+
+function drawEnemy(x: CanvasRenderingContext2D, w: World, A: Atlas, d: Enemy): void {
+  if (d.kind === EnemyKind.Charger) {
+    const X = Math.round(d.x - 6.5), Y = Math.round(d.y - 13);
+    if (d.flash > 0) {
+      x.drawImage(A.chargerFlash, X, Y);
+      return;
+    }
+    if (d.state === Charge.Windup) {
+      // The tell: blinking danger red for the whole windup (steady under reduced motion)
+      const on = w.reduced || Math.floor(d.t / 0.06) % 2 === 0;
+      x.drawImage(on ? A.chargerTell : A.charger, X, Y);
+      return;
+    }
+    if (d.state === Charge.Dash) {
+      // A short violet afterimage trail
+      for (let k = 2; k >= 1; k--) {
+        x.globalAlpha = 0.25 * k;
+        x.drawImage(A.chargerGhost, Math.round(X - d.ax * 7 * k), Math.round(Y - d.ay * 7 * k));
+      }
+      x.globalAlpha = 1;
+    }
+    x.drawImage(A.charger, X, Y);
+    return;
+  }
+  const bob = Math.round(Math.sin(d.phase * 1.7) * 1.5);
+  x.drawImage(d.flash > 0 ? A.drifterFlash : A.drifter, Math.round(d.x - 5.5), Math.round(d.y - 14 + bob));
 }
 
 function drawGem(x: CanvasRenderingContext2D, w: World, A: Atlas): void {

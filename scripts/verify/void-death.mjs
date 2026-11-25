@@ -29,8 +29,8 @@ const state = () =>
     return {
       phase: w.phase,
       hearts: w.player.hearts,
-      alive: w.drifters.filter((d) => d.alive).length,
-      pos: w.drifters.filter((d) => d.alive).map((d) => `${d.x.toFixed(2)},${d.y.toFixed(2)}`).join(" "),
+      alive: w.enemies.filter((d) => d.alive).length,
+      pos: w.enemies.filter((d) => d.alive).map((d) => `${d.x.toFixed(2)},${d.y.toFixed(2)}`).join(" "),
       card: card ? { text: card.textContent, opacity: Number(getComputedStyle(card).opacity) } : null,
     };
   });

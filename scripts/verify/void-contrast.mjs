@@ -78,7 +78,7 @@ const measure = () =>
         if (inGem) gem = Math.max(gem, l);
         else if (l > rest) { rest = l; restAt = `${xx},${y} rgb(${data[i]},${data[i + 1]},${data[i + 2]})`; }
       }
-    const flashing = v.world.drifters.some((d) => d.alive && d.flash > 0) || v.world.player.invuln > 0;
+    const flashing = v.world.enemies.some((d) => d.alive && d.flash > 0) || v.world.player.invuln > 0;
     return { gem, rest, restAt, flashing, hearts: v.world.player.hearts };
   });
 const spot = async (label) => {
@@ -98,7 +98,7 @@ await spot("against the lit north rim");
 // they get without touching), then the game's own blur pause holds the frame
 await page.evaluate(() => {
   const w = window.__void.world, p = w.player;
-  const ds = w.drifters.filter((d) => d.alive).slice(0, 6);
+  const ds = w.enemies.filter((d) => d.alive).slice(0, 6);
   ds.forEach((d, i) => {
     const a = (i / ds.length) * Math.PI * 2;
     Object.assign(d, { x: p.x + Math.cos(a) * 14, y: p.y + Math.sin(a) * 11, arrive: 0, flash: 0 });
