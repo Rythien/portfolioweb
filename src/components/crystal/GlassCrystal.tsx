@@ -11,7 +11,7 @@ import { crystalEvents, setCrystalBoundRadius, setCrystalTimeOverride } from "@/
 import { useCrystalSound } from "@/hooks/useCrystalSound";
 import { initAudioContext } from "@/hooks/crystalAudio";
 import { useSoundStore } from "@/store/useSoundStore";
-import { createGlowTexture } from "./frostUtils";
+import { createGlowTexture, createPoolTexture } from "./frostUtils";
 import { decodeCrystal, TARGET_SIZE } from "./crystalGen";
 import {
   CRYSTAL_MATERIAL,
@@ -311,8 +311,21 @@ const SHARD_LOGO_MAX_TURN = THREE.MathUtils.degToRad(35);
 /** Vertices sampled per shard to measure its projected silhouette. */
 const SHARD_SAMPLE = 192;
 const INCLUSION_COUNT = CRYSTAL_MATERIAL.slivers;
-/** Ground glow sprite under the crystal: base opacity and its slow pulse. */
-const GLOW_OPACITY = 0.2;
+/**
+ * The warm pool of light under the crystal that grounds it on the page: a
+ * flat soft ellipse centred on the silhouette's base (the old cool glow
+ * sat well inside it, where the glass refracted it and greyed the lower
+ * ice), in the crystal's group so it
+ * follows the crystal. Base opacity per mode, plus a slow pulse.
+ */
+const POOL = {
+  /** At the base of the silhouette (bounding radius ~1.45, the visible
+   * base sits near -1.2): the upper half tucks behind the crystal. */
+  y: -1.22,
+  scale: [3.6, 0.8] as [number, number],
+  wake: { color: "#f0b27a", opacity: 0.22 },
+  dream: { color: "#e8a07c", opacity: 0.12 },
+} as const;
 
 /**
  * The rig's fourth light: a small bright point behind the crystal, just
@@ -484,6 +497,7 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
     );
 
     const glowTex = useMemo(() => createGlowTexture(128), []);
+    const poolTex = useMemo(() => createPoolTexture(128), []);
     const inclusions = useMemo(() => buildInclusions(seed, INCLUSION_COUNT, R), [seed]);
     // Hero logo size: HERO_LOGO_FILL of the intact crystal's smallest side,
     // computed from the mesh (its thinnest caliper is still wider, so the
@@ -739,8 +753,8 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
         glowRef.current.visible = !mergedHidden || assembled;
         const sMat = glowRef.current.material as THREE.SpriteMaterial;
         const glowT = DEBUG?.freeze ?? elapsed;
-        // A third down from 0.3 +- 0.08 since it turned cool
-        if (sMat) sMat.opacity = (GLOW_OPACITY + Math.sin(glowT * 0.8) * GLOW_PULSE) * (assembled ? 1 : 1 - crossfade) * fade;
+        // The pulse scales with the mode's base opacity
+        if (sMat) sMat.opacity = Math.max(0, POOL[variant].opacity + Math.sin(glowT * 0.8) * GLOW_PULSE * (POOL[variant].opacity / 0.2)) * (assembled ? 1 : 1 - crossfade) * fade;
       }
 
       // ── Hero logo: cycles through every icon, always facing the camera
@@ -1068,9 +1082,9 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
     return (
       <group ref={ref}>
-        {/* Radial glow sprite underneath */}
-        <sprite ref={glowRef} position={[0, -1.1, 0]} scale={[4, 2, 1]}>
-          <spriteMaterial map={glowTex} transparent opacity={GLOW_OPACITY} depthWrite={false} />
+        {/* The warm pool of light underneath (POOL) */}
+        <sprite ref={glowRef} position={[0, POOL.y, 0]} scale={[POOL.scale[0], POOL.scale[1], 1]}>
+          <spriteMaterial map={poolTex} color={POOL[variant].color} transparent opacity={POOL[variant].opacity} depthWrite={false} />
         </sprite>
 
         {/* Backlight: drawn only in the intact backdrop pass (see BACKLIGHT) */}
