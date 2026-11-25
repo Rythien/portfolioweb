@@ -14,15 +14,18 @@ import { SCENE_LABEL } from "@/lib/palette";
  * the colour is the mode's label colour (lib/palette), so one texture
  * serves WAKE and DREAM.
  *
- * The type is an engraving, not a label: caps ~0.6% of the ring's
- * diameter, the phrase ~11 times round. The arc nearest the camera fades
- * out (nearFade), so perspective never blows the type up at the frame's
- * edges.
+ * A halo, not an orbit: ~1.3x the crystal's on-screen radius, tilted
+ * shallow, so it stays in the crystal's own area. The type is an
+ * engraving, not a label (caps ~0.03 world units, the phrase ~6 times
+ * round). The arc nearest the camera dims (nearFade) so the front pass
+ * never sits heavier than the back.
  */
 
 const RING = {
-  /** Clear of the crystal's silhouette (it touched at 2.6). */
-  radius: 2.8,
+  /** Just past the chunk's bounding radius (1.45, crystalGen at
+   * TARGET_SIZE), so it never cuts a corner: ~1.3x the crystal's visible
+   * half-width. Both scale with the pose, so it hugs at any size. */
+  radius: 1.5,
   /** Band height (world units): hugs the caps. */
   height: 0.05,
   label: ["SELECTED WORK", "2026", "SEARON MAHARJAN"],
@@ -35,13 +38,13 @@ const RING = {
   /** The star's half-size, em. */
   starR: 0.3,
   opacity: 0.7,
-  /** Texels across the ring at a pixel ratio of 1: caps ~9 texels tall. */
-  texWidth: 8192,
+  /** Texels across the ring at a pixel ratio of 1: caps ~10 texels tall. */
+  texWidth: 4096,
 } as const;
 
 const ARC = {
-  /** Where it was before the ring moved out (2.6 x 1.35). */
-  radius: 3.51,
+  /** Just outside the ring: inside the crystal's area, on screen. */
+  radius: 1.5 * 1.2,
   height: 0.035,
   /** Of a full turn. */
   span: 0.6,
@@ -59,10 +62,14 @@ const SPIN = { ring: 0.08, crawl: 0.02, arc: -0.03 } as const;
 
 /**
  * The near arc's fade, by view depth: 0 at the ring's centre plane, 1 at
- * the point nearest the camera (in radii). The ring is opaque up to
- * `from` and gone by `to`.
+ * the point nearest the camera (in radii). Full alpha up to `from`,
+ * `floor` of it by `to`.
  */
-const NEAR = { from: 0.3, to: 0.85 } as const;
+const NEAR = { from: 0.4, to: 1.0, floor: 0.4 } as const;
+
+/** Tilt off edge-on (radians) and its slow sway: shallow, so the halo
+ * stays a narrow ellipse around the crystal. */
+const TILT = { base: 0.3, sway: 0.05 } as const;
 
 /** Fade a band material's alpha out over the side nearest the camera. */
 function nearFade(radius: number) {
@@ -84,10 +91,10 @@ function nearFade(radius: number) {
         .replace(
           "#include <dithering_fragment>",
           `#include <dithering_fragment>
-          gl_FragColor.a *= 1.0 - smoothstep( ${f(NEAR.from)}, ${f(NEAR.to)}, vNear );`,
+          gl_FragColor.a *= mix( 1.0, ${f(NEAR.floor)}, smoothstep( ${f(NEAR.from)}, ${f(NEAR.to)}, vNear ) );`,
         );
     },
-    customProgramCacheKey: () => `orbit-near-v1-${f(radius)}`,
+    customProgramCacheKey: () => `orbit-near-v2-${f(radius)}`,
   };
 }
 
@@ -267,7 +274,7 @@ export default function OrbitRing({ variant, reducedMotion }: { variant: "wake" 
     damp(dampedPos.current, "z", pose.z, 0.3, delta);
 
     const scrollP = useScrollStore.getState().progress;
-    const tilt = 0.5 + Math.sin(elapsed * 0.06) * 0.1;
+    const tilt = TILT.base + Math.sin(elapsed * 0.06) * TILT.sway;
     const roll = 0.2 + scrollP * 0.4;
     // Rings shrink with the parked crystal so they never circle the copy
     const s = Math.max(pose.scale, 0.05);
@@ -287,7 +294,7 @@ export default function OrbitRing({ variant, reducedMotion }: { variant: "wake" 
     if (insideMat.map) insideMat.map.offset.x = -elapsed * SPIN.crawl;
 
     // Fade out as the crystal breaks and as the hero scrolls away. The
-    // ring is 2x the crystal's radius, so it would cross the copy the
+    // ring is 1.3x the crystal's radius, so it would cross the copy the
     // crystal is being kept off: it leaves as the copy clamp takes hold
     const breakFade = Math.max(0, 1 - pose.breakVal * 3);
     const scrollFade = scrollP < 0.6 ? 1 : 1 - (scrollP - 0.6) / 0.4;
@@ -305,7 +312,7 @@ export default function OrbitRing({ variant, reducedMotion }: { variant: "wake" 
   return (
     <>
       {/* Inside first: the far side draws before the near one */}
-      <group ref={ringRef} rotation={[0.5, 0, 0.2]} visible={false}>
+      <group ref={ringRef} rotation={[TILT.base, 0, 0.2]} visible={false}>
         <mesh ref={insideRef} geometry={ringGeo}>
           <meshBasicMaterial map={ring.inside} color={color} transparent opacity={0} side={THREE.BackSide} depthWrite={false} fog={false} {...ringFade} />
         </mesh>
@@ -313,7 +320,7 @@ export default function OrbitRing({ variant, reducedMotion }: { variant: "wake" 
           <meshBasicMaterial map={ring.tex} color={color} transparent opacity={0} side={THREE.FrontSide} depthWrite={false} fog={false} {...ringFade} />
         </mesh>
       </group>
-      <mesh ref={arcRef} rotation={[0.5, 0, 0.2]} visible={false}>
+      <mesh ref={arcRef} rotation={[TILT.base, 0, 0.2]} visible={false}>
         <cylinderGeometry args={[ARC.radius, ARC.radius, ARC.height, 96, 1, true, 0, 2 * Math.PI * ARC.span]} />
         <meshBasicMaterial map={arc.tex} color={color} transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} fog={false} {...arcFade} />
       </mesh>
