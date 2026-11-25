@@ -252,8 +252,23 @@ export function rebuildIsland(A: Atlas, room: Room): void {
  * south edge, a cliff of violet strata over the void.
  */
 function buildIsland(room: Room): HTMLCanvasElement {
+  // Written as pixels into one ImageData: one fillRect per pixel took
+  // ~30 ms and dropped a frame on every room change
   const c = canvas(VIEW.w, VIEW.h);
   const x = c.getContext("2d")!;
+  const img = x.createImageData(VIEW.w, VIEW.h);
+  const px32 = new Uint32Array(img.data.buffer);
+  const rgba = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    return ((255 << 24) | ((n & 255) << 16) | (n & 0xff00) | ((n >> 16) & 255)) >>> 0; // little-endian ABGR
+  };
+  const K = {
+    ice0: rgba(COLOR.ice0), ice1: rgba(COLOR.ice1), energy0: rgba(COLOR.energy0), energy1: rgba(COLOR.energy1),
+    deep: rgba(COLOR.deep), floorA: rgba(COLOR.floorA), floorB: rgba(COLOR.floorB),
+  };
+  const put = (X: number, Y: number, v: number) => {
+    if (X >= 0 && Y >= 0 && X < VIEW.w && Y < VIEW.h) px32[Y * VIEW.w + X] = v;
+  };
   const ice = (i: number, j: number) => i >= 0 && j >= 0 && i < COLS && j < ROWS && room.ice[j * COLS + i] === 1;
   // Cliffs first (they hang below the top faces)
   for (let j = 0; j < ROWS; j++)
@@ -264,10 +279,10 @@ function buildIsland(room: Room): HTMLCanvasElement {
         const X = i * TILE + px;
         const drop = 8 + Math.floor(hash(X, j, 1) * 4) + (hash(X >> 1, j, 2) > 0.8 ? 4 : 0);
         for (let py = 0; py < drop; py++) {
-          x.fillStyle = py === 0 ? COLOR.ice0 : py < 4 ? COLOR.energy0 : COLOR.deep;
-          if (py >= 2 && hash(X, py, j) > 0.93) x.fillStyle = COLOR.energy1; // a glint in the strata
-          if (py === drop - 1 && drop >= 12) x.fillStyle = COLOR.ice0; // an icicle tip catching light
-          x.fillRect(X, y0 + py, 1, 1);
+          let v = py === 0 ? K.ice0 : py < 4 ? K.energy0 : K.deep;
+          if (py >= 2 && hash(X, py, j) > 0.93) v = K.energy1; // a glint in the strata
+          if (py === drop - 1 && drop >= 12) v = K.ice0; // an icicle tip catching light
+          put(X, y0 + py, v);
         }
       }
     }
@@ -281,31 +296,27 @@ function buildIsland(room: Room): HTMLCanvasElement {
           const gx = X + px, gy = Y + py;
           // Two floor tones dithered over a slow field: patches, not a ramp
           const field = noise2(gx / 22, gy / 16, 5) * 0.8 + noise2(gx / 7, gy / 6, 6) * 0.2;
-          x.fillStyle = field * 16 > BAYER[(gx & 3) + (gy & 3) * 4] + 0.5 ? COLOR.floorB : COLOR.floorA;
-          if (hash(gx, gy, 7) > 0.985) x.fillStyle = COLOR.energy0;
-          x.fillRect(gx, gy, 1, 1);
+          let v = field * 16 > BAYER[(gx & 3) + (gy & 3) * 4] + 0.5 ? K.floorB : K.floorA;
+          if (hash(gx, gy, 7) > 0.985) v = K.energy0;
+          put(gx, gy, v);
         }
       // Rims: lit ice to the north (the accent), violet at the sides
-      if (!ice(i, j - 1)) {
-        x.fillStyle = COLOR.ice1;
-        x.fillRect(X, Y, TILE, 1);
-      }
-      x.fillStyle = COLOR.energy1;
-      if (!ice(i - 1, j)) x.fillRect(X, Y, 1, TILE);
-      if (!ice(i + 1, j)) x.fillRect(X + TILE - 1, Y, 1, TILE);
+      if (!ice(i, j - 1)) for (let k = 0; k < TILE; k++) put(X + k, Y, K.ice1);
+      if (!ice(i - 1, j)) for (let k = 0; k < TILE; k++) put(X, Y + k, K.energy1);
+      if (!ice(i + 1, j)) for (let k = 0; k < TILE; k++) put(X + TILE - 1, Y + k, K.energy1);
     }
   // A few long hairline cracks across the floor
-  x.fillStyle = COLOR.energy0;
   for (let n = 0; n < 7; n++) {
     let cx = 40 + hash(n, 1, 9) * 400, cy = 40 + hash(n, 2, 9) * 190;
     let a = hash(n, 3, 9) * Math.PI * 2;
     for (let s = 0; s < 26; s++) {
-      if (ice(Math.floor(cx / TILE), Math.floor(cy / TILE))) x.fillRect(Math.round(cx), Math.round(cy), 1, 1);
+      if (ice(Math.floor(cx / TILE), Math.floor(cy / TILE))) put(Math.round(cx), Math.round(cy), K.energy0);
       a += (hash(n, s, 4) - 0.5) * 0.9;
       cx += Math.cos(a);
       cy += Math.sin(a) * 0.6;
     }
   }
+  x.putImageData(img, 0, 0);
   return c;
 }
 
