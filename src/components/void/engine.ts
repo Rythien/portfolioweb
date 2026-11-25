@@ -1,0 +1,544 @@
+/**
+ * THE VOID, step 1: the rules. One room, the player (the pixel gem),
+ * move / dash / attack, and DRIFTERS. Pure (no DOM): the shell feeds it
+ * input and a frame time, render.ts draws the state, engine.test.ts pins
+ * the numbers. Everything lives in pre-allocated pools: nothing is
+ * allocated per frame.
+ *
+ * Space is the logical screen, 480 x 270 px, y down. An entity's (x, y)
+ * is its FEET (the three-quarter view's ground point); sprites draw up
+ * from there.
+ */
+
+export const VIEW = { w: 480, h: 270 } as const;
+
+/** The feel numbers. Everything else is tuned around the dash. */
+export const TUNE = {
+  move: {
+    speed: 95,
+    /** Seconds to full speed from rest, and to rest from full: snappy, no slide. */
+    accelTime: 0.045,
+    decelTime: 0.035,
+  },
+  dash: {
+    time: 0.18,
+    /** Mean speed. Speed eases out across the dash: fast start, settle. */
+    speed: 420,
+    /** Speed at the start and end, as a multiple of the mean (mean of the two = 1). */
+    ease: [1.3, 0.7] as [number, number],
+    invuln: 0.12,
+    cooldown: 0.55,
+    /** Squash on dash start: scale along / across the dash, recovering over `squashTime`. */
+    squash: [1.35, 0.7] as [number, number],
+    squashTime: 0.09,
+  },
+  attack: {
+    cooldown: 0.25,
+    /** Reach from the gem's centre, and the half-angle of the burst. */
+    range: 30,
+    halfAngle: (55 * Math.PI) / 180,
+    /** How long the burst draws. */
+    show: 0.12,
+  },
+  hurt: { invuln: 0.8, knockback: 170, knockDecay: 14, hearts: 3 },
+  feel: { hitStop: 0.06, shake: 2, shakeTime: 0.12 },
+  drifter: {
+    speed: 26,
+    /** Telegraph before a drifter can move or hurt: a contracting ring. */
+    telegraph: 0.6,
+    radius: 5,
+    wobble: 9,
+    /** Push-apart distance between drifters. */
+    space: 11,
+    flash: 0.05,
+  },
+  spawn: { first: 6, wave: 5, every: 3.6, maxAlive: 14, minDist: 80 },
+} as const;
+
+/** The gem's collision: feet half-extents (px). */
+const FEET = { x: 4, y: 3 } as const;
+/** Distance at which a drifter touches the gem. */
+const TOUCH = 9;
+
+/* ── Seeded randomness (tests reproduce a run) ─────────────────── */
+
+export function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ── The room: an ice island over the void ─────────────────────── */
+
+export const TILE = 10;
+export const COLS = VIEW.w / TILE; // 48
+export const ROWS = VIEW.h / TILE; // 27
+
+export interface Room {
+  /** 1 = ice, 0 = void; COLS x ROWS, row-major. */
+  ice: Uint8Array;
+  spawnX: number;
+  spawnY: number;
+}
+
+/**
+ * One screen: a chipped island with two void pits inside it. Edges are
+ * ragged (seeded), so the void is a shape to play around, not a frame.
+ */
+export function buildRoom(seed = 1): Room {
+  const r = rng(seed);
+  const ice = new Uint8Array(COLS * ROWS);
+  const cx = COLS / 2, cy = ROWS / 2 + 0.5;
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++) {
+      // A rounded rectangle, its edge bitten by noise
+      const dx = Math.max(0, Math.abs(x + 0.5 - cx) - 15) / 6;
+      const dy = Math.max(0, Math.abs(y + 0.5 - cy) - 6) / 4.2;
+      const d = Math.hypot(dx, dy);
+      if (d < 0.75 + 0.5 * r()) ice[y * COLS + x] = 1;
+    }
+  // Two pits: void to dash across the corners of, never through
+  const pit = (px: number, py: number, w: number, h: number) => {
+    for (let y = py; y < py + h; y++) for (let x = px; x < px + w; x++) ice[y * COLS + x] = 0;
+  };
+  pit(14, 9, 3, 3);
+  pit(31, 15, 4, 2);
+  // Keep the outer two rows/columns void (the island floats)
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++) if (x < 2 || y < 2 || x >= COLS - 2 || y >= ROWS - 2) ice[y * COLS + x] = 0;
+  return { ice, spawnX: VIEW.w / 2, spawnY: VIEW.h / 2 + 20 };
+}
+
+export function iceAt(room: Room, x: number, y: number): boolean {
+  const c = Math.floor(x / TILE), r = Math.floor(y / TILE);
+  if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return false;
+  return room.ice[r * COLS + c] === 1;
+}
+
+/** The gem's feet box stands wholly on ice. */
+function feetOnIce(room: Room, x: number, y: number): boolean {
+  return (
+    iceAt(room, x - FEET.x, y - FEET.y) &&
+    iceAt(room, x + FEET.x, y - FEET.y) &&
+    iceAt(room, x - FEET.x, y + FEET.y) &&
+    iceAt(room, x + FEET.x, y + FEET.y)
+  );
+}
+
+/* ── State ─────────────────────────────────────────────────────── */
+
+export interface Input {
+  /** Movement, each axis -1..1 (keyboard: -1, 0 or 1). */
+  mx: number;
+  my: number;
+  /** Dash pressed this frame (an edge, not a hold). */
+  dash: boolean;
+  /** Attack held (repeats on cooldown). */
+  attack: boolean;
+  /** Aim for this attack (unit vector), or 0,0 to use the facing. */
+  aimX: number;
+  aimY: number;
+}
+
+export interface Drifter {
+  alive: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** > 0: still telegraphing its arrival (cannot move or hurt). */
+  arrive: number;
+  flash: number;
+  phase: number;
+}
+
+/** Particle kinds (a plain object: node's type stripping has no enums). */
+export const Kind = { Chip: 0, Shard: 1, Spark: 2 } as const;
+export type Kind = (typeof Kind)[keyof typeof Kind];
+
+export interface Particle {
+  alive: boolean;
+  kind: Kind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  /** Palette index (render.ts PALETTE). */
+  color: number;
+  friction: number;
+}
+
+export interface Player {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  faceX: number;
+  faceY: number;
+  dashAge: number; // < 0: not dashing
+  dashX: number;
+  dashY: number;
+  dashCd: number;
+  atkCd: number;
+  /** Time since the last attack (for the burst draw), and its aim. */
+  atkAge: number;
+  atkX: number;
+  atkY: number;
+  squash: number;
+  hearts: number;
+  invuln: number;
+  kbX: number;
+  kbY: number;
+  /** Seconds since knocked out (step 1: the room restarts). */
+  down: number;
+}
+
+export const TRAIL = 6;
+export const MAX_DRIFTERS = 40;
+export const MAX_PARTICLES = 320;
+
+export interface World {
+  room: Room;
+  t: number;
+  player: Player;
+  drifters: Drifter[];
+  particles: Particle[];
+  /** Ring buffer of past feet positions (x, y pairs), newest at trailHead. */
+  trail: Float32Array;
+  trailHead: number;
+  trailClock: number;
+  hitStop: number;
+  shake: number;
+  spawnClock: number;
+  kills: number;
+  hits: number;
+  random: () => number;
+  /** Reduced motion: slower enemies, longer telegraphs, no shake. */
+  reduced: boolean;
+}
+
+function freshPlayer(room: Room): Player {
+  return {
+    x: room.spawnX, y: room.spawnY, vx: 0, vy: 0, faceX: 1, faceY: 0,
+    dashAge: -1, dashX: 1, dashY: 0, dashCd: 0, atkCd: 0, atkAge: 99, atkX: 1, atkY: 0,
+    squash: 0, hearts: TUNE.hurt.hearts, invuln: 0, kbX: 0, kbY: 0, down: -1,
+  };
+}
+
+export function createWorld(seed = 1, reduced = false): World {
+  const room = buildRoom(seed);
+  const w: World = {
+    room,
+    t: 0,
+    player: freshPlayer(room),
+    drifters: Array.from({ length: MAX_DRIFTERS }, () => ({ alive: false, x: 0, y: 0, vx: 0, vy: 0, arrive: 0, flash: 0, phase: 0 })),
+    particles: Array.from({ length: MAX_PARTICLES }, () => ({
+      alive: false, kind: Kind.Chip, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, color: 0, friction: 0,
+    })),
+    trail: new Float32Array(TRAIL * 2),
+    trailHead: 0,
+    trailClock: 0,
+    hitStop: 0,
+    shake: 0,
+    spawnClock: 0,
+    kills: 0,
+    hits: 0,
+    random: rng(seed * 7919 + 3),
+    reduced,
+  };
+  for (let i = 0; i < TRAIL; i++) {
+    w.trail[i * 2] = w.player.x;
+    w.trail[i * 2 + 1] = w.player.y;
+  }
+  spawnWave(w, TUNE.spawn.first);
+  return w;
+}
+
+/* ── Helpers ───────────────────────────────────────────────────── */
+
+const approach = (v: number, target: number, step: number) =>
+  v < target ? Math.min(target, v + step) : Math.max(target, v - step);
+
+export function isDashing(p: Player): boolean {
+  return p.dashAge >= 0 && p.dashAge < TUNE.dash.time;
+}
+
+export function isInvulnerable(p: Player): boolean {
+  return p.invuln > 0 || (p.dashAge >= 0 && p.dashAge < TUNE.dash.invuln);
+}
+
+function emit(w: World, kind: Kind, x: number, y: number, vx: number, vy: number, life: number, color: number, friction: number) {
+  for (const q of w.particles) {
+    if (q.alive) continue;
+    q.alive = true; q.kind = kind; q.x = x; q.y = y; q.vx = vx; q.vy = vy;
+    q.life = life; q.max = life; q.color = color; q.friction = friction;
+    return;
+  }
+}
+
+/** Moves the player's feet by (dx, dy), axis by axis, never off the ice. */
+function moveOnIce(w: World, dx: number, dy: number): void {
+  const p = w.player;
+  // Sub-steps so a dash (up to ~9 px a frame) never skips a thin pit edge
+  const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 2));
+  const sx = dx / n, sy = dy / n;
+  for (let i = 0; i < n; i++) {
+    if (sx && feetOnIce(w.room, p.x + sx, p.y)) p.x += sx;
+    if (sy && feetOnIce(w.room, p.x, p.y + sy)) p.y += sy;
+  }
+}
+
+export function spawnWave(w: World, count: number): void {
+  const p = w.player;
+  const tele = TUNE.drifter.telegraph * (w.reduced ? 1.5 : 1);
+  let placed = 0;
+  for (let tries = 0; placed < count && tries < 200; tries++) {
+    const x = 30 + w.random() * (VIEW.w - 60);
+    const y = 30 + w.random() * (VIEW.h - 60);
+    if (!iceAt(w.room, x, y) || Math.hypot(x - p.x, y - p.y) < TUNE.spawn.minDist) continue;
+    const d = w.drifters.find((q) => !q.alive);
+    if (!d) return;
+    d.alive = true; d.x = x; d.y = y; d.vx = 0; d.vy = 0;
+    d.arrive = tele + placed * 0.08; // a ripple, not a pop
+    d.flash = 0; d.phase = w.random() * Math.PI * 2;
+    placed++;
+  }
+}
+
+function killDrifter(w: World, d: Drifter): void {
+  d.alive = false;
+  w.kills++;
+  // Chips: ice and energy, flung outward, slowed by friction
+  for (let i = 0; i < 9; i++) {
+    const a = w.random() * Math.PI * 2;
+    const s = 60 + w.random() * 90;
+    emit(w, Kind.Chip, d.x, d.y - 6, Math.cos(a) * s, Math.sin(a) * s - 20, 0.35 + w.random() * 0.25, i % 3, 7);
+  }
+  w.shake = Math.max(w.shake, TUNE.feel.shakeTime);
+}
+
+function hurt(w: World, fromX: number, fromY: number): void {
+  const p = w.player;
+  p.hearts--;
+  p.invuln = TUNE.hurt.invuln;
+  const dx = p.x - fromX, dy = p.y - fromY;
+  const l = Math.hypot(dx, dy) || 1;
+  p.kbX = (dx / l) * TUNE.hurt.knockback;
+  p.kbY = (dy / l) * TUNE.hurt.knockback;
+  w.shake = Math.max(w.shake, TUNE.feel.shakeTime * 1.5);
+  w.hitStop = TUNE.feel.hitStop;
+  if (p.hearts <= 0) p.down = 0;
+}
+
+/* ── The step ──────────────────────────────────────────────────── */
+
+export function step(w: World, dt: number, input: Input): void {
+  // Hit-stop freezes the world, chips included: the hit lands
+  if (w.hitStop > 0) {
+    w.hitStop = Math.max(0, w.hitStop - dt);
+    return;
+  }
+  w.t += dt;
+  w.shake = Math.max(0, w.shake - dt);
+  const p = w.player;
+
+  // Knocked out: step 1 restarts the room after a beat
+  if (p.down >= 0) {
+    p.down += dt;
+    if (p.down > 1.2) {
+      Object.assign(p, freshPlayer(w.room));
+      for (const d of w.drifters) d.alive = false;
+      w.spawnClock = 0;
+      spawnWave(w, TUNE.spawn.first);
+    }
+    stepParticles(w, dt);
+    return;
+  }
+
+  p.dashCd = Math.max(0, p.dashCd - dt);
+  p.atkCd = Math.max(0, p.atkCd - dt);
+  p.invuln = Math.max(0, p.invuln - dt);
+  p.squash = Math.max(0, p.squash - dt);
+  p.atkAge += dt;
+
+  // Facing follows movement
+  const ml = Math.hypot(input.mx, input.my);
+  const mx = ml > 1 ? input.mx / ml : input.mx;
+  const my = ml > 1 ? input.my / ml : input.my;
+  if (ml > 0.01) {
+    const fl = Math.hypot(mx, my);
+    p.faceX = mx / fl;
+    p.faceY = my / fl;
+  }
+
+  // Dash: the core defensive verb
+  if (input.dash && p.dashCd <= 0 && !isDashing(p)) {
+    // Along the held direction (the facing just took it), else the facing
+    p.dashX = p.faceX;
+    p.dashY = p.faceY;
+    p.dashAge = 0;
+    p.dashCd = TUNE.dash.cooldown;
+    p.squash = TUNE.dash.squashTime;
+  }
+
+  if (isDashing(p)) {
+    const k = p.dashAge / TUNE.dash.time;
+    const s = TUNE.dash.speed * (TUNE.dash.ease[0] + (TUNE.dash.ease[1] - TUNE.dash.ease[0]) * k);
+    const used = Math.min(dt, TUNE.dash.time - p.dashAge);
+    moveOnIce(w, p.dashX * s * used, p.dashY * s * used);
+    p.dashAge += dt;
+    // Leaves the dash at walking speed in the held direction: no slide
+    p.vx = mx * TUNE.move.speed;
+    p.vy = my * TUNE.move.speed;
+    if (!isDashing(p)) p.dashAge = 99;
+  } else {
+    const tx = mx * TUNE.move.speed, ty = my * TUNE.move.speed;
+    const accel = TUNE.move.speed / TUNE.move.accelTime;
+    const decel = TUNE.move.speed / TUNE.move.decelTime;
+    p.vx = approach(p.vx, tx, (Math.abs(tx) > Math.abs(p.vx) && Math.sign(tx) === Math.sign(p.vx || tx) ? accel : decel) * dt);
+    p.vy = approach(p.vy, ty, (Math.abs(ty) > Math.abs(p.vy) && Math.sign(ty) === Math.sign(p.vy || ty) ? accel : decel) * dt);
+    moveOnIce(w, p.vx * dt, p.vy * dt);
+  }
+  // Knockback rides on top and dies away fast
+  if (p.kbX || p.kbY) {
+    moveOnIce(w, p.kbX * dt, p.kbY * dt);
+    const f = Math.exp(-TUNE.hurt.knockDecay * dt);
+    p.kbX *= f;
+    p.kbY *= f;
+    if (Math.hypot(p.kbX, p.kbY) < 4) p.kbX = p.kbY = 0;
+  }
+
+  // Trail: a sample every 20 ms
+  w.trailClock += dt;
+  if (w.trailClock >= 0.02) {
+    w.trailClock = 0;
+    w.trailHead = (w.trailHead + 1) % TRAIL;
+    w.trail[w.trailHead * 2] = p.x;
+    w.trail[w.trailHead * 2 + 1] = p.y;
+  }
+
+  // Attack: a shard burst in the facing (or aimed) direction
+  if (input.attack && p.atkCd <= 0) attack(w, input);
+
+  stepDrifters(w, dt);
+  stepParticles(w, dt);
+
+  // Waves keep coming (step 1 has no doorway yet)
+  w.spawnClock += dt;
+  if (w.spawnClock >= TUNE.spawn.every) {
+    w.spawnClock = 0;
+    let alive = 0;
+    for (const d of w.drifters) if (d.alive) alive++;
+    if (alive < TUNE.spawn.maxAlive) spawnWave(w, Math.min(TUNE.spawn.wave, TUNE.spawn.maxAlive - alive));
+  }
+}
+
+function attack(w: World, input: Input): void {
+  const p = w.player;
+  const al = Math.hypot(input.aimX, input.aimY);
+  const ax = al > 0.01 ? input.aimX / al : p.faceX;
+  const ay = al > 0.01 ? input.aimY / al : p.faceY;
+  if (al > 0.01) {
+    p.faceX = ax;
+    p.faceY = ay;
+  }
+  p.atkCd = TUNE.attack.cooldown;
+  p.atkAge = 0;
+  p.atkX = ax;
+  p.atkY = ay;
+  // The burst's shards
+  const base = Math.atan2(ay, ax);
+  for (let i = 0; i < 7; i++) {
+    const a = base + (i / 6 - 0.5) * 2 * TUNE.attack.halfAngle * 0.9;
+    const s = 230 + w.random() * 60;
+    emit(w, Kind.Shard, p.x + ax * 4, p.y - 6 + ay * 4, Math.cos(a) * s, Math.sin(a) * s, TUNE.attack.show, 3, 16);
+  }
+  // Hits: drifters whose body centre is in the cone and in reach
+  const cosHalf = Math.cos(TUNE.attack.halfAngle);
+  let connected = false;
+  for (const d of w.drifters) {
+    if (!d.alive || d.arrive > 0) continue;
+    const dx = d.x - p.x, dy = d.y - p.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > TUNE.attack.range + TUNE.drifter.radius) continue;
+    // Point blank always counts; otherwise it must be in the cone
+    if (dist > 8 && (dx * ax + dy * ay) / dist < cosHalf) continue;
+    d.flash = TUNE.drifter.flash;
+    connected = true;
+    w.hits++;
+    killDrifter(w, d);
+  }
+  if (connected) w.hitStop = TUNE.feel.hitStop;
+}
+
+function stepDrifters(w: World, dt: number): void {
+  const p = w.player;
+  const speed = TUNE.drifter.speed * (w.reduced ? 0.75 : 1);
+  for (const d of w.drifters) {
+    if (!d.alive) continue;
+    d.flash = Math.max(0, d.flash - dt);
+    if (d.arrive > 0) {
+      d.arrive -= dt;
+      continue;
+    }
+    d.phase += dt * 2.2;
+    const dx = p.x - d.x, dy = p.y - d.y;
+    const l = Math.hypot(dx, dy) || 1;
+    // Toward the gem, with a slow sideways sway (they float, they don't march)
+    const sway = Math.sin(d.phase) * TUNE.drifter.wobble;
+    let vx = (dx / l) * speed + (-dy / l) * sway;
+    let vy = (dy / l) * speed + (dx / l) * sway;
+    // Keep apart: a crowd, not a stack
+    for (const o of w.drifters) {
+      if (o === d || !o.alive || o.arrive > 0) continue;
+      const ox = d.x - o.x, oy = d.y - o.y;
+      const ol = Math.hypot(ox, oy);
+      if (ol > 0 && ol < TUNE.drifter.space) {
+        const push = (TUNE.drifter.space - ol) * 6;
+        vx += (ox / ol) * push;
+        vy += (oy / ol) * push;
+      }
+    }
+    d.vx = vx;
+    d.vy = vy;
+    d.x += vx * dt;
+    d.y += vy * dt;
+    // Contact
+    if (l < TOUCH && !isInvulnerable(p) && p.down < 0) {
+      hurt(w, d.x, d.y);
+      d.x -= (dx / l) * 10;
+      d.y -= (dy / l) * 10;
+    }
+  }
+}
+
+function stepParticles(w: World, dt: number): void {
+  for (const q of w.particles) {
+    if (!q.alive) continue;
+    q.life -= dt;
+    if (q.life <= 0) {
+      q.alive = false;
+      continue;
+    }
+    const f = Math.exp(-q.friction * dt);
+    q.vx *= f;
+    q.vy *= f;
+    q.x += q.vx * dt;
+    q.y += q.vy * dt;
+  }
+}
+
+/** Screen shake offset (logical px) for this frame, written into `out`; zero under reduced motion. */
+export function shakeOffset(w: World, out: { x: number; y: number }): void {
+  out.x = out.y = 0;
+  if (w.reduced || w.shake <= 0) return;
+  const a = TUNE.feel.shake * Math.min(1, w.shake / TUNE.feel.shakeTime);
+  out.x = Math.round((w.random() * 2 - 1) * a);
+  out.y = Math.round((w.random() * 2 - 1) * a);
+}

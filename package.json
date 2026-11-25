@@ -14,6 +14,7 @@
     "test:archive": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/archive/flight.test.ts src/components/archive/game.test.ts src/components/archive/fight.test.ts src/content/projects.test.ts",
     "test:crystal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/crystal/crystalGen.test.ts",
     "test:motion": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/motion.test.ts",
+    "test:void": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/void/engine.test.ts",
     "test:palette": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/palette.test.ts"
   },
   "dependencies": {

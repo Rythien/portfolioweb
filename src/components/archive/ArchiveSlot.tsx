@@ -14,6 +14,13 @@ import { crystalEvents } from "@/hooks/crystalState";
 // interaction with the WAKE page, never during the initial load, so
 // Lighthouse (which never interacts) pays nothing for it
 const Archive = dynamic(() => import("./Archive"), { ssr: false });
+// THE VOID: the pixel-art game replacing the Archive, in development.
+// Step 1 (one room, the gem, drifters) is behind ?dream=void until it
+// carries the seals and the freed-project reward; the Archive stays the
+// default till then
+const VoidGame = dynamic(() => import("@/components/void/VoidGame"), { ssr: false });
+const USE_VOID =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("dream") === "void";
 
 /** The Archive's clip leads the ink edge by a hair, so no page shows at the rim. */
 const CLIP_LEAD = 1.02;
@@ -176,5 +183,6 @@ export default function ArchiveSlot() {
   }, [router]);
 
   if (!warm) return null;
+  if (USE_VOID) return <VoidGame rootRef={rootRef} active={active} open={open} onWake={wake} />;
   return <Archive rootRef={rootRef} active={active} open={open} onWake={wake} />;
 }
