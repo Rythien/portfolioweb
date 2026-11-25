@@ -16,15 +16,18 @@ export const CRYSTAL_MATERIAL = {
   frostStrength: 0.06,
   /** Frost tiles this many times around the chunk inside the one map. */
   frostRepeat: 3,
-  ior: 1.35,
+  /** Glass-strong, not ice-weak: the headline behind is visibly bent
+   * and offset, the bending IS the effect. */
+  ior: 1.5,
   /** Thickness per world unit of the mesh's largest side. */
-  thicknessRatio: 0.45 / TARGET_SIZE,
+  thicknessRatio: 0.75 / TARGET_SIZE,
   /** Shards are optically thinner (thickness is the one value they may
    * change): at full ratio their refraction smeared the logo inside. */
   shardThicknessScale: 0.35,
   /** Ice disperses far less than a prism. */
   chromaticAberration: 0.045,
-  anisotropicBlur: 0.05,
+  /** Low: the bent letters stay sharp (it grows with thickness). */
+  anisotropicBlur: 0.02,
   /** 1, so the roughness map (roughnessRange) gives the final values. */
   roughness: 1,
   /** Wet-polished pits .. frosted ridges, from the shared relief field. */
@@ -34,7 +37,7 @@ export const CRYSTAL_MATERIAL = {
    * at grazing angles by (1 - |n.v|)^frostRimPower. Real ice is clearest
    * through the middle. drei's refraction blur is driven by roughness, so
    * this is what keeps the headline readable through the centre. */
-  frostRimPower: 2,
+  frostRimPower: 3,
   /** Wet sheen on fresh faces. */
   clearcoat: 0.6,
   clearcoatRoughness: 0.1,
