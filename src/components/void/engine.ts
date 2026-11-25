@@ -1,6 +1,7 @@
 /**
  * THE VOID: the rules. The player (the pixel gem), move / dash / attack,
- * and the enemies: DRIFTERS and CHARGERS. Pure (no DOM): the shell feeds it
+ * and the enemies: DRIFTERS, CHARGERS and SPITTERS (and their bolts).
+ * Pure (no DOM): the shell feeds it
  * input and a frame time, render.ts draws the state, engine.test.ts pins
  * the numbers. Everything lives in pre-allocated pools: nothing is
  * allocated per frame.
@@ -73,6 +74,28 @@ export const TUNE = {
     rest: 0.5,
     radius: 6,
   },
+  /**
+   * SPITTER: keeps its distance (backs off inside `near`, closes beyond
+   * `far`, strafes between), and every `every` s stops for a `windup`
+   * tell (its mouth glows, its aim drawn and LOCKED), then fires one slow
+   * violet bolt. Bolts fly over the void; a dash's i-frames pass through
+   * them. Two hits. It walks on the ice.
+   */
+  spitter: {
+    speed: 30,
+    hp: 2,
+    near: 85,
+    far: 135,
+    /** Fires only from this close. */
+    range: 220,
+    every: 2.2,
+    windup: 0.5,
+    boltSpeed: 70,
+    boltLife: 4,
+    /** Bolt-to-gem-centre distance that hits. */
+    boltHit: 5,
+    radius: 6,
+  },
   /** A hit that does not kill: a white flash and a shove. */
   hit: { flash: 0.08, shove: 7 },
   /** ONE fixed wave per room, cleared to finish it (no trickle). */
@@ -80,9 +103,9 @@ export const TUNE = {
 } as const;
 
 /** Enemy kinds (plain object: node's type stripping has no enums). */
-export const EnemyKind = { Drifter: 0, Charger: 1 } as const;
+export const EnemyKind = { Drifter: 0, Charger: 1, Spitter: 2 } as const;
 export type EnemyKind = (typeof EnemyKind)[keyof typeof EnemyKind];
-export const ENEMY_NAMES = ["drifter", "charger"] as const;
+export const ENEMY_NAMES = ["drifter", "charger", "spitter"] as const;
 export type EnemyName = (typeof ENEMY_NAMES)[number];
 
 /** A wave: how many of each kind. */
@@ -90,6 +113,13 @@ export type Wave = Partial<Record<EnemyName, number>>;
 
 /** Charger states. */
 export const Charge = { Walk: 0, Windup: 1, Dash: 2, Recover: 3 } as const;
+/** Spitter states. */
+export const Spit = { Move: 0, Windup: 1 } as const;
+
+/** Body radius per kind (for the attack's reach). */
+const RADIUS = [TUNE.drifter.radius, TUNE.charger.radius, TUNE.spitter.radius] as const;
+/** Hit points per kind. */
+const HP = [1, TUNE.charger.hp, TUNE.spitter.hp] as const;
 
 /** The gem's collision: feet half-extents (px). */
 const FEET = { x: 4, y: 3 } as const;
@@ -280,6 +310,16 @@ export type Phase = "play" | "dead" | "clear";
 
 export const TRAIL = 6;
 export const MAX_ENEMIES = 40;
+export const MAX_BOLTS = 24;
+
+export interface Bolt {
+  alive: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+}
 export const MAX_PARTICLES = 320;
 
 export interface World {
@@ -287,6 +327,7 @@ export interface World {
   t: number;
   player: Player;
   enemies: Enemy[];
+  bolts: Bolt[];
   /** The wave each room (re)starts with. */
   wave: Wave;
   particles: Particle[];
@@ -327,6 +368,7 @@ export function createWorld(seed = 1, reduced = false, wave: Wave = { drifter: T
       state: 0, t: 0, ax: 0, ay: 0, cool: 0,
     })),
     wave,
+    bolts: Array.from({ length: MAX_BOLTS }, (): Bolt => ({ alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 })),
     particles: Array.from({ length: MAX_PARTICLES }, () => ({
       alive: false, kind: Kind.Chip, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, color: 0, friction: 0,
     })),
@@ -359,6 +401,7 @@ function resetTrail(w: World): void {
 export function restart(w: World): void {
   Object.assign(w.player, freshPlayer(w.room));
   for (const d of w.enemies) d.alive = false;
+  for (const b of w.bolts) b.alive = false;
   for (const q of w.particles) q.alive = false;
   w.phase = "play";
   w.endT = 0;
@@ -418,7 +461,7 @@ export function spawnWave(w: World, wave: Wave): void {
       const d = w.enemies.find((q) => !q.alive);
       if (!d) return;
       d.alive = true; d.kind = kind as EnemyKind; d.x = x; d.y = y; d.vx = 0; d.vy = 0;
-      d.hp = kind === EnemyKind.Charger ? TUNE.charger.hp : 1;
+      d.hp = HP[kind];
       d.arrive = tele + placed * 0.08; // a ripple, not a pop
       d.flash = 0; d.phase = w.random() * Math.PI * 2;
       d.state = 0; d.t = 0; d.ax = 0; d.ay = 0; d.cool = 0.4 + w.random() * 0.8;
@@ -437,6 +480,7 @@ function killEnemy(w: World, d: Enemy): void {
     w.endT = 0;
   }
   // Chips: ice and energy, flung outward, slowed by friction
+  // Two-hit kinds burst bigger
   for (let i = 0; i < (d.kind === EnemyKind.Drifter ? 9 : 13); i++) {
     const a = w.random() * Math.PI * 2;
     const s = 60 + w.random() * 90;
@@ -558,6 +602,7 @@ export function step(w: World, dt: number, input: Input): void {
   if (input.attack && p.atkCd <= 0) attack(w, input);
 
   stepEnemies(w, dt);
+  stepBolts(w, dt);
   stepParticles(w, dt);
 }
 
@@ -588,8 +633,7 @@ function attack(w: World, input: Input): void {
     if (!d.alive || d.arrive > 0) continue;
     const dx = d.x - p.x, dy = d.y - p.y;
     const dist = Math.hypot(dx, dy);
-    const radius = d.kind === EnemyKind.Charger ? TUNE.charger.radius : TUNE.drifter.radius;
-    if (dist > TUNE.attack.range + radius) continue;
+    if (dist > TUNE.attack.range + RADIUS[d.kind]) continue;
     // Point blank always counts; otherwise it must be in the cone
     if (dist > 8 && (dx * ax + dy * ay) / dist < cosHalf) continue;
     connected = true;
@@ -640,6 +684,10 @@ function stepEnemies(w: World, dt: number): void {
     }
     if (d.kind === EnemyKind.Charger) {
       stepCharger(w, d, dt, slow);
+      continue;
+    }
+    if (d.kind === EnemyKind.Spitter) {
+      stepSpitter(w, d, dt, slow);
       continue;
     }
     d.phase += dt * 2.2;
@@ -729,6 +777,77 @@ function stepCharger(w: World, d: Enemy, dt: number, slow: number): void {
     if (d.state === Charge.Dash) {
       d.state = Charge.Recover;
       d.t = C.recover;
+    }
+  }
+}
+
+function stepSpitter(w: World, d: Enemy, dt: number, slow: number): void {
+  const p = w.player;
+  const S = TUNE.spitter;
+  const dx = p.x - d.x, dy = p.y - d.y;
+  const l = Math.hypot(dx, dy) || 1;
+  d.t -= dt;
+  d.cool -= dt;
+  d.phase += dt * 0.9;
+  if (d.state === Spit.Windup) {
+    if (d.t <= 0) {
+      // Fire along the line it showed
+      for (const b of w.bolts) {
+        if (b.alive) continue;
+        b.alive = true;
+        b.x = d.x + d.ax * 6;
+        b.y = d.y - 7 + d.ay * 6;
+        b.vx = d.ax * S.boltSpeed * slow;
+        b.vy = d.ay * S.boltSpeed * slow;
+        b.life = S.boltLife / slow;
+        break;
+      }
+      d.state = Spit.Move;
+      d.cool = S.every;
+    }
+  } else if (d.cool <= 0 && l < S.range) {
+    d.state = Spit.Windup;
+    d.t = S.windup * (w.reduced ? 1.5 : 1);
+    // Aimed at the gem's centre, LOCKED now: the tell shows where it goes
+    const cy = p.y - 6 - (d.y - 7);
+    const cl = Math.hypot(dx, cy) || 1;
+    d.ax = dx / cl;
+    d.ay = cy / cl;
+    d.vx = d.vy = 0;
+  } else {
+    // Keep its distance: back off, close in, or strafe
+    const s = S.speed * slow;
+    const toward = l < S.near ? -1 : l > S.far ? 1 : 0;
+    const side = Math.sin(d.phase) >= 0 ? 1 : -1;
+    let vx = (dx / l) * toward + (toward ? 0 : (-dy / l) * side);
+    let vy = (dy / l) * toward + (toward ? 0 : (dx / l) * side);
+    const vl = Math.hypot(vx, vy) || 1;
+    vx = (vx / vl) * s;
+    vy = (vy / vl) * s;
+    d.vx = vx;
+    d.vy = vy;
+    // Cornered against the void while backing off: slide along instead
+    if (!shove(w, d, vx * dt, vy * dt) && toward < 0) shove(w, d, (-dy / l) * side * s * dt, (dx / l) * side * s * dt);
+  }
+  if (l < TOUCH && !isInvulnerable(p) && w.phase === "play") hurt(w, d.x, d.y);
+}
+
+/** Bolts fly straight, over the void too. A dash's i-frames pass through them. */
+function stepBolts(w: World, dt: number): void {
+  const p = w.player;
+  for (const b of w.bolts) {
+    if (!b.alive) continue;
+    b.life -= dt;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    if (b.life <= 0 || b.x < -10 || b.y < -10 || b.x > VIEW.w + 10 || b.y > VIEW.h + 10) {
+      b.alive = false;
+      continue;
+    }
+    if (w.phase !== "play" || isInvulnerable(p)) continue;
+    if (Math.hypot(b.x - p.x, b.y - (p.y - 6)) < TUNE.spitter.boltHit) {
+      b.alive = false;
+      hurt(w, b.x - b.vx, b.y - b.vy);
     }
   }
 }

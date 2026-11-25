@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Charge, EnemyKind, TUNE, createWorld, iceAt, isInvulnerable, restart, step, type Input, type World } from "./engine.ts";
+import { Charge, EnemyKind, Spit, TUNE, createWorld, iceAt, isInvulnerable, restart, step, type Input, type World } from "./engine.ts";
 
 const DT = 1 / 120;
 const idle = (): Input => ({ mx: 0, my: 0, dash: false, attack: false, aimX: 0, aimY: 0 });
@@ -251,4 +251,68 @@ test("a charge that connects costs a heart", () => {
   Object.assign(d, { state: Charge.Dash, t: TUNE.charger.chargeTime, ax: 1, ay: 0 });
   run(w, 0.2);
   assert.equal(w.player.hearts, TUNE.hurt.hearts - 1);
+});
+
+/* ── SPITTER ── */
+
+function oneSpitter(w: World, dx: number, dy: number) {
+  const d = w.enemies[0];
+  Object.assign(d, { alive: true, kind: EnemyKind.Spitter, hp: TUNE.spitter.hp, x: w.player.x + dx, y: w.player.y + dy,
+    arrive: 0, state: Spit.Move, t: 0, cool: 99, vx: 0, vy: 0, flash: 0, phase: 0 });
+  return d;
+}
+const bolts = (w: World) => w.bolts.filter((b) => b.alive);
+
+test("a spitter keeps its distance", () => {
+  const w = empty();
+  const d = oneSpitter(w, -40, 0);
+  run(w, 1.2);
+  const l = Math.hypot(d.x - w.player.x, d.y - w.player.y);
+  assert.ok(l > 60, `backed off to ${l.toFixed(0)} px`);
+});
+
+test("a spitter tells for 0.5 s, then fires one bolt along the line it showed", () => {
+  const w = empty();
+  const d = oneSpitter(w, -100, 0);
+  d.cool = 0;
+  step(w, DT, idle());
+  assert.equal(d.state, Spit.Windup);
+  const ax = d.ax, ay = d.ay;
+  run(w, 0.45, { my: 1 }); // the gem moves during the tell
+  assert.equal(bolts(w).length, 0, "nothing flies during the tell");
+  run(w, 0.1);
+  const b = bolts(w);
+  assert.equal(b.length, 1, "one bolt");
+  const bl = Math.hypot(b[0].vx, b[0].vy);
+  assert.ok(Math.abs(b[0].vx / bl - ax) < 1e-6 && Math.abs(b[0].vy / bl - ay) < 1e-6, "along the locked line");
+  assert.ok(Math.abs(bl - TUNE.spitter.boltSpeed) < 1e-6, "slow");
+});
+
+test("a bolt costs a heart if you stand in it, and a dash passes through it", () => {
+  for (const dash of [false, true]) {
+    const w = empty();
+    const b = w.bolts[0];
+    Object.assign(b, { alive: true, x: w.player.x - 30, y: w.player.y - 6, vx: TUNE.spitter.boltSpeed, vy: 0, life: 4 });
+    if (dash) step(w, DT, { ...idle(), mx: -1, dash: true });
+    run(w, 0.12, dash ? { mx: -1 } : {});
+    run(w, 0.5);
+    assert.equal(w.player.hearts, TUNE.hurt.hearts - (dash ? 0 : 1), dash ? "dashed through" : "stood in it");
+  }
+});
+
+test("a spitter takes two hits, and R clears every bolt", () => {
+  const w = empty();
+  const d = oneSpitter(w, 20, 0);
+  w.player.faceX = 1;
+  w.player.faceY = 0;
+  step(w, DT, { ...idle(), attack: true });
+  assert.ok(d.alive && d.hp === 1);
+  run(w, TUNE.attack.cooldown + TUNE.feel.hitStop + 0.05);
+  d.x = w.player.x + 20;
+  d.y = w.player.y;
+  step(w, DT, { ...idle(), attack: true });
+  assert.equal(d.alive, false);
+  Object.assign(w.bolts[3], { alive: true, x: 10, y: 10, vx: 1, vy: 0, life: 4 });
+  restart(w);
+  assert.equal(bolts(w).length, 0);
 });

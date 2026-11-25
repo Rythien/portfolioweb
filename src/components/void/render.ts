@@ -10,7 +10,7 @@
  * enemies outlined dark, and the gem, white, the brightest thing there.
  */
 import {
-  COLS, Charge, EnemyKind, Kind, ROWS, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, shakeOffset,
+  COLS, Charge, EnemyKind, Kind, ROWS, Spit, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, shakeOffset,
   type Enemy, type Room, type World,
 } from "./engine";
 import { COLOR } from "./palette";
@@ -98,6 +98,29 @@ const CHARGER = [
   "..OsssssssO..",
   "...OOOOOOO...",
 ];
+// Tall, a round mouth (m / M) that glows danger red in its tell
+const SPITTER = [
+  "....OOO....",
+  "...OvvvO...",
+  "..OvhvvsO..",
+  ".OvhvvvvsO.",
+  ".OvvmmmvsO.",
+  "OvvmMMMmvsO",
+  "OvvmMMMmvsO",
+  ".OvvmmmvsO.",
+  ".OvvvvvvsO.",
+  "..OvsvssO..",
+  "..OsO.OsO..",
+  "...O...O...",
+];
+// The bolt: violet, a pale core
+const BOLT = [
+  ".vVv.",
+  "vVWVv",
+  "VWWWV",
+  "vVWVv",
+  ".vVv.",
+];
 const HEART = [
   ".hh.hh.",
   "hHHhhhh",
@@ -118,6 +141,11 @@ export interface Atlas {
   /** The windup tint: the charger in danger red. */
   chargerTell: HTMLCanvasElement;
   chargerGhost: HTMLCanvasElement;
+  spitter: HTMLCanvasElement;
+  spitterFlash: HTMLCanvasElement;
+  /** The tell: the mouth lit. */
+  spitterTell: HTMLCanvasElement;
+  bolt: HTMLCanvasElement;
   heart: HTMLCanvasElement;
   heartEmpty: HTMLCanvasElement;
   shadow: HTMLCanvasElement;
@@ -134,6 +162,9 @@ export function buildAtlas(room: Room): Atlas {
   const charger = sprite(CHARGER, {
     O: COLOR.void0, v: COLOR.energy1, s: COLOR.energy0, h: COLOR.ice0, i: COLOR.ice0, p: COLOR.danger, P: COLOR.dangerHot,
   });
+  const spitterKey = { O: COLOR.void0, v: COLOR.energy1, s: COLOR.energy0, h: COLOR.ice0, m: COLOR.energy0, M: COLOR.deep };
+  const spitter = sprite(SPITTER, spitterKey);
+  const spitterTell = sprite(SPITTER, { ...spitterKey, m: COLOR.danger, M: COLOR.dangerHot });
   const heart = sprite(HEART, { h: COLOR.danger, H: COLOR.dangerHot });
   const shadow = canvas(12, 4);
   {
@@ -152,6 +183,10 @@ export function buildAtlas(room: Room): Atlas {
     chargerFlash: silhouette(charger, COLOR.white),
     chargerTell: silhouette(charger, COLOR.danger),
     chargerGhost: silhouette(charger, COLOR.energy1),
+    spitter,
+    spitterFlash: silhouette(spitter, COLOR.white),
+    spitterTell,
+    bolt: sprite(BOLT, { v: COLOR.energy0, V: COLOR.energy1, W: COLOR.ice1 }),
     heart,
     heartEmpty: silhouette(heart, COLOR.energy0),
     shadow,
@@ -369,6 +404,19 @@ export function drawWorld(
     }
   }
   x.globalAlpha = 1;
+
+  // Spitter telegraph: rings swelling round its mouth, and a short dotted
+  // aim line (locked) toward where the bolt will go
+  for (const d of w.enemies) {
+    if (!d.alive || d.kind !== EnemyKind.Spitter || d.state !== Spit.Windup) continue;
+    const total = TUNE.spitter.windup * (w.reduced ? 1.5 : 1);
+    const k = 1 - Math.max(0, d.t) / total;
+    x.fillStyle = COLOR.danger;
+    x.globalAlpha = 0.5 + 0.5 * k;
+    pixelRing(x, d.x, d.y - 7, 4 + k * 5, 0, Math.PI * 2);
+    for (let s = 10; s < 34; s += 4) x.fillRect(Math.round(d.x + d.ax * s), Math.round(d.y - 7 + d.ay * s), 1, 1);
+  }
+  x.globalAlpha = 1;
   if (w.phase !== "dead") x.drawImage(A.shadow, Math.round(p.x - 6), Math.round(p.y - 1));
 
   // Trail: fading diamonds at the gem's recent positions; afterimages in a dash
@@ -407,6 +455,19 @@ export function drawWorld(
     const o = amb.order[j];
     if (o === 0) drawGem(x, w, A);
     else drawEnemy(x, w, A, w.enemies[o - 1]);
+  }
+
+  // Bolts, over everything on the ground (they fly), each with a short trail
+  for (const b of w.bolts) {
+    if (!b.alive) continue;
+    const l = Math.hypot(b.vx, b.vy) || 1;
+    x.fillStyle = COLOR.energy1;
+    x.globalAlpha = 0.5;
+    x.fillRect(Math.round(b.x - (b.vx / l) * 4), Math.round(b.y - (b.vy / l) * 4), 1, 1);
+    x.globalAlpha = 0.25;
+    x.fillRect(Math.round(b.x - (b.vx / l) * 7), Math.round(b.y - (b.vy / l) * 7), 1, 1);
+    x.globalAlpha = 1;
+    x.drawImage(A.bolt, Math.round(b.x - 2.5), Math.round(b.y - 2.5));
   }
 
   // The attack burst: a crescent of points sweeping out, ease-out
@@ -490,6 +551,11 @@ function drawEnemy(x: CanvasRenderingContext2D, w: World, A: Atlas, d: Enemy): v
       x.globalAlpha = 1;
     }
     x.drawImage(A.charger, X, Y);
+    return;
+  }
+  if (d.kind === EnemyKind.Spitter) {
+    const X = Math.round(d.x - 5.5), Y = Math.round(d.y - 13);
+    x.drawImage(d.flash > 0 ? A.spitterFlash : d.state === Spit.Windup ? A.spitterTell : A.spitter, X, Y);
     return;
   }
   const bob = Math.round(Math.sin(d.phase * 1.7) * 1.5);

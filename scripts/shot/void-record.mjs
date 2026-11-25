@@ -69,7 +69,8 @@ while (Date.now() - t0 < SECONDS * 1000) {
     const p = w.player;
     // [x, y, kind, state, ax, ay]
     const ds = w.enemies.filter((d) => d.alive && d.arrive <= 0).map((d) => [d.x, d.y, d.kind, d.state, d.ax, d.ay]);
-    return { x: p.x, y: p.y, cd: p.dashCd, ds, phase: w.phase, hearts: p.hearts };
+    const bs = w.bolts.filter((b) => b.alive).map((b) => [b.x, b.y, b.vx, b.vy]);
+    return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts };
   });
   // A cleared room: fall again (R) for a fresh wave, so the take keeps playing.
   // A death is reported, not hidden, then R as well
@@ -91,6 +92,24 @@ while (Date.now() - t0 < SECONDS * 1000) {
     const along = (s.x - x) * ax + (s.y - y) * ay;
     const perp = Math.abs((s.x - x) * ay - (s.y - y) * ax);
     if (along > -4 && along < 150 && perp < 14) threat = [ax, ay, (s.x - x) * ay - (s.y - y) * ax];
+  }
+  // A bolt about to hit: dash THROUGH it (toward where it came from), or sidestep
+  for (const [bx, by, vx, vy] of s.bs) {
+    const l = Math.hypot(vx, vy) || 1, ux = vx / l, uy = vy / l;
+    const along = (s.x - bx) * ux + (s.y - 6 - by) * uy;
+    const perp = Math.abs((s.x - bx) * uy - (s.y - 6 - by) * ux);
+    if (along > 0 && along < 26 && perp < 9) { threat = s.cd === 0 ? [-uy, ux, 0, -ux, -uy] : [ux, uy, perp]; break; }
+  }
+  if (threat && threat.length === 5) {
+    // Into the bolt: the dash's i-frames carry the gem through it
+    const [, , , tx, ty] = threat;
+    if (tx > 0.3) want.add("KeyD"); else if (tx < -0.3) want.add("KeyA");
+    if (ty > 0.3) want.add("KeyS"); else if (ty < -0.3) want.add("KeyW");
+    await hold(want);
+    await page.keyboard.press("Space");
+    if (mouseDown) { await page.mouse.up(); mouseDown = false; }
+    await page.waitForTimeout(40);
+    continue;
   }
   if (threat) {
     const [ax, ay, side] = threat;
