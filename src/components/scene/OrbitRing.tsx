@@ -13,28 +13,35 @@ import { SCENE_LABEL } from "@/lib/palette";
  * further out turning the other way. Both are alpha masks drawn white;
  * the colour is the mode's label colour (lib/palette), so one texture
  * serves WAKE and DREAM.
+ *
+ * The type is an engraving, not a label: caps ~0.6% of the ring's
+ * diameter, the phrase ~11 times round. The arc nearest the camera fades
+ * out (nearFade), so perspective never blows the type up at the frame's
+ * edges.
  */
 
 const RING = {
-  radius: 2.6,
-  /** Band height (world units): the type's line box. */
-  height: 0.1,
+  /** Clear of the crystal's silhouette (it touched at 2.6). */
+  radius: 2.8,
+  /** Band height (world units): hugs the caps. */
+  height: 0.05,
   label: ["SELECTED WORK", "2026", "SEARON MAHARJAN"],
   /** Of the band height. */
-  fontShare: 0.62,
+  fontShare: 0.85,
   /** Letterspacing, em (the chrome's labels, opened up for the ring). */
-  tracking: 0.18,
+  tracking: 0.2,
   /** Space either side of each star, em. */
   starGap: 1.5,
   /** The star's half-size, em. */
   starR: 0.3,
   opacity: 0.7,
-  /** Texels across the ring at a pixel ratio of 1. */
-  texWidth: 4096,
+  /** Texels across the ring at a pixel ratio of 1: caps ~9 texels tall. */
+  texWidth: 8192,
 } as const;
 
 const ARC = {
-  radius: RING.radius * 1.35,
+  /** Where it was before the ring moved out (2.6 x 1.35). */
+  radius: 3.51,
   height: 0.035,
   /** Of a full turn. */
   span: 0.6,
@@ -49,6 +56,40 @@ const ARC = {
 
 /** Rotation rates, radians (or texture turns) per second. */
 const SPIN = { ring: 0.08, crawl: 0.02, arc: -0.03 } as const;
+
+/**
+ * The near arc's fade, by view depth: 0 at the ring's centre plane, 1 at
+ * the point nearest the camera (in radii). The ring is opaque up to
+ * `from` and gone by `to`.
+ */
+const NEAR = { from: 0.3, to: 0.85 } as const;
+
+/** Fade a band material's alpha out over the side nearest the camera. */
+function nearFade(radius: number) {
+  const f = (n: number) => n.toFixed(4);
+  return {
+    onBeforeCompile(shader: THREE.WebGLProgramParametersWithUniforms) {
+      shader.vertexShader = shader.vertexShader
+        .replace("void main() {", "varying float vNear;\nvoid main() {")
+        .replace(
+          "#include <project_vertex>",
+          `#include <project_vertex>
+          {
+            vec4 nc = modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );
+            vNear = ( mvPosition.z - nc.z ) / ( length( modelViewMatrix[ 0 ].xyz ) * ${f(radius)} );
+          }`,
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace("void main() {", "varying float vNear;\nvoid main() {")
+        .replace(
+          "#include <dithering_fragment>",
+          `#include <dithering_fragment>
+          gl_FragColor.a *= 1.0 - smoothstep( ${f(NEAR.from)}, ${f(NEAR.to)}, vNear );`,
+        );
+    },
+    customProgramCacheKey: () => `orbit-near-v1-${f(radius)}`,
+  };
+}
 
 /** The chrome's mono family (next/font's --font-mono), resolved. */
 function monoFamily(): string {
@@ -259,20 +300,22 @@ export default function OrbitRing({ variant, reducedMotion }: { variant: "wake" 
   });
 
   const color = SCENE_LABEL[variant];
+  const ringFade = useMemo(() => nearFade(RING.radius), []);
+  const arcFade = useMemo(() => nearFade(ARC.radius), []);
   return (
     <>
       {/* Inside first: the far side draws before the near one */}
       <group ref={ringRef} rotation={[0.5, 0, 0.2]} visible={false}>
         <mesh ref={insideRef} geometry={ringGeo}>
-          <meshBasicMaterial map={ring.inside} color={color} transparent opacity={0} side={THREE.BackSide} depthWrite={false} fog={false} />
+          <meshBasicMaterial map={ring.inside} color={color} transparent opacity={0} side={THREE.BackSide} depthWrite={false} fog={false} {...ringFade} />
         </mesh>
         <mesh ref={faceRef} geometry={ringGeo}>
-          <meshBasicMaterial map={ring.tex} color={color} transparent opacity={0} side={THREE.FrontSide} depthWrite={false} fog={false} />
+          <meshBasicMaterial map={ring.tex} color={color} transparent opacity={0} side={THREE.FrontSide} depthWrite={false} fog={false} {...ringFade} />
         </mesh>
       </group>
       <mesh ref={arcRef} rotation={[0.5, 0, 0.2]} visible={false}>
         <cylinderGeometry args={[ARC.radius, ARC.radius, ARC.height, 96, 1, true, 0, 2 * Math.PI * ARC.span]} />
-        <meshBasicMaterial map={arc.tex} color={color} transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} fog={false} />
+        <meshBasicMaterial map={arc.tex} color={color} transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} fog={false} {...arcFade} />
       </mesh>
     </>
   );
