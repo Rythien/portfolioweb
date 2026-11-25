@@ -38,28 +38,38 @@ export const CRYSTAL_MATERIAL = {
    * through the middle. drei's refraction blur is driven by roughness, so
    * this is what keeps the headline readable through the centre. */
   frostRimPower: 3,
-  /** Wet sheen on fresh faces. */
-  clearcoat: 0.6,
-  clearcoatRoughness: 0.1,
+  /** Wet sheen on fresh faces: hard, tight highlights. */
+  clearcoat: 1,
+  clearcoatRoughness: 0.03,
   distortion: 0.1,
   distortionScale: 0.2,
   temporalDistortion: 0.02,
   /** Refraction samples per pixel (drei recompiles per value). */
   samples: { intact: 8, shard: 3, seal: 4 },
   attenuationDistance: 5,
-  envMapIntensity: 1.0,
+  /** Up from 1: wet faces catch the studio cards as hard light. */
+  envMapIntensity: 1.5,
   /** Thin film: oil-slick streaks, masked to the crevices (inverse relief). */
-  iridescence: 0.3,
+  iridescence: 0.7,
   iridescenceIOR: 1.6,
   /** Film thickness in nm (three r187: separate min / max). */
   iridescenceThicknessMinimum: 180,
   iridescenceThicknessMaximum: 520,
-  /** The film also darkens the glass slightly where it sits. */
-  streakDarken: 0.32,
+  /** The film also darkens the glass where it sits, toward streakTint:
+   * up to streakDarken on faces turned up (world normal y over
+   * streakUpper), streakLower of that on the rest. The object's dark
+   * areas: brown-black oil slick on the upper faces. */
+  streakDarken: 0.97,
+  streakTint: "#24170e",
+  streakUpper: [0.05, 0.6] as [number, number],
+  streakLower: 0.35,
+  /** Of the darkening that upper faces get even outside the crevices:
+   * the slick is a film over the face, the crevices hold the most. */
+  streakBase: 0.7,
   /** Fresnel rim along the silhouette. */
   rim: { color: "#ffffff", power: 4, intensity: 0.7 },
   /** Internal cloud: ice is never optically empty. */
-  cloud: { scale: 0.82, opacity: 0.015 },
+  cloud: { scale: 0.82, opacity: 0.005 },
   /**
    * Glass that stays clear when the crystal is small on screen. Frost,
    * cloud and blur are surface effects with a fixed footprint, so at the
@@ -421,6 +431,12 @@ const shared: RimUniforms = {
 };
 
 const PATCHED = Symbol("crystalShader");
+const f4 = (n: number) => n.toFixed(4);
+/** streakTint as a GLSL vec3 (linear: the shader works in linear). */
+const STREAK_TINT = (() => {
+  const c = new THREE.Color(CRYSTAL_MATERIAL.streakTint);
+  return `vec3( ${f4(c.r)}, ${f4(c.g)}, ${f4(c.b)} )`;
+})();
 
 export interface RimOverride {
   color?: string;
@@ -500,15 +516,24 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
         `{
           vec3 rimView = isOrthographic ? vec3( 0.0, 0.0, 1.0 ) : normalize( vViewPosition );
           float rimF = pow( 1.0 - clamp( abs( dot( normalize( normal ), rimView ) ), 0.0, 1.0 ), rimPower );
+          float sk = 0.0;
           #ifdef USE_IRIDESCENCEMAP
-            gl_FragColor.rgb *= 1.0 - streakDarken * texture2D( iridescenceMap, vIridescenceMapUv ).r;
+            {
+              // Oil slick: darker and browner on the faces turned up
+              float upW = smoothstep( ${f4(CRYSTAL_MATERIAL.streakUpper[0])}, ${f4(CRYSTAL_MATERIAL.streakUpper[1])}, inverseTransformDirection( normal, viewMatrix ).y );
+              float crevice = texture2D( iridescenceMap, vIridescenceMapUv ).r;
+              float film = mix( crevice, mix( ${f4(CRYSTAL_MATERIAL.streakBase)}, 1.0, crevice ), upW );
+              sk = streakDarken * mix( ${f4(CRYSTAL_MATERIAL.streakLower)}, 1.0, upW ) * film;
+            }
           #endif
-          gl_FragColor.rgb += rimColor * rimF * rimIntensity;
+          // The film dulls the rim too: a white fresnel over it read grey
+          gl_FragColor.rgb += rimColor * rimF * rimIntensity * ( 1.0 - sk );
+          gl_FragColor.rgb = mix( gl_FragColor.rgb, gl_FragColor.rgb * ${STREAK_TINT}, sk );
         }
         #include <dithering_fragment>`,
       );
   };
   const baseKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v2`;
+  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v5`;
   material.needsUpdate = true;
 }
