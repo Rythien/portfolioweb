@@ -8,7 +8,9 @@
 //   node scripts/shot/void-record.mjs [base=http://localhost:3100] [--seconds=20] [--out=shots/void]
 //
 // Writes <out>/step1.webm, <out>/step1-still.png, and prints frame-time
-// percentiles, kills and hearts.
+// percentiles, rooms cleared, deaths and hearts. A cleared room is
+// restarted with R so the take keeps playing; a death is counted.
+// --size=WxH (default 1280x720).
 import { chromium } from "playwright";
 import { mkdirSync, renameSync, rmSync } from "fs";
 import { join } from "path";
@@ -19,15 +21,17 @@ const SECONDS = Number(args.find((a) => a.startsWith("--seconds="))?.slice(10) ?
 const OUT = args.find((a) => a.startsWith("--out="))?.slice(6) ?? "shots/void";
 /** --novideo: the same play without recording (frame times without the capture's cost). */
 const VIDEO = !args.includes("--novideo");
+/** --size=WxH: the viewport (and video) size. */
+const [VW, VH] = (args.find((a) => a.startsWith("--size="))?.slice(7) ?? "1280x720").split("x").map(Number);
 mkdirSync(OUT, { recursive: true });
 const tmp = join(OUT, "_video");
 rmSync(tmp, { recursive: true, force: true });
 
 const browser = await chromium.launch({ channel: "msedge", headless: true });
 const ctx = await browser.newContext({
-  viewport: { width: 1440, height: 900 },
+  viewport: { width: VW, height: VH },
   deviceScaleFactor: 1,
-  ...(VIDEO ? { recordVideo: { dir: tmp, size: { width: 1440, height: 900 } } } : {}),
+  ...(VIDEO ? { recordVideo: { dir: tmp, size: { width: VW, height: VH } } } : {}),
 });
 const page = await ctx.newPage();
 await page.goto(`${BASE}/?nopreload=1&mode=dream&dream=void`, { waitUntil: "load" });
@@ -54,13 +58,25 @@ async function hold(want) {
 const t0 = Date.now();
 let still = false;
 let mouseDown = false;
+let deaths = 0, clears = 0;
 while (Date.now() - t0 < SECONDS * 1000) {
   const s = await page.evaluate(() => {
     const w = window.__void.world;
     const p = w.player;
     const ds = w.drifters.filter((d) => d.alive && d.arrive <= 0).map((d) => [d.x, d.y]);
-    return { x: p.x, y: p.y, cd: p.dashCd, ds, down: p.down };
+    return { x: p.x, y: p.y, cd: p.dashCd, ds, phase: w.phase, hearts: p.hearts };
   });
+  // A cleared room: fall again (R) for a fresh wave, so the take keeps playing.
+  // A death is reported, not hidden, then R as well
+  if (s.phase !== "play") {
+    if (s.phase === "dead") deaths++;
+    else clears++;
+    await hold(new Set());
+    if (mouseDown) { await page.mouse.up(); mouseDown = false; }
+    await page.waitForTimeout(700); // let the card show on camera
+    await page.keyboard.press("KeyR");
+    continue;
+  }
   const want = new Set();
   let near = null, nd = 1e9;
   for (const [x, y] of s.ds) {
@@ -128,4 +144,4 @@ const r = (x) => x?.toFixed(1);
 console.log(VIDEO ? `recorded ${SECONDS}s -> ${join(OUT, "step1.webm")}` : `played ${SECONDS}s (no video)`);
 console.log(`frame interval (game + browser compositing): ${stats.frames} frames, ${r(stats.fps)} fps sustained; p50 ${r(stats.p50)} ms, p95 ${r(stats.p95)}, p99 ${r(stats.p99)}, max ${r(stats.max)}; ${stats.over20} over 20 ms`);
 console.log(`game work per frame (rules + draw + blit): p50 ${stats.w50.toFixed(2)} ms, p95 ${stats.w95.toFixed(2)}, p99 ${stats.w99.toFixed(2)}, max ${stats.wmax.toFixed(2)}`);
-console.log(`kills ${stats.kills}, hearts left ${stats.hearts}`);
+console.log(`rooms cleared ${clears}, deaths ${deaths}, kills this run ${stats.kills}, hearts left ${stats.hearts}`);
