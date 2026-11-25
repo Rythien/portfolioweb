@@ -92,6 +92,29 @@ export const CRYSTAL_MATERIAL = {
     blue: "#08133a",
     opacity: 0.96,
   },
+  /**
+   * Hard speculars: narrow lights fixed in view space (the camera is
+   * fixed, so they stay where the art direction puts them), added in the
+   * shader on top of drei's soft environment sheen. The power keeps them
+   * small, and the frost normal map breaks them into glints. (At 700 a
+   * flat face had to line up within a few degrees: almost never.)
+   * Upper EDGES: where the geometric normal changes across the pixel
+   * quad (fwidth: a crease, never a flat face) on an upward-facing
+   * crease, a hard white line. A grazing-angle term lit whole faces grey.
+   */
+  speculars: {
+    power: 160,
+    lights: [
+      { dir: [-0.35, 0.8, 0.5] as [number, number, number], intensity: 5 },
+      { dir: [0.55, 0.6, 0.55] as [number, number, number], intensity: 3 },
+      { dir: [0.0, 0.35, 0.95] as [number, number, number], intensity: 2.5 },
+    ],
+    /** fwidth(normal) range that counts as a crease. */
+    edge: [0.12, 0.4] as [number, number],
+    /** World-up range of the crease's normal that lights it. */
+    edgeUp: [0.0, 0.5] as [number, number],
+    edgeIntensity: 2.2,
+  },
   /** Internal cloud: ice is never optically empty. */
   cloud: { scale: 0.82, opacity: 0.005 },
   /**
@@ -540,6 +563,13 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
   const base = material.onBeforeCompile.bind(material);
   const V = CRYSTAL_MATERIAL.veins;
   const vSide = new THREE.Vector3(...V.side).normalize().toArray();
+  const S = {
+    ...CRYSTAL_MATERIAL.speculars,
+    lights: CRYSTAL_MATERIAL.speculars.lights.map((l) => ({
+      ...l,
+      dir: new THREE.Vector3(...l.dir).normalize().toArray() as [number, number, number],
+    })),
+  };
   material.onBeforeCompile = (shader, renderer) => {
     base(shader, renderer);
     Object.assign(shader.uniforms, rimUniforms(rim));
@@ -594,12 +624,29 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
             vec3 veinCol = mix( ${glslVec3(V.brown)}, ${glslVec3(V.blue)}, smoothstep( 0.35, 0.65, cNoise( vp * 1.1 + 7.0 ) ) );
             gl_FragColor.rgb = mix( gl_FragColor.rgb, veinCol, vm * ${f4(V.opacity)} );
           }
+          {
+            // Hard speculars: narrow lights in view space, so wet faces and
+            // upper edges catch small blown-out highlights (on veins too)
+            vec3 sN = normalize( normal );
+            vec3 sV = isOrthographic ? vec3( 0.0, 0.0, 1.0 ) : normalize( vViewPosition );
+            float spec = 0.0;
+            ${S.lights
+              .map(
+                (l) =>
+                  `spec += ${f4(l.intensity)} * pow( max( dot( sN, normalize( ${glslVec3(l.dir)} + sV ) ), 0.0 ), ${f4(S.power)} );`,
+              )
+              .join("\n            ")}
+            vec3 gN = normalize( vNormal );
+            float crease = smoothstep( ${f4(S.edge[0])}, ${f4(S.edge[1])}, length( fwidth( gN ) ) );
+            float glint = crease * smoothstep( ${f4(S.edgeUp[0])}, ${f4(S.edgeUp[1])}, inverseTransformDirection( gN, viewMatrix ).y );
+            gl_FragColor.rgb += vec3( spec + glint * ${f4(S.edgeIntensity)} );
+          }
         }
         ${GLASS_MATTE ? "gl_FragColor = vec4( 1.0, 0.0, 1.0, 1.0 );" : ""}
         #include <dithering_fragment>`,
       );
   };
   const baseKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v6${GLASS_MATTE ? "|matte" : ""}`;
+  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v8${GLASS_MATTE ? "|matte" : ""}`;
   material.needsUpdate = true;
 }
