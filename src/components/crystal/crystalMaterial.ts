@@ -68,6 +68,30 @@ export const CRYSTAL_MATERIAL = {
   streakBase: 0.7,
   /** Fresnel rim along the silhouette. */
   rim: { color: "#ffffff", power: 4, intensity: 0.7 },
+  /**
+   * Veins: opaque brown-black and deep-blue sheets through the body, the
+   * object's darkest values (the reference spans near-black to blown
+   * white; clear glass alone only spans the pale end). A warped ridged
+   * noise in object space, so they stay put as it turns: thin veins where
+   * the ridge passes `vein`, broad sheets where a second field passes
+   * `sheet`, both weighted toward `side` so they gather off-centre.
+   * Tuned against scripts/verify/crystal-values.mjs.
+   */
+  veins: {
+    scale: 1.5,
+    /** Per-axis stretch of the field (object space): long thin planes,
+     * not blotches. Large on one axis = compressed across it. */
+    stretch: [0.55, 2.4, 0.8] as [number, number, number],
+    warp: 0.45,
+    vein: [0.79, 0.86] as [number, number],
+    sheet: [0.56, 0.6] as [number, number],
+    /** Object-space direction they gather toward, and the falloff (dot). */
+    side: [0.6, 0.35, 0.72] as [number, number, number],
+    sideFalloff: [-0.2, 0.4] as [number, number],
+    brown: "#1a1009",
+    blue: "#08133a",
+    opacity: 0.96,
+  },
   /** Internal cloud: ice is never optically empty. */
   cloud: { scale: 0.82, opacity: 0.005 },
   /**
@@ -445,6 +469,21 @@ const STREAK_TINT = (() => {
   const c = new THREE.Color(CRYSTAL_MATERIAL.streakTint);
   return `vec3( ${f4(c.r)}, ${f4(c.g)}, ${f4(c.b)} )`;
 })();
+/** A colour (hex: converted to linear) or a raw triple as a GLSL vec3. */
+const glslVec3 = (c: string | [number, number, number]) => {
+  const v = typeof c === "string" ? new THREE.Color(c).toArray() : c;
+  return `vec3( ${v.map(f4).join(", ")} )`;
+};
+/** Hash value noise + fbm in GLSL, for object-space fields (veins, wear). */
+const NOISE_GLSL = `
+float cHash( vec3 p ) { p = fract( p * 0.3183099 + 0.1 ); p *= 17.0; return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) ); }
+float cNoise( vec3 x ) {
+  vec3 i = floor( x ); vec3 f = fract( x ); f = f * f * ( 3.0 - 2.0 * f );
+  return mix( mix( mix( cHash( i ), cHash( i + vec3( 1.0, 0.0, 0.0 ) ), f.x ), mix( cHash( i + vec3( 0.0, 1.0, 0.0 ) ), cHash( i + vec3( 1.0, 1.0, 0.0 ) ), f.x ), f.y ),
+              mix( mix( cHash( i + vec3( 0.0, 0.0, 1.0 ) ), cHash( i + vec3( 1.0, 0.0, 1.0 ) ), f.x ), mix( cHash( i + vec3( 0.0, 1.0, 1.0 ) ), cHash( i + vec3( 1.0, 1.0, 1.0 ) ), f.x ), f.y ), f.z );
+}
+float cFbm( vec3 p ) { float a = 0.5, s = 0.0; for ( int i = 0; i < 4; i++ ) { s += a * cNoise( p ); p *= 2.03; a *= 0.5; } return s / 0.9375; }
+`;
 
 export interface RimOverride {
   color?: string;
@@ -499,13 +538,19 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
   const mtm = material as THREE.Material & { uniforms?: { buffer?: unknown }; defines?: Record<string, string> };
   if (mtm.uniforms?.buffer !== undefined) mtm.defines = { ...(mtm.defines ?? {}), USE_TRANSMISSION: "" };
   const base = material.onBeforeCompile.bind(material);
+  const V = CRYSTAL_MATERIAL.veins;
+  const vSide = new THREE.Vector3(...V.side).normalize().toArray();
   material.onBeforeCompile = (shader, renderer) => {
     base(shader, renderer);
     Object.assign(shader.uniforms, rimUniforms(rim));
+    // Object-space surface position: fields that stay on the crystal as it turns
+    shader.vertexShader = shader.vertexShader
+      .replace("void main() {", "varying vec3 vCrystalObj;\nvoid main() {")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCrystalObj = position;");
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "void main() {",
-        "uniform vec3 rimColor;\nuniform float rimPower;\nuniform float rimIntensity;\nuniform float streakDarken;\nuniform float frostRimPower;\nuniform float clearRoughness;\nvoid main() {",
+        `uniform vec3 rimColor;\nuniform float rimPower;\nuniform float rimIntensity;\nuniform float streakDarken;\nuniform float frostRimPower;\nuniform float clearRoughness;\nvarying vec3 vCrystalObj;\n${NOISE_GLSL}\nvoid main() {`,
       )
       .replace(
         "#include <roughnessmap_fragment>",
@@ -537,12 +582,24 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
           // The film dulls the rim too: a white fresnel over it read grey
           gl_FragColor.rgb += rimColor * rimF * rimIntensity * ( 1.0 - sk );
           gl_FragColor.rgb = mix( gl_FragColor.rgb, gl_FragColor.rgb * ${STREAK_TINT}, sk );
+          {
+            // Veins: opaque dark sheets through the body, gathered off-centre
+            vec3 vp = vCrystalObj * ${f4(V.scale)} * ${glslVec3(V.stretch)};
+            vec3 wp = vp + ${f4(V.warp)} * vec3( cFbm( vp * 1.3 + 11.0 ), cFbm( vp * 1.3 + 23.0 ), cFbm( vp * 1.3 + 37.0 ) );
+            float ridge = 1.0 - abs( 2.0 * cFbm( wp ) - 1.0 );
+            float veinM = smoothstep( ${f4(V.vein[0])}, ${f4(V.vein[1])}, ridge );
+            float sheetM = smoothstep( ${f4(V.sheet[0])}, ${f4(V.sheet[1])}, cFbm( wp * 0.6 + 3.0 ) );
+            float sideW = smoothstep( ${f4(V.sideFalloff[0])}, ${f4(V.sideFalloff[1])}, dot( normalize( vCrystalObj + 1e-4 ), ${glslVec3(vSide as [number, number, number])} ) );
+            float vm = max( veinM, sheetM ) * sideW;
+            vec3 veinCol = mix( ${glslVec3(V.brown)}, ${glslVec3(V.blue)}, smoothstep( 0.35, 0.65, cNoise( vp * 1.1 + 7.0 ) ) );
+            gl_FragColor.rgb = mix( gl_FragColor.rgb, veinCol, vm * ${f4(V.opacity)} );
+          }
         }
         ${GLASS_MATTE ? "gl_FragColor = vec4( 1.0, 0.0, 1.0, 1.0 );" : ""}
         #include <dithering_fragment>`,
       );
   };
   const baseKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v5${GLASS_MATTE ? "|matte" : ""}`;
+  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v6${GLASS_MATTE ? "|matte" : ""}`;
   material.needsUpdate = true;
 }
