@@ -431,6 +431,14 @@ const shared: RimUniforms = {
 };
 
 const PATCHED = Symbol("crystalShader");
+/**
+ * Test-only (crystalview=matte; the UI never sets it): every crystal glass
+ * fragment paints flat magenta, so a test finds the glass's exact on-screen
+ * silhouette (scripts/verify/crystal-values.mjs samples the real frame
+ * inside it). Read once; it is part of the program key.
+ */
+const GLASS_MATTE =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("crystalview") === "matte";
 const f4 = (n: number) => n.toFixed(4);
 /** streakTint as a GLSL vec3 (linear: the shader works in linear). */
 const STREAK_TINT = (() => {
@@ -530,10 +538,11 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
           gl_FragColor.rgb += rimColor * rimF * rimIntensity * ( 1.0 - sk );
           gl_FragColor.rgb = mix( gl_FragColor.rgb, gl_FragColor.rgb * ${STREAK_TINT}, sk );
         }
+        ${GLASS_MATTE ? "gl_FragColor = vec4( 1.0, 0.0, 1.0, 1.0 );" : ""}
         #include <dithering_fragment>`,
       );
   };
   const baseKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v5`;
+  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v5${GLASS_MATTE ? "|matte" : ""}`;
   material.needsUpdate = true;
 }
