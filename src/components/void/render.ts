@@ -305,7 +305,7 @@ export function drawWorld(x: CanvasRenderingContext2D, w: World, A: Atlas, amb: 
 
   // Shadows under everything standing
   for (const d of w.drifters) if (d.alive && d.arrive <= 0) x.drawImage(A.shadow, Math.round(d.x - 6), Math.round(d.y - 1));
-  if (p.down < 0) x.drawImage(A.shadow, Math.round(p.x - 6), Math.round(p.y - 1));
+  if (w.phase !== "dead") x.drawImage(A.shadow, Math.round(p.x - 6), Math.round(p.y - 1));
 
   // Trail: fading diamonds at the gem's recent positions; afterimages in a dash
   const dashing = isDashing(p);
@@ -386,7 +386,7 @@ export function drawWorld(x: CanvasRenderingContext2D, w: World, A: Atlas, amb: 
   if (amb.wasCooling && !cooling) amb.readyBlink = 0.08;
   amb.wasCooling = cooling;
   amb.readyBlink = Math.max(0, amb.readyBlink - dt);
-  if (p.down < 0 && (cooling || amb.readyBlink > 0)) {
+  if (w.phase === "play" && (cooling || amb.readyBlink > 0)) {
     const k = cooling ? 1 - p.dashCd / TUNE.dash.cooldown : 1;
     x.fillStyle = cooling ? COLOR.energy1 : COLOR.white;
     x.globalAlpha = cooling ? 0.85 : 1;
@@ -396,18 +396,22 @@ export function drawWorld(x: CanvasRenderingContext2D, w: World, A: Atlas, amb: 
 
   x.restore();
 
+  // Over: the arena dims behind the shell's card (death darker than a clear)
+  if (w.phase !== "play") {
+    x.globalAlpha = Math.min(1, w.endT / TUNE.death.fade) * (w.phase === "dead" ? 0.6 : 0.35);
+    x.fillStyle = COLOR.void0;
+    x.fillRect(0, 0, VIEW.w, VIEW.h);
+    x.globalAlpha = 1;
+  }
+
   // Hearts (screen-fixed)
   for (let i = 0; i < TUNE.hurt.hearts; i++) x.drawImage(i < p.hearts ? A.heart : A.heartEmpty, 10 + i * 9, 10);
 }
 
 function drawGem(x: CanvasRenderingContext2D, w: World, A: Atlas): void {
   const p = w.player;
-  if (p.down >= 0) {
-    x.globalAlpha = Math.max(0, 1 - p.down * 2);
-    x.drawImage(A.gemGhost, Math.round(p.x - 6), Math.round(p.y - 14));
-    x.globalAlpha = 1;
-    return;
-  }
+  // Dead: the gem has shattered into chips (engine die()); the card takes over
+  if (w.phase === "dead") return;
   // Hurt: blink through the invulnerability
   if (p.invuln > 0 && Math.floor(p.invuln * 18) % 2 === 1) return;
   const bob = isDashing(p) ? 0 : Math.round(Math.sin(w.t * 5) * 1);

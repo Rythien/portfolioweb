@@ -42,6 +42,8 @@ export const TUNE = {
   },
   hurt: { invuln: 0.8, knockback: 170, knockDecay: 14, hearts: 3 },
   feel: { hitStop: 0.06, shake: 2, shakeTime: 0.12 },
+  /** The last heart: a longer hit-stop, then the arena freezes and fades. */
+  death: { hitStop: 0.12, fade: 0.5 },
   drifter: {
     speed: 26,
     /** Telegraph before a drifter can move or hurt: a contracting ring. */
@@ -52,7 +54,8 @@ export const TUNE = {
     space: 11,
     flash: 0.05,
   },
-  spawn: { first: 6, wave: 5, every: 3.6, maxAlive: 14, minDist: 80 },
+  /** Step 1: ONE fixed wave per room, cleared to finish it (no trickle). */
+  spawn: { wave: 8, minDist: 80 },
 } as const;
 
 /** The gem's collision: feet half-extents (px). */
@@ -195,9 +198,14 @@ export interface Player {
   invuln: number;
   kbX: number;
   kbY: number;
-  /** Seconds since knocked out (step 1: the room restarts). */
-  down: number;
 }
+
+/**
+ * Where a run stands. "dead": the last heart is gone; the arena is frozen
+ * and the shell shows YOU WOKE (R falls again, Escape wakes). "clear":
+ * the wave is cleared. Nothing ever leaves the gem gone in "play".
+ */
+export type Phase = "play" | "dead" | "clear";
 
 export const TRAIL = 6;
 export const MAX_DRIFTERS = 40;
@@ -215,7 +223,11 @@ export interface World {
   trailClock: number;
   hitStop: number;
   shake: number;
-  spawnClock: number;
+  phase: Phase;
+  /** Seconds in the current phase once it is not "play" (drives the fade). */
+  endT: number;
+  /** The room this run reached (step 1 has one). */
+  roomReached: number;
   kills: number;
   hits: number;
   random: () => number;
@@ -227,7 +239,7 @@ function freshPlayer(room: Room): Player {
   return {
     x: room.spawnX, y: room.spawnY, vx: 0, vy: 0, faceX: 1, faceY: 0,
     dashAge: -1, dashX: 1, dashY: 0, dashCd: 0, atkCd: 0, atkAge: 99, atkX: 1, atkY: 0,
-    squash: 0, hearts: TUNE.hurt.hearts, invuln: 0, kbX: 0, kbY: 0, down: -1,
+    squash: 0, hearts: TUNE.hurt.hearts, invuln: 0, kbX: 0, kbY: 0,
   };
 }
 
@@ -246,18 +258,39 @@ export function createWorld(seed = 1, reduced = false): World {
     trailClock: 0,
     hitStop: 0,
     shake: 0,
-    spawnClock: 0,
+    phase: "play",
+    endT: 0,
+    roomReached: 1,
     kills: 0,
     hits: 0,
     random: rng(seed * 7919 + 3),
     reduced,
   };
+  resetTrail(w);
+  spawnWave(w, TUNE.spawn.wave);
+  return w;
+}
+
+function resetTrail(w: World): void {
   for (let i = 0; i < TRAIL; i++) {
     w.trail[i * 2] = w.player.x;
     w.trail[i * 2 + 1] = w.player.y;
   }
-  spawnWave(w, TUNE.spawn.first);
-  return w;
+}
+
+/** R ("fall again"): a fresh run of the room, same world objects (no allocation churn). */
+export function restart(w: World): void {
+  Object.assign(w.player, freshPlayer(w.room));
+  for (const d of w.drifters) d.alive = false;
+  for (const q of w.particles) q.alive = false;
+  w.phase = "play";
+  w.endT = 0;
+  w.hitStop = 0;
+  w.shake = 0;
+  w.kills = 0;
+  w.hits = 0;
+  resetTrail(w);
+  spawnWave(w, TUNE.spawn.wave);
 }
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -314,6 +347,11 @@ export function spawnWave(w: World, count: number): void {
 function killDrifter(w: World, d: Drifter): void {
   d.alive = false;
   w.kills++;
+  // The wave is the room: the last one down clears it
+  if (!w.drifters.some((o) => o.alive)) {
+    w.phase = "clear";
+    w.endT = 0;
+  }
   // Chips: ice and energy, flung outward, slowed by friction
   for (let i = 0; i < 9; i++) {
     const a = w.random() * Math.PI * 2;
@@ -333,7 +371,21 @@ function hurt(w: World, fromX: number, fromY: number): void {
   p.kbY = (dy / l) * TUNE.hurt.knockback;
   w.shake = Math.max(w.shake, TUNE.feel.shakeTime * 1.5);
   w.hitStop = TUNE.feel.hitStop;
-  if (p.hearts <= 0) p.down = 0;
+  if (p.hearts <= 0) die(w);
+}
+
+/** The last heart: the gem shatters, the world holds, then freezes. */
+function die(w: World): void {
+  const p = w.player;
+  w.phase = "dead";
+  w.endT = 0;
+  w.hitStop = TUNE.death.hitStop;
+  p.kbX = p.kbY = 0;
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2 + w.random() * 0.3;
+    const s = 50 + w.random() * 110;
+    emit(w, Kind.Chip, p.x, p.y - 7, Math.cos(a) * s, Math.sin(a) * s - 25, 0.5 + w.random() * 0.4, i % 2 ? 3 : 1, 5);
+  }
 }
 
 /* ── The step ──────────────────────────────────────────────────── */
@@ -348,15 +400,10 @@ export function step(w: World, dt: number, input: Input): void {
   w.shake = Math.max(0, w.shake - dt);
   const p = w.player;
 
-  // Knocked out: step 1 restarts the room after a beat
-  if (p.down >= 0) {
-    p.down += dt;
-    if (p.down > 1.2) {
-      Object.assign(p, freshPlayer(w.room));
-      for (const d of w.drifters) d.alive = false;
-      w.spawnClock = 0;
-      spawnWave(w, TUNE.spawn.first);
-    }
+  // Over (dead or cleared): the arena holds still; only the last chips
+  // settle. The shell's card is the way on (R) or out (Escape)
+  if (w.phase !== "play") {
+    w.endT += dt;
     stepParticles(w, dt);
     return;
   }
@@ -428,15 +475,6 @@ export function step(w: World, dt: number, input: Input): void {
 
   stepDrifters(w, dt);
   stepParticles(w, dt);
-
-  // Waves keep coming (step 1 has no doorway yet)
-  w.spawnClock += dt;
-  if (w.spawnClock >= TUNE.spawn.every) {
-    w.spawnClock = 0;
-    let alive = 0;
-    for (const d of w.drifters) if (d.alive) alive++;
-    if (alive < TUNE.spawn.maxAlive) spawnWave(w, Math.min(TUNE.spawn.wave, TUNE.spawn.maxAlive - alive));
-  }
 }
 
 function attack(w: World, input: Input): void {
@@ -510,7 +548,7 @@ function stepDrifters(w: World, dt: number): void {
     d.x += vx * dt;
     d.y += vy * dt;
     // Contact
-    if (l < TOUCH && !isInvulnerable(p) && p.down < 0) {
+    if (l < TOUCH && !isInvulnerable(p) && w.phase === "play") {
       hurt(w, d.x, d.y);
       d.x -= (dx / l) * 10;
       d.y -= (dy / l) * 10;

@@ -1,15 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TUNE, createWorld, iceAt, isInvulnerable, step, type Input, type World } from "./engine.ts";
+import { TUNE, createWorld, iceAt, isInvulnerable, restart, step, type Input, type World } from "./engine.ts";
 
 const DT = 1 / 120;
 const idle = (): Input => ({ mx: 0, my: 0, dash: false, attack: false, aimX: 0, aimY: 0 });
 
-/** A world with no drifters (so nothing interferes). */
+/** A world with no drifters in reach (so nothing interferes). One far-off,
+ * still-telegraphing drifter stays alive so the arena never reads as cleared. */
 function empty(seed = 1): World {
   const w = createWorld(seed);
   for (const d of w.drifters) d.alive = false;
-  w.spawnClock = -1e9; // no waves
+  Object.assign(w.drifters[w.drifters.length - 1], { alive: true, x: -500, y: -500, arrive: 1e9 });
   return w;
 }
 
@@ -125,4 +126,53 @@ test("a dash's i-frames pass through a drifter unharmed", () => {
   step(w, DT, { ...idle(), mx: 1, dash: true });
   run(w, 0.1, { mx: 1 });
   assert.equal(w.player.hearts, TUNE.hurt.hearts);
+});
+
+const alive = (w: World) => w.drifters.filter((d) => d.alive).length;
+
+test("a room is ONE wave of 8: nobody trickles in, however long you wait", () => {
+  const w = createWorld(1);
+  assert.equal(alive(w), TUNE.spawn.wave);
+  // 20 s of walking and dashing about without attacking
+  for (let i = 0; i < 200 && w.phase === "play"; i++) {
+    step(w, DT, { ...idle(), mx: i % 40 < 20 ? 1 : -1, dash: i % 10 === 0 });
+    run(w, 0.1, { mx: i % 40 < 20 ? 1 : -1 });
+  }
+  assert.ok(alive(w) <= TUNE.spawn.wave, `${alive(w)} drifters`);
+});
+
+test("the last heart ends the run: phase dead, arena frozen, never a running world with no gem", () => {
+  const w = createWorld(1);
+  w.player.hearts = 1;
+  const d = w.drifters.find((q) => q.alive)!;
+  Object.assign(d, { x: w.player.x + 5, y: w.player.y, arrive: 0 });
+  step(w, DT, idle());
+  assert.equal(w.phase, "dead");
+  assert.equal(w.hitStop, TUNE.death.hitStop);
+  const pos = w.drifters.filter((q) => q.alive).map((q) => q.x + "," + q.y).join(" ");
+  run(w, 3);
+  assert.equal(w.drifters.filter((q) => q.alive).map((q) => q.x + "," + q.y).join(" "), pos, "drifters moved after death");
+  assert.equal(w.phase, "dead", "death is a state, not a timer: it waits for R or Escape");
+  assert.ok(w.endT > 2.5);
+});
+
+test("R (restart) gives a fresh run: full hearts, a new wave of 8, phase play", () => {
+  const w = createWorld(1);
+  w.player.hearts = 0;
+  w.phase = "dead";
+  restart(w);
+  assert.equal(w.phase, "play");
+  assert.equal(w.player.hearts, TUNE.hurt.hearts);
+  assert.equal(alive(w), TUNE.spawn.wave);
+  assert.equal(w.kills, 0);
+});
+
+test("killing the whole wave clears the room", () => {
+  const w = createWorld(1);
+  for (const d of w.drifters) if (d.alive) Object.assign(d, { x: w.player.x + 20, y: w.player.y, arrive: 0 });
+  w.player.faceX = 1;
+  w.player.faceY = 0;
+  step(w, DT, { ...idle(), attack: true });
+  assert.equal(alive(w), 0);
+  assert.equal(w.phase, "clear");
 });

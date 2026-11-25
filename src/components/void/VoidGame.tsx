@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { VIEW, createWorld, step, type Input, type World } from "./engine";
+import { TUNE, VIEW, createWorld, restart, step, type Input, type Phase, type World } from "./engine";
 import { COLOR, buildAtlas, createAmbient, drawWorld } from "./render";
 
 /**
@@ -46,6 +46,15 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   const wakeFn = useRef(onWake);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
+  /** The run's phase, mirrored for the card (set only when it changes). */
+  const [phase, setPhase] = useState<Phase>("play");
+  const [stats, setStats] = useState({ room: 1, kills: 0 });
+  /** Counts phase changes, so a second death waits for its own fade. */
+  const [endKey, setEndKey] = useState(0);
+  const [shownKey, setShownKey] = useState(-1);
+  const worldRef = useRef<World | null>(null);
+  const reducedRef = useRef(false);
+  const fallAgainRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     activeRef.current = active;
@@ -63,6 +72,9 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     if (!cvs) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const world: World = createWorld(1, reduced);
+    worldRef.current = world;
+    reducedRef.current = reduced;
+    let lastPhase: Phase = "play";
     const atlas = buildAtlas(world.room);
     const amb = createAmbient();
     const off = document.createElement("canvas");
@@ -144,6 +156,12 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         return;
       }
       resume();
+      // R: fall again, from the card (dead or cleared)
+      if (e.code === "KeyR" && world.phase !== "play") {
+        e.preventDefault();
+        restart(world);
+        return;
+      }
       if (e.code in MOVE_KEYS || e.code === "Space" || e.code === "KeyJ") e.preventDefault();
       if (e.code === "Space" && !e.repeat) dashLatch = true;
       held.add(e.code);
@@ -215,6 +233,12 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         }
         step(world, dt, input);
       }
+      if (world.phase !== lastPhase) {
+        lastPhase = world.phase;
+        setPhase(world.phase);
+        setStats({ room: world.roomReached, kills: world.kills });
+        setEndKey((k) => k + 1);
+      }
       drawWorld(octx, world, atlas, amb, playing ? dt : 0);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(off, view.dx, view.dy, view.dw, view.dh);
@@ -235,6 +259,25 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       delete hook.__void;
     };
   }, []);
+
+  // The end card arrives once the arena has dimmed (at once under reduced
+  // motion), and takes focus so Enter / Space work on it as well as R / Esc
+  useEffect(() => {
+    if (phase === "play") return;
+    const id = window.setTimeout(() => {
+      setShownKey(endKey);
+      fallAgainRef.current?.focus({ preventScroll: true });
+    }, reducedRef.current ? 0 : TUNE.death.fade * 1000);
+    return () => window.clearTimeout(id);
+  }, [phase, endKey]);
+  const cardOn = phase !== "play" && shownKey === endKey;
+
+  const fallAgain = () => {
+    const w = worldRef.current;
+    if (!w || w.phase === "play") return;
+    restart(w);
+    stageRef.current?.focus({ preventScroll: true });
+  };
 
   const wakeFromButton = () => {
     const r = wakeRef.current?.getBoundingClientRect();
@@ -279,6 +322,42 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       <p className="pointer-events-none absolute bottom-[max(1.6rem,calc(env(safe-area-inset-bottom)+1.1rem))] left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-label uppercase tracking-[0.2em] text-white/60">
         W A S D move · Space dash · J / click attack · Esc wake
       </p>
+
+      {phase !== "play" && (
+        <div
+          role="dialog"
+          aria-labelledby="void-end-title"
+          aria-describedby="void-end-detail"
+          className="absolute inset-0 grid place-items-center transition-opacity duration-300 ease-out motion-reduce:transition-none"
+          style={{ opacity: cardOn ? 1 : 0, pointerEvents: cardOn ? "auto" : "none" }}
+        >
+          <div className="flex flex-col items-center gap-5 text-center">
+            <h2 id="void-end-title" className="font-mono text-[clamp(1.75rem,3.2vw,2.75rem)] uppercase tracking-[0.3em] text-white">
+              {phase === "dead" ? "You woke" : "Room clear"}
+            </h2>
+            <p id="void-end-detail" className="font-mono text-label uppercase tracking-[0.2em] text-white/70">
+              {phase === "dead" ? `Room ${stats.room} reached · ${stats.kills} shattered` : `All ${stats.kills} drifters shattered`}
+            </p>
+            <div className="mt-2 flex gap-3">
+              <button
+                ref={fallAgainRef}
+                type="button"
+                onClick={fallAgain}
+                className="pressable min-h-11 rounded-full border border-white/40 bg-white/10 px-5 font-mono text-label uppercase tracking-[0.16em] text-white focus-visible:outline-offset-4"
+              >
+                R · Fall again
+              </button>
+              <button
+                type="button"
+                onClick={wakeFromButton}
+                className="pressable min-h-11 rounded-full border border-white/25 bg-white/5 px-5 font-mono text-label uppercase tracking-[0.16em] text-white/85 focus-visible:outline-offset-4"
+              >
+                Esc · Wake
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {paused && (
         <p className="pointer-events-none absolute inset-0 grid place-items-center font-mono text-label uppercase tracking-[0.2em] text-white/85">
