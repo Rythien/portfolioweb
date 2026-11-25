@@ -24,8 +24,9 @@ export const CRYSTAL_MATERIAL = {
   /** Shards are optically thinner (thickness is the one value they may
    * change): at full ratio their refraction smeared the logo inside. */
   shardThicknessScale: 0.35,
-  /** Ice disperses far less than a prism. */
-  chromaticAberration: 0.045,
+  /** A thin chromatic fringe where the clear body bends the headline
+   * (0.045 was invisible; ice disperses less than a prism, so thin). */
+  chromaticAberration: 0.14,
   /** Low: the bent letters stay sharp (it grows with thickness). */
   anisotropicBlur: 0.02,
   /** 1, so the roughness map (roughnessRange) gives the final values. */
