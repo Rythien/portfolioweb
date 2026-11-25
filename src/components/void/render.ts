@@ -5,28 +5,19 @@
  * the island from the room's tiles. Built once; nothing is allocated per
  * frame.
  *
- * Palette (DREAM): void #07062B..#1a1050, energy #4b32b8 / #8f7bff, ice
- * #cfe3ea / #e4dcff, danger #ff5c7a.
+ * Palette (palette.ts): a dark void, a dark dithered violet floor, pale
+ * ice only as lit accents (north rims, cliff lips, icicles), violet
+ * enemies outlined dark, and the gem, white, the brightest thing there.
  */
 import {
   COLS, Kind, ROWS, TILE, TRAIL, TUNE, VIEW, isDashing, shakeOffset,
   type Room, type World,
 } from "./engine";
+import { COLOR } from "./palette";
 
-export const COLOR = {
-  void0: "#07062B",
-  void1: "#1a1050",
-  deep: "#2c1d80",
-  energy0: "#4b32b8",
-  energy1: "#8f7bff",
-  ice0: "#cfe3ea",
-  ice1: "#e4dcff",
-  white: "#ffffff",
-  danger: "#ff5c7a",
-  dangerHot: "#ffe0e6",
-} as const;
+export { COLOR };
 
-/** Particle palette, indexed by Particle.color. */
+/** Particle palette, indexed by Particle.color (3, white, is only the gem's own shatter). */
 const PARTICLE = [COLOR.ice0, COLOR.ice1, COLOR.energy1, COLOR.white] as const;
 
 /* ── Sprites from pixel maps ───────────────────────────────────── */
@@ -63,18 +54,20 @@ function silhouette(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
   return c;
 }
 
+// White, lit from the top left (W), pale ice facets below (a, c), inside a
+// dark 1 px outline that separates it from any tile
 const GEM = [
   ".....OO.....",
-  "....OaaO....",
-  "...OaWabO...",
-  "..OaaaabbO..",
-  ".OaaaaabbbO.",
-  "OaaaaaabbbbO",
-  "OccccccddddO",
-  ".OcccccdddO.",
-  "..OccccddO..",
-  "...OcccdO...",
-  "....OcdO....",
+  "....OWWO....",
+  "...OWWWaO...",
+  "..OWWWWaaO..",
+  ".OWWWWWaaaO.",
+  "OWWWWWWaaaaO",
+  "OaaaaaaccccO",
+  ".OaaaaacccO.",
+  "..OaaaaccO..",
+  "...OaaacO...",
+  "....OacO....",
   ".....OO.....",
 ];
 const DRIFTER = [
@@ -101,6 +94,7 @@ const HEART = [
 
 export interface Atlas {
   gem: HTMLCanvasElement;
+  gemGlow: HTMLCanvasElement;
   gemGhost: HTMLCanvasElement;
   drifter: HTMLCanvasElement;
   drifterFlash: HTMLCanvasElement;
@@ -112,11 +106,10 @@ export interface Atlas {
 }
 
 export function buildAtlas(room: Room): Atlas {
-  const gem = sprite(GEM, {
-    O: COLOR.void1, a: COLOR.ice1, b: COLOR.ice0, W: COLOR.white, c: COLOR.energy1, d: COLOR.energy0,
-  });
+  const gem = sprite(GEM, { O: COLOR.void0, W: COLOR.white, a: COLOR.ice1, c: COLOR.ice0 });
+  // Violet body, shaded, a dark outline; the danger eye is the read
   const drifter = sprite(DRIFTER, {
-    O: COLOR.void0, v: COLOR.energy0, s: COLOR.deep, h: COLOR.energy1, p: COLOR.danger, P: COLOR.dangerHot,
+    O: COLOR.void0, v: COLOR.energy1, s: COLOR.energy0, h: COLOR.energy1, p: COLOR.danger, P: COLOR.dangerHot,
   });
   const heart = sprite(HEART, { h: COLOR.danger, H: COLOR.dangerHot });
   const shadow = canvas(12, 4);
@@ -128,6 +121,7 @@ export function buildAtlas(room: Room): Atlas {
   }
   return {
     gem,
+    gemGlow: buildGlow(),
     gemGhost: silhouette(gem, COLOR.energy1),
     drifter,
     drifterFlash: silhouette(drifter, COLOR.white),
@@ -139,16 +133,41 @@ export function buildAtlas(room: Room): Atlas {
   };
 }
 
-/** The void: a vertical fall from #07062B into #1a1050. */
+/** The void: flat, the darkest value on screen (no smooth gradient: pixels only). */
 function buildSky(): HTMLCanvasElement {
   const c = canvas(VIEW.w, VIEW.h);
   const x = c.getContext("2d")!;
-  const g = x.createLinearGradient(0, 0, 0, VIEW.h);
-  g.addColorStop(0, COLOR.void0);
-  g.addColorStop(1, COLOR.void1);
-  x.fillStyle = g;
+  x.fillStyle = COLOR.void0;
   x.fillRect(0, 0, VIEW.w, VIEW.h);
   return c;
+}
+
+/** The gem's faint glow: soft pixel rings of energy violet, drawn behind it. */
+function buildGlow(): HTMLCanvasElement {
+  const c = canvas(24, 24);
+  const x = c.getContext("2d")!;
+  x.fillStyle = COLOR.energy1;
+  for (let j = 0; j < 24; j++)
+    for (let i = 0; i < 24; i++) {
+      const d = Math.hypot(i + 0.5 - 12, (j + 0.5 - 12) * 1.15);
+      const a = d < 7 ? 0.38 : d < 9.5 ? 0.2 : d < 11.5 ? 0.08 : 0;
+      if (!a) continue;
+      x.globalAlpha = a;
+      x.fillRect(i, j, 1, 1);
+    }
+  return c;
+}
+
+/** 4x4 ordered (Bayer) dither thresholds, 0..15. */
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+/** Smooth 2D value noise in [0, 1], the floor's dither field. */
+function noise2(x: number, y: number, k: number): number {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const a = hash(ix, iy, k), b = hash(ix + 1, iy, k), c = hash(ix, iy + 1, k), d = hash(ix + 1, iy + 1, k);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
 }
 
 /** Seeded hash for the island's static detail. */
@@ -159,9 +178,11 @@ function hash(i: number, j: number, k: number): number {
 }
 
 /**
- * The island, three-quarter view: a pale ice top face with speckle and
- * hairline cracks, a lit north rim, and below every south edge a cliff of
- * energy-violet strata breaking into icicles over the void.
+ * The island, three-quarter view: a DARK violet top face, two tones
+ * ordered-dithered over a slow noise field (texture, not a gradient), with
+ * sparse specks and hairline cracks; pale ice only where light catches: a
+ * lit north rim, the cliff's top lip and the icicle tips. Below every
+ * south edge, a cliff of violet strata over the void.
  */
 function buildIsland(room: Room): HTMLCanvasElement {
   const c = canvas(VIEW.w, VIEW.h);
@@ -176,8 +197,9 @@ function buildIsland(room: Room): HTMLCanvasElement {
         const X = i * TILE + px;
         const drop = 8 + Math.floor(hash(X, j, 1) * 4) + (hash(X >> 1, j, 2) > 0.8 ? 4 : 0);
         for (let py = 0; py < drop; py++) {
-          x.fillStyle = py < 3 ? COLOR.energy1 : py < 6 ? COLOR.energy0 : COLOR.deep;
-          if (py >= 3 && hash(X, py, j) > 0.9) x.fillStyle = COLOR.energy1; // a glint in the strata
+          x.fillStyle = py === 0 ? COLOR.ice0 : py < 4 ? COLOR.energy0 : COLOR.deep;
+          if (py >= 2 && hash(X, py, j) > 0.93) x.fillStyle = COLOR.energy1; // a glint in the strata
+          if (py === drop - 1 && drop >= 12) x.fillStyle = COLOR.ice0; // an icicle tip catching light
           x.fillRect(X, y0 + py, 1, 1);
         }
       }
@@ -187,34 +209,26 @@ function buildIsland(room: Room): HTMLCanvasElement {
     for (let i = 0; i < COLS; i++) {
       if (!ice(i, j)) continue;
       const X = i * TILE, Y = j * TILE;
-      x.fillStyle = COLOR.ice0;
-      x.fillRect(X, Y, TILE, TILE);
       for (let py = 0; py < TILE; py++)
         for (let px = 0; px < TILE; px++) {
-          const h = hash(X + px, Y + py, 7);
-          if (h > 0.93) {
-            x.fillStyle = COLOR.ice1;
-            x.fillRect(X + px, Y + py, 1, 1);
-          } else if (h < 0.012) {
-            x.fillStyle = COLOR.energy1;
-            x.fillRect(X + px, Y + py, 1, 1);
-          }
+          const gx = X + px, gy = Y + py;
+          // Two floor tones dithered over a slow field: patches, not a ramp
+          const field = noise2(gx / 22, gy / 16, 5) * 0.8 + noise2(gx / 7, gy / 6, 6) * 0.2;
+          x.fillStyle = field * 16 > BAYER[(gx & 3) + (gy & 3) * 4] + 0.5 ? COLOR.floorB : COLOR.floorA;
+          if (hash(gx, gy, 7) > 0.985) x.fillStyle = COLOR.energy0;
+          x.fillRect(gx, gy, 1, 1);
         }
-      // Rims: lit to the north, violet at the sides, a dark lip to the south
+      // Rims: lit ice to the north (the accent), violet at the sides
       if (!ice(i, j - 1)) {
-        x.fillStyle = COLOR.white;
+        x.fillStyle = COLOR.ice1;
         x.fillRect(X, Y, TILE, 1);
       }
       x.fillStyle = COLOR.energy1;
       if (!ice(i - 1, j)) x.fillRect(X, Y, 1, TILE);
       if (!ice(i + 1, j)) x.fillRect(X + TILE - 1, Y, 1, TILE);
-      if (!ice(i, j + 1)) {
-        x.fillStyle = COLOR.energy0;
-        x.fillRect(X, Y + TILE - 1, TILE, 1);
-      }
     }
-  // A few long hairline cracks across the ice
-  x.fillStyle = COLOR.energy1;
+  // A few long hairline cracks across the floor
+  x.fillStyle = COLOR.energy0;
   for (let n = 0; n < 7; n++) {
     let cx = 40 + hash(n, 1, 9) * 400, cy = 40 + hash(n, 2, 9) * 190;
     let a = hash(n, 3, 9) * Math.PI * 2;
@@ -388,7 +402,7 @@ export function drawWorld(x: CanvasRenderingContext2D, w: World, A: Atlas, amb: 
   amb.readyBlink = Math.max(0, amb.readyBlink - dt);
   if (w.phase === "play" && (cooling || amb.readyBlink > 0)) {
     const k = cooling ? 1 - p.dashCd / TUNE.dash.cooldown : 1;
-    x.fillStyle = cooling ? COLOR.energy1 : COLOR.white;
+    x.fillStyle = cooling ? COLOR.energy1 : COLOR.ice1;
     x.globalAlpha = cooling ? 0.85 : 1;
     pixelRing(x, p.x, p.y, 9, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
     x.globalAlpha = 1;
@@ -423,8 +437,10 @@ function drawGem(x: CanvasRenderingContext2D, w: World, A: Atlas): void {
     const horiz = Math.abs(p.dashX) >= Math.abs(p.dashY);
     const sw = Math.round(12 * (horiz ? along : across));
     const sh = Math.round(12 * (horiz ? across : along));
+    x.drawImage(A.gemGlow, Math.round(p.x - 12), Math.round(p.y - 2 - sh / 2 - 12));
     x.drawImage(A.gem, Math.round(p.x - sw / 2), Math.round(p.y - 2 - sh), sw, sh);
     return;
   }
+  x.drawImage(A.gemGlow, Math.round(p.x - 12), Math.round(p.y - 20 + bob));
   x.drawImage(A.gem, Math.round(p.x - 6), Math.round(p.y - 14 + bob));
 }

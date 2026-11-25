@@ -198,8 +198,11 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     const frames = new Float32Array(FRAME_LOG);
     const work = new Float32Array(FRAME_LOG);
     let frameN = 0;
-    const hook = window as unknown as { __void?: { world: World; frames: Float32Array; work: Float32Array; count: () => number } };
-    hook.__void = { world, frames, work, count: () => frameN };
+    const hook = window as unknown as {
+      __void?: { world: World; frames: Float32Array; work: Float32Array; count: () => number; off: HTMLCanvasElement };
+    };
+    // off: the logical 480 x 270 frame (scripts/verify/void-contrast.mjs reads its pixels)
+    hook.__void = { world, frames, work, count: () => frameN, off };
     let raf = 0;
     let prev = performance.now();
     const loop = (now: number) => {

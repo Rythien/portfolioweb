@@ -495,7 +495,7 @@ function attack(w: World, input: Input): void {
   for (let i = 0; i < 7; i++) {
     const a = base + (i / 6 - 0.5) * 2 * TUNE.attack.halfAngle * 0.9;
     const s = 230 + w.random() * 60;
-    emit(w, Kind.Shard, p.x + ax * 4, p.y - 6 + ay * 4, Math.cos(a) * s, Math.sin(a) * s, TUNE.attack.show, 3, 16);
+    emit(w, Kind.Shard, p.x + ax * 4, p.y - 6 + ay * 4, Math.cos(a) * s, Math.sin(a) * s, TUNE.attack.show, 1, 16);
   }
   // Hits: drifters whose body centre is in the cone and in reach
   const cosHalf = Math.cos(TUNE.attack.halfAngle);
