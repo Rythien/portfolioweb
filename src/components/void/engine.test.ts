@@ -230,6 +230,25 @@ test("clearing the last room ends the run as clear; R starts again at room 1", (
   assert.equal(w.player.hearts, TUNE.hurt.hearts);
 });
 
+test("the waves mix in: room 1 drifters, room 2 adds chargers, room 3 adds spitters", () => {
+  const expect = [[8, 0, 0], [6, 3, 0], [4, 2, 3]];
+  const w = createWorld(1);
+  for (let r = 0; r < ROOMS.length; r++) {
+    const got = [0, 0, 0];
+    for (const d of w.enemies) if (d.alive) {
+      got[d.kind]++;
+      assert.ok(iceAt(w.room, d.x, d.y), "every enemy starts on the ice");
+      assert.equal(d.hp, d.kind === EnemyKind.Drifter ? 1 : 2);
+    }
+    assert.deepEqual(got, expect[r], `room ${r + 1}: drifter, charger, spitter`);
+    if (r < ROOMS.length - 1) {
+      clearWave(w);
+      walkToDoor(w);
+      run(w, TUNE.door.fade + 0.05);
+    }
+  }
+});
+
 test("every room fits 3x on a 1280x720 screen, and its doorway is reachable from the spawn", () => {
   for (let i = 0; i < ROOMS.length; i++) {
     const room = buildRoom(i);

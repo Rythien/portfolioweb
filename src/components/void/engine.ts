@@ -158,12 +158,13 @@ export interface Room {
 /**
  * The run's rooms, in order: the island's half-size in tiles (its edge
  * then bitten by noise), the void pits inside it (tile x, y, w, h), and
- * the wave that fills it. Later rooms are tighter.
+ * the wave that fills it. Later rooms are tighter, and each adds a kind:
+ * room 1 drifters only, room 2 adds chargers, room 3 adds spitters.
  */
 export const ROOMS: { half: [number, number]; pits: [number, number, number, number][]; wave: Wave }[] = [
   { half: [13, 5.5], pits: [[14, 9, 3, 3], [31, 15, 4, 2]], wave: { drifter: 8 } },
-  { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 8 } },
-  { half: [11.5, 4.8], pits: [[15, 10, 2, 3], [21, 8, 3, 2], [28, 15, 3, 2], [32, 10, 2, 3]], wave: { drifter: 8 } },
+  { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 6, charger: 3 } },
+  { half: [11.5, 4.8], pits: [[15, 10, 2, 3], [21, 8, 3, 2], [28, 15, 3, 2], [32, 10, 2, 3]], wave: { drifter: 4, charger: 2, spitter: 3 } },
 ];
 
 /**
