@@ -27,6 +27,14 @@ interface VoidProps {
 
 /** Longest frame fed to the rules: a hitch never teleports anything. */
 const MAX_DT = 1 / 20;
+/**
+ * Input buffers (ms). Input was sampled once a frame as "held now", so a
+ * click or a J tap whose down and up fell between two frames never
+ * attacked at all (an automated run clicked for 14 s: 0 shattered). A
+ * press is now remembered until the game uses it, for this long, which
+ * also carries a press made just before a cooldown ends.
+ */
+const BUFFER = { attack: 150, dash: 120 } as const;
 /** Frame times kept for the test hook (scripts/shot/void-record.mjs). */
 const FRAME_LOG = 1200;
 
@@ -143,7 +151,11 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     /* ── Input ── */
     const held = new Set<string>();
     const input: Input = { mx: 0, my: 0, dash: false, attack: false, aimX: 0, aimY: 0 };
-    let dashLatch = false;
+    /** When the last unused attack / dash press happened (performance.now), or -1. */
+    let attackAt = -1;
+    let dashAt = -1;
+    /** The buffered attack came from the pointer: it aims where it was clicked, even released. */
+    let attackByPointer = false;
     let pointerDown = false;
     let pointerX = 0, pointerY = 0;
     const toLogical = (clientX: number, clientY: number) => {
@@ -173,7 +185,11 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         return;
       }
       if (e.code in MOVE_KEYS || e.code === "Space" || e.code === "KeyJ") e.preventDefault();
-      if (e.code === "Space" && !e.repeat) dashLatch = true;
+      if (e.code === "Space" && !e.repeat) dashAt = performance.now();
+      if (e.code === "KeyJ" && !e.repeat) {
+        attackAt = performance.now();
+        attackByPointer = false;
+      }
       held.add(e.code);
     };
     const onKeyUp = (e: KeyboardEvent) => held.delete(e.code);
@@ -188,6 +204,8 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       if (!openRef.current || e.button !== 0) return;
       resume();
       pointerDown = true;
+      attackAt = performance.now();
+      attackByPointer = true;
       toLogical(e.clientX, e.clientY);
     };
     const onPointerMove = (e: PointerEvent) => toLogical(e.clientX, e.clientY);
@@ -238,16 +256,19 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         }
         input.mx = Math.max(-1, Math.min(1, mx));
         input.my = Math.max(-1, Math.min(1, my));
-        input.dash = dashLatch;
-        dashLatch = false;
-        input.attack = pointerDown || held.has("KeyJ");
-        if (pointerDown) {
+        input.dash = dashAt >= 0 && now - dashAt < BUFFER.dash;
+        input.attack = pointerDown || held.has("KeyJ") || (attackAt >= 0 && now - attackAt < BUFFER.attack);
+        // Aim at the pointer while it is held, or for a click still in the buffer
+        if (pointerDown || (attackByPointer && attackAt >= 0)) {
           input.aimX = pointerX - world.player.x;
           input.aimY = pointerY - (world.player.y - 6);
         } else {
           input.aimX = input.aimY = 0;
         }
         step(world, dt, input);
+        // A press is spent once it has acted (the rules reset these the frame they fire)
+        if (world.player.atkAge === 0) attackAt = -1;
+        if (world.player.dashCd === TUNE.dash.cooldown) dashAt = -1;
       }
       if (world.phase !== lastPhase) {
         lastPhase = world.phase;
