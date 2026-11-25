@@ -39,7 +39,7 @@ const ICONS = [
  * (AREA_TOLERANCE). At 0.62 on the larger side, square marks filled the
  * crystal and it stopped reading as ice.
  */
-export const HERO_LOGO_FILL = 0.4;
+export const HERO_LOGO_FILL = 0.34;
 /** Each logo's filled area is brought within this of the set's median. */
 export const AREA_TOLERANCE = 0.15;
 export const HERO_LOGO_DEPTH = 0.26;
@@ -49,15 +49,14 @@ export const HERO_LOGO_DEPTH = 0.26;
 const UNIT_DEPTH = HERO_LOGO_DEPTH / 1.4;
 
 /**
- * Bevel in SVG units (icons are 24 units wide). WAKE: wide, because the
- * bevel is the logo's edge highlight; it carries its own light material
- * (GlassCrystal LOGO_LOOK.bevel) and catches the key light, and a lit edge
- * survives the glass's refraction blur where a dark outline does not.
- * DREAM: the original narrow bevel (its glowing face + violet walls + rim
- * already read; a wide bevel there either flattened the mark or matched
- * the lavender type behind it).
+ * Bevel in SVG units (icons are 24 units wide). three grows the bevel
+ * OUTWARD by this much on every contour, holes included, so it must stay
+ * well under half the narrowest gap in a mark: at 1.4 (WAKE) and 0.8
+ * (DREAM) the Next.js N's cut-outs closed up and folded through each
+ * other, and the mark rendered as overlapping light edges (a wireframe)
+ * instead of a solid. A small bevel softens the edge; the mark is solid.
  */
-export const BEVEL = { wake: 1.4, dream: 0.8 } as const;
+export const BEVEL = { wake: 0.3, dream: 0.3 } as const;
 export type BevelKind = keyof typeof BEVEL;
 
 /** Faces whose normal is within this of the extrusion plane are walls;

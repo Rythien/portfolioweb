@@ -232,20 +232,20 @@ export function useCrystalData(seed = DEFAULT_SEED) {
  */
 const LOGO_LOOK = {
   wake: {
-    // Mid-grey metal; the light bevel separates it from both pale ice and
-    // the dark type refracted through it. Emissive stays low or the face
-    // lifts into the ice's own lightness.
-    color: "#9aa3b1",
+    // A soft solid inside the ice: mid-grey, its small bevel in the face's
+    // own tone (a bright bevel line read as a wireframe). Emissive stays
+    // low or the face lifts into the ice's own lightness.
+    color: "#a3abb8",
     emissive: "#7a8391",
     emissiveIntensity: 0.04,
     side: "#3a404a",
     roughness: 0.45,
     metalness: 0.0,
-    envMapIntensity: 0.9,
-    /** Bevel: the edge highlight. Smoother and more reflective than the face. */
-    bevel: "#d4dae4",
-    bevelRoughness: 0.25,
-    bevelEnvMapIntensity: 1.6,
+    envMapIntensity: 0.8,
+    /** Bevel: a slight sheen on the softened edge, near the face's tone. */
+    bevel: "#b3bbc7",
+    bevelRoughness: 0.35,
+    bevelEnvMapIntensity: 1.0,
     bevelEmissiveScale: 1,
     /** The dark contour is retired here (the bevel does its job); kept as a
      * value so DREAM's rim and the matte test view share one path. */
