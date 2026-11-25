@@ -116,6 +116,21 @@ export const CRYSTAL_MATERIAL = {
     edgeUp: [0.0, 0.5] as [number, number],
     edgeIntensity: 2.2,
   },
+  /**
+   * Wet vs frosted: most faces stay polished; a few along the lower
+   * broken edges are matte and eroded. Object space (y from `y[0]` fading
+   * in to full by `y[1]`), broken into patches by noise so only some
+   * faces wear. Worn faces take `roughness` (which also blurs the
+   * refraction through them), a frost lift (rgb * lift[0] + lift[1]) and
+   * no hard speculars.
+   */
+  wear: {
+    y: [-0.35, -0.8] as [number, number],
+    scale: 2.6,
+    patch: [0.42, 0.55] as [number, number],
+    roughness: 0.7,
+    lift: [0.8, 0.16] as [number, number],
+  },
   /** Internal cloud: ice is never optically empty. */
   cloud: { scale: 0.82, opacity: 0.005 },
   /**
@@ -564,6 +579,7 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
   const base = material.onBeforeCompile.bind(material);
   const V = CRYSTAL_MATERIAL.veins;
   const vSide = new THREE.Vector3(...V.side).normalize().toArray();
+  const W = CRYSTAL_MATERIAL.wear;
   const S = {
     ...CRYSTAL_MATERIAL.speculars,
     lights: CRYSTAL_MATERIAL.speculars.lights.map((l) => ({
@@ -586,12 +602,17 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
       .replace(
         "#include <roughnessmap_fragment>",
         `#include <roughnessmap_fragment>
+        // Wear: matte, eroded faces along the lower broken edges (object
+        // space, broken up by noise); everything else stays wet
+        float wearW = smoothstep( ${f4(W.y[0])}, ${f4(W.y[1])}, vCrystalObj.y )
+          * smoothstep( ${f4(W.patch[0])}, ${f4(W.patch[1])}, cFbm( vCrystalObj * ${f4(W.scale)} + 5.0 ) );
         #ifndef FLAT_SHADED
         {
           // Clear through the middle, frosted toward the silhouette
           vec3 frostView = isOrthographic ? vec3( 0.0, 0.0, 1.0 ) : normalize( vViewPosition );
           float frostW = pow( 1.0 - clamp( abs( dot( normalize( vNormal ), frostView ) ), 0.0, 1.0 ), frostRimPower );
           roughnessFactor = mix( clearRoughness, roughnessFactor, frostW );
+          roughnessFactor = mix( roughnessFactor, ${f4(W.roughness)}, wearW );
         }
         #endif`,
       )
@@ -640,7 +661,9 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
             vec3 gN = normalize( vNormal );
             float crease = smoothstep( ${f4(S.edge[0])}, ${f4(S.edge[1])}, length( fwidth( gN ) ) );
             float glint = crease * smoothstep( ${f4(S.edgeUp[0])}, ${f4(S.edgeUp[1])}, inverseTransformDirection( gN, viewMatrix ).y );
-            gl_FragColor.rgb += vec3( spec + glint * ${f4(S.edgeIntensity)} );
+            // Worn faces scatter: a frost lift, and no hard highlight
+            gl_FragColor.rgb = mix( gl_FragColor.rgb, gl_FragColor.rgb * ${f4(W.lift[0])} + ${f4(W.lift[1])}, wearW );
+            gl_FragColor.rgb += vec3( spec + glint * ${f4(S.edgeIntensity)} ) * ( 1.0 - wearW );
           }
         }
         ${GLASS_MATTE ? "gl_FragColor = vec4( 1.0, 0.0, 1.0, 1.0 );" : ""}
@@ -648,6 +671,6 @@ export function applyCrystalShader(material: THREE.Material | null, rim?: RimOve
       );
   };
   const baseKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v8${GLASS_MATTE ? "|matte" : ""}`;
+  material.customProgramCacheKey = () => `${baseKey()}|crystal-rim-v9${GLASS_MATTE ? "|matte" : ""}`;
   material.needsUpdate = true;
 }
