@@ -16,7 +16,7 @@ import { SCENE_LABEL } from "@/lib/palette";
  *
  * A halo, not an orbit: ~1.3x the crystal's on-screen radius, tilted
  * shallow, so it stays in the crystal's own area. The type is an
- * engraving, not a label (caps ~0.03 world units, the phrase ~6 times
+ * engraving, not a label (caps ~1.5% of the diameter, the phrase ~4 times
  * round). The arc nearest the camera dims (nearFade) so the front pass
  * never sits heavier than the back.
  */
@@ -26,8 +26,9 @@ const RING = {
    * TARGET_SIZE), so it never cuts a corner: ~1.3x the crystal's visible
    * half-width. Both scale with the pose, so it hugs at any size. */
   radius: 1.5,
-  /** Band height (world units): hugs the caps. */
-  height: 0.05,
+  /** Band height (world units): hugs the caps. Geist Mono caps are
+   * ~0.71 em, so 0.076 x 0.85 x 0.71 = 0.046: 1.5% of the 3.0 diameter. */
+  height: 0.076,
   label: ["SELECTED WORK", "2026", "SEARON MAHARJAN"],
   /** Of the band height. */
   fontShare: 0.85,
@@ -38,7 +39,7 @@ const RING = {
   /** The star's half-size, em. */
   starR: 0.3,
   opacity: 0.7,
-  /** Texels across the ring at a pixel ratio of 1: caps ~10 texels tall. */
+  /** Texels across the ring at a pixel ratio of 1: caps ~15 texels tall. */
   texWidth: 4096,
 } as const;
 
