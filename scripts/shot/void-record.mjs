@@ -64,7 +64,7 @@ async function hold(want) {
 const t0 = Date.now();
 let still = false;
 let mouseDown = false;
-let deaths = 0, clears = 0, rooms = 0, lastRoom = 0;
+let deaths = 0, clears = 0, rooms = 0, lastRoom = 0, wonAt = 0;
 let sealFrom = null;
 const sealTimes = [];
 const TRACE = args.includes("--trace");
@@ -81,16 +81,23 @@ while (Date.now() - t0 < SECONDS * 1000) {
     const ds = w.enemies.filter((d) => d.alive && d.arrive <= 0).map((d) => [d.x, d.y, d.kind, d.state, d.ax, d.ay]);
     const bs = w.bolts.filter((b) => b.alive).map((b) => [b.x, b.y, b.vx, b.vy]);
     const sl = w.seal;
-    const seal = sl.state === 0 || sl.state === 7 ? null : { x: sl.x, y: sl.y, state: sl.state, rings: w.rings.filter((q) => q.alive).map((q) => [q.r, q.gapA]) };
+    const seal = sl.state === 0 || sl.state === 7 ? null : { x: sl.x, y: sl.y, state: sl.state, rings: w.rings.filter((q) => q.alive).map((q) => [q.r, q.gapA, q.spin]) };
     return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts, open: w.doorOpen, room: w.roomIndex, moving: w.transition >= 0,
       seal, sealState: sl.state, t: w.t };
   });
   if (s.room !== lastRoom) { if (s.room > lastRoom) rooms++; lastRoom = s.room; }
   // The run cleared (or lost): fall again (R), so the take keeps playing.
   // A death is reported, not hidden, then R as well
+  // Won: the run is over and the page wakes at Contact; just watch it
+  if (s.phase === "won") {
+    if (!wonAt) { wonAt = Date.now(); clears++; }
+    await hold(new Set());
+    if (mouseDown) { await page.mouse.up(); mouseDown = false; }
+    await page.waitForTimeout(100);
+    continue;
+  }
   if (s.phase !== "play") {
-    if (s.phase === "dead") deaths++;
-    else clears++;
+    deaths++;
     await hold(new Set());
     if (mouseDown) { await page.mouse.up(); mouseDown = false; }
     await page.waitForTimeout(700); // let the card show on camera
@@ -213,8 +220,18 @@ while (Date.now() - t0 < SECONDS * 1000) {
     continue;
   }
   if (s.seal && s.ds.length === 0) {
-    // A post ~60 px out: a ring gives over a second's notice, the fan room to read
-    const [tx, ty] = around(58);
+    // A post ~60 px out: a ring gives over a second's notice, the fan room to read.
+    // With a ring coming, circle the post to where its GAP will be when it
+    // arrives (gap angle + spin x arrival time): it passes us through the gap
+    let [tx, ty] = around(58);
+    const gx0 = s.x - s.seal.x, gy0 = s.y - 6 - (s.seal.y - 8), pd0 = Math.hypot(gx0, gy0);
+    let next = null;
+    for (const [rr, gapA, spin] of s.seal.rings) if (rr < pd0 && (!next || rr > next[0])) next = [rr, gapA, spin];
+    if (next) {
+      const ta = next[1] + next[2] * Math.max(0, (pd0 - next[0]) / 34);
+      tx = s.seal.x + Math.cos(ta) * 58;
+      ty = s.seal.y - 2 + Math.sin(ta) * 58;
+    }
     if (tx - s.x > 4) want.add("KeyD"); else if (tx - s.x < -4) want.add("KeyA");
     if (ty - s.y > 4) want.add("KeyS"); else if (ty - s.y < -4) want.add("KeyW");
     await hold(want);
