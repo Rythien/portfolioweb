@@ -240,10 +240,13 @@ export interface Room {
  * the wave that fills it. Later rooms are tighter, and each adds a kind:
  * room 1 drifters only, room 2 adds chargers, room 3 adds spitters.
  */
+/** Seal 1: one ring, a 3-bolt fan, a long window. */
 const SEAL_1: SealPattern = { rings: 1, ringEvery: 0, spin: 0.9, alternate: false, fan: 3, spread: 0.5, recover: 1.5 };
+/** Seal 2: two rings 1.2 s apart spinning opposite ways (their gaps cross), a 5-bolt fan, a shorter window. */
+const SEAL_2: SealPattern = { rings: 2, ringEvery: 1.2, spin: 1.3, alternate: true, fan: 5, spread: 0.8, recover: 1.3 };
 export const ROOMS: { half: [number, number]; pits: [number, number, number, number][]; wave: Wave; seal: SealPattern }[] = [
   { half: [13, 5.5], pits: [[14, 9, 3, 3], [31, 15, 4, 2]], wave: { drifter: 8 }, seal: SEAL_1 },
-  { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 6, charger: 3 }, seal: SEAL_1 },
+  { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 6, charger: 3 }, seal: SEAL_2 },
   { half: [11.5, 4.8], pits: [[15, 10, 2, 3], [21, 8, 3, 2], [28, 15, 3, 2], [32, 10, 2, 3]], wave: { drifter: 4, charger: 2, spitter: 3 }, seal: SEAL_1 },
 ];
 

@@ -528,6 +528,19 @@ test("a ring stings on its band, passes you in its gap, and passes a dash", () =
   }
 });
 
+test("seal 2: two rings a cycle, spinning opposite ways, and a 5-bolt fan", () => {
+  const w = atSeal(1);
+  until(w, SealState.Rings);
+  const rings = w.rings.filter((r) => r.alive);
+  assert.equal(rings.length, 2, "two rings");
+  assert.ok(Math.sign(rings[0].spin) === -Math.sign(rings[1].spin), "opposite spins");
+  assert.ok(rings[0].r - rings[1].r > 30, "launched apart");
+  until(w, SealState.AimWarn);
+  until(w, SealState.Recover);
+  assert.equal(w.bolts.filter((b) => b.alive).length, 5);
+  assert.equal(sealPattern(w).recover, 1.3);
+});
+
 test("R after a death starts at the first unfreed room", () => {
   const w = createWorld(1);
   w.player.hearts = 0;

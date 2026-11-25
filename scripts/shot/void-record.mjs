@@ -196,8 +196,14 @@ while (Date.now() - t0 < SECONDS * 1000) {
   // Its window: once the fan's bolts are past our post, close to the edge of
   // reach (~30 px; the burst reaches ~43) and hit; never into the muzzle
   const fanOut = s.seal && s.bs.some(([bx, by]) => Math.hypot(bx - s.seal.x, by - (s.seal.y - 8)) < 70);
+  // Posts round the seal on the side we already stand (never through its body)
+  const around = (d) => {
+    const ax = s.x - s.seal.x, ay = s.y - (s.seal.y - 2);
+    const l = Math.hypot(ax, ay) || 1;
+    return [s.seal.x + (ax / l) * d, s.seal.y - 2 + (ay / l) * d];
+  };
   if (s.seal && s.seal.state === 5 && !fanOut) {
-    const tx = s.seal.x, ty = s.seal.y + 28;
+    const [tx, ty] = around(28);
     if (tx - s.x > 3) want.add("KeyD"); else if (tx - s.x < -3) want.add("KeyA");
     if (ty - s.y > 3) want.add("KeyS"); else if (ty - s.y < -3) want.add("KeyW");
     await hold(want);
@@ -208,7 +214,7 @@ while (Date.now() - t0 < SECONDS * 1000) {
   }
   if (s.seal && s.ds.length === 0) {
     // A post ~60 px out: a ring gives over a second's notice, the fan room to read
-    const tx = s.seal.x, ty = s.seal.y + 58;
+    const [tx, ty] = around(58);
     if (tx - s.x > 4) want.add("KeyD"); else if (tx - s.x < -4) want.add("KeyA");
     if (ty - s.y > 4) want.add("KeyS"); else if (ty - s.y < -4) want.add("KeyW");
     await hold(want);
