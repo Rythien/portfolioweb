@@ -62,7 +62,7 @@ async function hold(want) {
 const t0 = Date.now();
 let still = false;
 let mouseDown = false;
-let deaths = 0, clears = 0;
+let deaths = 0, clears = 0, rooms = 0, lastRoom = 0;
 while (Date.now() - t0 < SECONDS * 1000) {
   const s = await page.evaluate(() => {
     const w = window.__void.world;
@@ -70,9 +70,10 @@ while (Date.now() - t0 < SECONDS * 1000) {
     // [x, y, kind, state, ax, ay]
     const ds = w.enemies.filter((d) => d.alive && d.arrive <= 0).map((d) => [d.x, d.y, d.kind, d.state, d.ax, d.ay]);
     const bs = w.bolts.filter((b) => b.alive).map((b) => [b.x, b.y, b.vx, b.vy]);
-    return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts };
+    return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts, open: w.doorOpen, room: w.roomIndex, moving: w.transition >= 0 };
   });
-  // A cleared room: fall again (R) for a fresh wave, so the take keeps playing.
+  if (s.room !== lastRoom) { if (s.room > lastRoom) rooms++; lastRoom = s.room; }
+  // The run cleared (or lost): fall again (R), so the take keeps playing.
   // A death is reported, not hidden, then R as well
   if (s.phase !== "play") {
     if (s.phase === "dead") deaths++;
@@ -84,6 +85,29 @@ while (Date.now() - t0 < SECONDS * 1000) {
     continue;
   }
   const want = new Set();
+  if (s.moving) { await hold(want); await page.waitForTimeout(40); continue; }
+  // Wave cleared, the doorway open: walk to it (a path over the ice tiles)
+  if (s.open && s.ds.length === 0) {
+    if (mouseDown) { await page.mouse.up(); mouseDown = false; }
+    const step = await page.evaluate(() => {
+      const w = window.__void.world, p = w.player, room = w.room, COLS = 48, ROWS = 27, T = 10;
+      const start = Math.floor(p.y / T) * COLS + Math.floor(p.x / T);
+      const goal = (room.door.y / T) * COLS + room.door.x / T;
+      const prev = new Int32Array(COLS * ROWS).fill(-1);
+      const q = [start]; prev[start] = start;
+      while (q.length) { const k = q.shift(); if (k === goal || k === goal + 1) { let n = k; while (prev[n] !== start && n !== start) n = prev[n]; return { tx: (n % COLS) * T + 5, ty: Math.floor(n / COLS) * T + 5, gx: room.door.x + room.door.w / 2, gy: room.door.y + 4 }; }
+        for (const n of [k - 1, k + 1, k - COLS, k + COLS]) if (n >= 0 && n < COLS * ROWS && room.ice[n] && prev[n] < 0) { prev[n] = k; q.push(n); } }
+      return null; });
+    if (step) {
+      const near = Math.hypot(step.gx - s.x, step.gy - s.y) < 14;
+      const tx = near ? step.gx : step.tx, ty = near ? step.gy : step.ty;
+      if (tx - s.x > 2) want.add("KeyD"); else if (tx - s.x < -2) want.add("KeyA");
+      if (ty - s.y > 2) want.add("KeyS"); else if (ty - s.y < -2) want.add("KeyW");
+    }
+    await hold(want);
+    await page.waitForTimeout(40);
+    continue;
+  }
   // A charger winding up or charging along a line through us: get off the
   // line sideways (dash if it is ready). Its tell (0.4 s) is the warning
   let threat = null;
@@ -191,4 +215,4 @@ const r = (x) => x?.toFixed(1);
 console.log(VIDEO ? `recorded ${SECONDS}s -> ${join(OUT, NAME + ".webm")}` : `played ${SECONDS}s (no video)`);
 console.log(`frame interval (game + browser compositing): ${stats.frames} frames, ${r(stats.fps)} fps sustained; p50 ${r(stats.p50)} ms, p95 ${r(stats.p95)}, p99 ${r(stats.p99)}, max ${r(stats.max)}; ${stats.over20} over 20 ms`);
 console.log(`game work per frame (rules + draw + blit): p50 ${stats.w50.toFixed(2)} ms, p95 ${stats.w95.toFixed(2)}, p99 ${stats.w99.toFixed(2)}, max ${stats.wmax.toFixed(2)}`);
-console.log(`rooms cleared ${clears}, deaths ${deaths}, kills this run ${stats.kills}, hearts left ${stats.hearts}`);
+console.log(`doorways walked through ${rooms}, runs cleared ${clears}, deaths ${deaths}, kills this run ${stats.kills}, hearts left ${stats.hearts}`);

@@ -10,7 +10,7 @@
  * enemies outlined dark, and the gem, white, the brightest thing there.
  */
 import {
-  COLS, Charge, EnemyKind, Kind, ROWS, Spit, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, shakeOffset,
+  COLS, Charge, EnemyKind, Kind, ROWS, Spit, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, shakeOffset, transitionVeil,
   type Enemy, type Room, type World,
 } from "./engine";
 import { COLOR } from "./palette";
@@ -239,6 +239,11 @@ function hash(i: number, j: number, k: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+/** A new room: its island is pre-rendered once, here. */
+export function rebuildIsland(A: Atlas, room: Room): void {
+  A.island = buildIsland(room);
+}
+
 /**
  * The island, three-quarter view: a DARK violet top face, two tones
  * ordered-dithered over a slow noise field (texture, not a gradient), with
@@ -372,6 +377,7 @@ export function drawWorld(
   x.save();
   x.translate(amb.shake.x, amb.shake.y);
   x.drawImage(A.island, 0, 0);
+  drawDoor(x, w);
 
   // Telegraphs: a danger ring contracting onto where a drifter will be
   x.fillStyle = COLOR.danger;
@@ -517,6 +523,15 @@ export function drawWorld(
 
   x.restore();
 
+  // Through a doorway: the screen fades to the void and back
+  const veil = transitionVeil(w);
+  if (veil > 0) {
+    x.globalAlpha = veil;
+    x.fillStyle = COLOR.void0;
+    x.fillRect(0, 0, VIEW.w, VIEW.h);
+    x.globalAlpha = 1;
+  }
+
   // Over: the arena dims behind the shell's card (death darker than a clear)
   if (w.phase !== "play") {
     x.globalAlpha = Math.min(1, w.endT / TUNE.death.fade) * (w.phase === "dead" ? 0.6 : 0.35);
@@ -527,6 +542,44 @@ export function drawWorld(
 
   // Hearts (screen-fixed)
   for (let i = 0; i < TUNE.hurt.hearts; i++) x.drawImage(i < p.hearts ? A.heart : A.heartEmpty, hud.x + 8 + i * 9, hud.y + 8);
+}
+
+/**
+ * The doorway on the north rim: a dim arch while the wave lives; once it is
+ * cleared, the arch lights in pale ice, the opening shimmers violet and
+ * chevrons point through it (still under reduced motion).
+ */
+function drawDoor(x: CanvasRenderingContext2D, w: World): void {
+  const d = w.room.door;
+  const open = w.doorOpen;
+  const top = d.y - 9;
+  // The opening
+  for (let py = top + 1; py < d.y + 1; py++)
+    for (let px = d.x + 2; px < d.x + d.w - 2; px++) {
+      if (!open) x.fillStyle = COLOR.void0;
+      else {
+        const shimmer = w.reduced ? 0 : Math.floor(w.t * 8);
+        x.fillStyle = ((px + py + shimmer) & 3) === 0 ? COLOR.energy1 : COLOR.energy0;
+      }
+      x.fillRect(px, py, 1, 1);
+    }
+  // Pillars and lintel
+  x.fillStyle = open ? COLOR.ice1 : COLOR.energy0;
+  x.fillRect(d.x + 1, top, 1, d.y - top + 1);
+  x.fillRect(d.x + d.w - 2, top, 1, d.y - top + 1);
+  x.fillRect(d.x + 1, top, d.w - 2, 1);
+  if (open) {
+    // Chevrons pointing through, stepping upward
+    const lift = w.reduced ? 0 : Math.floor(w.t * 6) % 3;
+    x.fillStyle = COLOR.ice1;
+    const cx = d.x + d.w / 2;
+    for (let n = 0; n < 2; n++) {
+      const y = d.y + 10 + n * 5 - lift;
+      x.fillRect(Math.round(cx - 3), y + 2, 2, 1);
+      x.fillRect(Math.round(cx - 1), y, 2, 1);
+      x.fillRect(Math.round(cx + 1), y + 2, 2, 1);
+    }
+  }
 }
 
 function drawEnemy(x: CanvasRenderingContext2D, w: World, A: Atlas, d: Enemy): void {

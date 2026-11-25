@@ -59,7 +59,7 @@ async function waitForDeath(label) {
 const first = await waitForDeath("first");
 check(!first.timeout, `the drifters end the run (${first.timeout ? "never died in 40 s" : "died"})`);
 check(first.s.phase === "dead" && first.s.hearts <= 0, `phase dead, hearts ${first.s.hearts}`);
-check(first.s.card && first.s.card.opacity > 0.95 && /you woke/i.test(first.s.card.text) && /room 1 reached/i.test(first.s.card.text),
+check(first.s.card && first.s.card.opacity > 0.95 && /you woke/i.test(first.s.card.text) && /room 1 of 3 reached/i.test(first.s.card.text),
   `YOU WOKE card shown: "${first.s.card?.text}" at opacity ${first.s.card?.opacity}`);
 const pos0 = first.s.pos;
 await page.waitForTimeout(1500);

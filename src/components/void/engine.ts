@@ -98,8 +98,10 @@ export const TUNE = {
   },
   /** A hit that does not kill: a white flash and a shove. */
   hit: { flash: 0.08, shove: 7 },
-  /** ONE fixed wave per room, cleared to finish it (no trickle). */
+  /** ONE fixed wave per room, cleared to open its doorway (no trickle). */
   spawn: { wave: 8, minDist: 80 },
+  /** Walking through an open doorway: the screen fades to the void and back. */
+  door: { fade: 0.4 },
 } as const;
 
 /** Enemy kinds (plain object: node's type stripping has no enums). */
@@ -149,35 +151,60 @@ export interface Room {
   ice: Uint8Array;
   spawnX: number;
   spawnY: number;
+  /** The doorway out: two tiles on the north rim (logical px). */
+  door: { x: number; y: number; w: number; h: number };
 }
 
 /**
- * One screen: a chipped island with two void pits inside it. Edges are
- * ragged (seeded), so the void is a shape to play around, not a frame.
+ * The run's rooms, in order: the island's half-size in tiles (its edge
+ * then bitten by noise), the void pits inside it (tile x, y, w, h), and
+ * the wave that fills it. Later rooms are tighter.
  */
-export function buildRoom(seed = 1): Room {
-  const r = rng(seed);
+export const ROOMS: { half: [number, number]; pits: [number, number, number, number][]; wave: Wave }[] = [
+  { half: [13, 5.5], pits: [[14, 9, 3, 3], [31, 15, 4, 2]], wave: { drifter: 8 } },
+  { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 8 } },
+  { half: [11.5, 4.8], pits: [[15, 10, 2, 3], [21, 8, 3, 2], [28, 15, 3, 2], [32, 10, 2, 3]], wave: { drifter: 8 } },
+];
+
+/**
+ * One screen: a chipped island with void pits inside it. Edges are ragged
+ * (seeded), so the void is a shape to play around, not a frame.
+ */
+export function buildRoom(index = 0): Room {
+  const spec = ROOMS[Math.min(index, ROOMS.length - 1)];
+  const r = rng(index + 1);
   const ice = new Uint8Array(COLS * ROWS);
   const cx = COLS / 2, cy = ROWS / 2 + 0.5;
   for (let y = 0; y < ROWS; y++)
     for (let x = 0; x < COLS; x++) {
-      // A rounded rectangle, its edge bitten by noise
-      // ~40 x 20 tiles: narrow enough that 3x fits a 1280-wide screen
-      const dx = Math.max(0, Math.abs(x + 0.5 - cx) - 13) / 5;
-      const dy = Math.max(0, Math.abs(y + 0.5 - cy) - 5.5) / 3.6;
+      // A rounded rectangle, its edge bitten by noise; ~40 x 20 tiles at
+      // most, so 3x fits a 1280-wide screen
+      const dx = Math.max(0, Math.abs(x + 0.5 - cx) - spec.half[0]) / 5;
+      const dy = Math.max(0, Math.abs(y + 0.5 - cy) - spec.half[1]) / 3.6;
       const d = Math.hypot(dx, dy);
       if (d < 0.75 + 0.5 * r()) ice[y * COLS + x] = 1;
     }
-  // Two pits: void to dash across the corners of, never through
-  const pit = (px: number, py: number, w: number, h: number) => {
+  // Pits: void to dash across the corners of, never through
+  for (const [px, py, w, h] of spec.pits)
     for (let y = py; y < py + h; y++) for (let x = px; x < px + w; x++) ice[y * COLS + x] = 0;
-  };
-  pit(14, 9, 3, 3);
-  pit(31, 15, 4, 2);
   // Keep the outer rows/columns void (the island floats; its cliffs hang below)
   for (let y = 0; y < ROWS; y++)
     for (let x = 0; x < COLS; x++) if (x < 3 || y < 3 || x >= COLS - 3 || y >= ROWS - 3) ice[y * COLS + x] = 0;
-  return { ice, spawnX: VIEW.w / 2, spawnY: VIEW.h / 2 + 20 };
+  // The doorway: the pair of north-rim tiles nearest the centre (ice, void above)
+  const rimTop = (c: number) => {
+    for (let y = 0; y < ROWS; y++) if (ice[y * COLS + c]) return y;
+    return -1;
+  };
+  let door = { x: 0, y: 0, w: 2 * TILE, h: TILE };
+  for (let k = 0; k < COLS; k++) {
+    const c = Math.floor(COLS / 2) - 1 + (k % 2 ? -(k + 1) >> 1 : k >> 1);
+    const t = rimTop(c);
+    if (t > 0 && rimTop(c + 1) === t) {
+      door = { x: c * TILE, y: t * TILE, w: 2 * TILE, h: TILE };
+      break;
+    }
+  }
+  return { ice, spawnX: VIEW.w / 2, spawnY: VIEW.h / 2 + 20, door };
 }
 
 /** Cliffs hang this far below a south edge (render.ts draws up to 15). */
@@ -328,8 +355,14 @@ export interface World {
   player: Player;
   enemies: Enemy[];
   bolts: Bolt[];
-  /** The wave each room (re)starts with. */
-  wave: Wave;
+  /** Test hook: one wave for every room instead of ROOMS' own (or null). */
+  waveOverride: Wave | null;
+  /** The room this run is in (index into ROOMS). */
+  roomIndex: number;
+  /** The wave is cleared and the doorway is open. */
+  doorOpen: boolean;
+  /** < 0: no room change; else seconds into the fade through a doorway. */
+  transition: number;
   particles: Particle[];
   /** Ring buffer of past feet positions (x, y pairs), newest at trailHead. */
   trail: Float32Array;
@@ -340,7 +373,7 @@ export interface World {
   phase: Phase;
   /** Seconds in the current phase once it is not "play" (drives the fade). */
   endT: number;
-  /** The room this run reached (step 1 has one). */
+  /** The room this run reached (1-based, for the cards). */
   roomReached: number;
   kills: number;
   hits: number;
@@ -357,8 +390,13 @@ function freshPlayer(room: Room): Player {
   };
 }
 
-export function createWorld(seed = 1, reduced = false, wave: Wave = { drifter: TUNE.spawn.wave }): World {
-  const room = buildRoom(seed);
+/** The wave a room starts with. */
+export function waveFor(w: World, index: number): Wave {
+  return w.waveOverride ?? ROOMS[index].wave;
+}
+
+export function createWorld(seed = 1, reduced = false, wave: Wave | null = null): World {
+  const room = buildRoom(0);
   const w: World = {
     room,
     t: 0,
@@ -367,7 +405,10 @@ export function createWorld(seed = 1, reduced = false, wave: Wave = { drifter: T
       alive: false, kind: EnemyKind.Drifter, hp: 1, x: 0, y: 0, vx: 0, vy: 0, arrive: 0, flash: 0, phase: 0,
       state: 0, t: 0, ax: 0, ay: 0, cool: 0,
     })),
-    wave,
+    waveOverride: wave,
+    roomIndex: 0,
+    doorOpen: false,
+    transition: -1,
     bolts: Array.from({ length: MAX_BOLTS }, (): Bolt => ({ alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 })),
     particles: Array.from({ length: MAX_PARTICLES }, () => ({
       alive: false, kind: Kind.Chip, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, color: 0, friction: 0,
@@ -386,8 +427,26 @@ export function createWorld(seed = 1, reduced = false, wave: Wave = { drifter: T
     reduced,
   };
   resetTrail(w);
-  spawnWave(w, w.wave);
+  spawnWave(w, waveFor(w, 0));
   return w;
+}
+
+/** Enter room `index`: its island, the gem at its spawn (hearts kept), its wave. */
+export function loadRoom(w: World, index: number): void {
+  w.roomIndex = index;
+  w.roomReached = Math.max(w.roomReached, index + 1);
+  w.room = buildRoom(index);
+  const p = w.player;
+  p.x = w.room.spawnX;
+  p.y = w.room.spawnY;
+  p.vx = p.vy = p.kbX = p.kbY = 0;
+  p.dashAge = 99;
+  for (const d of w.enemies) d.alive = false;
+  for (const b of w.bolts) b.alive = false;
+  for (const q of w.particles) q.alive = false;
+  w.doorOpen = false;
+  resetTrail(w);
+  spawnWave(w, waveFor(w, index));
 }
 
 function resetTrail(w: World): void {
@@ -397,20 +456,19 @@ function resetTrail(w: World): void {
   }
 }
 
-/** R ("fall again"): a fresh run of the room, same world objects (no allocation churn). */
+/** R ("fall again"): a fresh run from room 1, same world objects (no allocation churn). */
 export function restart(w: World): void {
+  w.room = buildRoom(0);
   Object.assign(w.player, freshPlayer(w.room));
-  for (const d of w.enemies) d.alive = false;
-  for (const b of w.bolts) b.alive = false;
-  for (const q of w.particles) q.alive = false;
   w.phase = "play";
   w.endT = 0;
   w.hitStop = 0;
   w.shake = 0;
   w.kills = 0;
   w.hits = 0;
-  resetTrail(w);
-  spawnWave(w, w.wave);
+  w.transition = -1;
+  w.roomReached = 1;
+  loadRoom(w, 0);
 }
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -474,10 +532,14 @@ export function spawnWave(w: World, wave: Wave): void {
 function killEnemy(w: World, d: Enemy): void {
   d.alive = false;
   w.kills++;
-  // The wave is the room: the last one down clears it
+  // The wave is the room: the last one down opens the doorway (the last
+  // room's clears the run)
   if (!w.enemies.some((o) => o.alive)) {
-    w.phase = "clear";
-    w.endT = 0;
+    if (w.roomIndex < ROOMS.length - 1) w.doorOpen = true;
+    else {
+      w.phase = "clear";
+      w.endT = 0;
+    }
   }
   // Chips: ice and energy, flung outward, slowed by friction
   // Two-hit kinds burst bigger
@@ -533,6 +595,17 @@ export function step(w: World, dt: number, input: Input): void {
   if (w.phase !== "play") {
     w.endT += dt;
     stepParticles(w, dt);
+    return;
+  }
+
+  // Through a doorway: the world holds while the screen fades to the void;
+  // the next room loads at the darkest point
+  if (w.transition >= 0) {
+    const half = TUNE.door.fade / 2;
+    const before = w.transition;
+    w.transition += dt;
+    if (before < half && w.transition >= half) loadRoom(w, w.roomIndex + 1);
+    if (w.transition >= TUNE.door.fade) w.transition = -1;
     return;
   }
 
@@ -604,6 +677,18 @@ export function step(w: World, dt: number, input: Input): void {
   stepEnemies(w, dt);
   stepBolts(w, dt);
   stepParticles(w, dt);
+
+  // Walking into the open doorway (its tile row on the north rim) leaves
+  const door = w.room.door;
+  if (w.doorOpen && w.phase === "play" && p.x > door.x - 1 && p.x < door.x + door.w + 1 && p.y < door.y + door.h) {
+    w.transition = 0;
+  }
+}
+
+/** 0..1: how dark the doorway fade is now (0 = none). */
+export function transitionVeil(w: World): number {
+  if (w.transition < 0) return 0;
+  return 1 - Math.abs(w.transition / (TUNE.door.fade / 2) - 1);
 }
 
 function attack(w: World, input: Input): void {

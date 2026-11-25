@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Charge, EnemyKind, Spit, TUNE, createWorld, iceAt, isInvulnerable, restart, step, type Input, type World } from "./engine.ts";
+import {
+  COLS, Charge, EnemyKind, ROOMS, ROWS, Spit, TILE, TUNE, buildRoom, createWorld, iceAt, isInvulnerable, restart, roomBounds, step,
+  type Input, type World,
+} from "./engine.ts";
 
 const DT = 1 / 120;
 const idle = (): Input => ({ mx: 0, my: 0, dash: false, attack: false, aimX: 0, aimY: 0 });
@@ -167,14 +170,83 @@ test("R (restart) gives a fresh run: full hearts, a new wave of 8, phase play", 
   assert.equal(w.kills, 0);
 });
 
-test("killing the whole wave clears the room", () => {
-  const w = createWorld(1);
-  for (const d of w.enemies) if (d.alive) Object.assign(d, { x: w.player.x + 20, y: w.player.y, arrive: 0 });
+/** Kills the whole wave in one burst (all moved in front of the gem). */
+function clearWave(w: World) {
+  for (const d of w.enemies) if (d.alive) Object.assign(d, { x: w.player.x + 20, y: w.player.y, arrive: 0, hp: 1 });
   w.player.faceX = 1;
   w.player.faceY = 0;
+  w.player.atkCd = 0;
   step(w, DT, { ...idle(), attack: true });
+  run(w, 0.1);
+}
+/** Walks the gem straight up into the doorway from its spawn column. */
+function walkToDoor(w: World) {
+  const d = w.room.door;
+  w.player.x = d.x + d.w / 2;
+  w.player.y = d.y + d.h + 12;
+  for (let i = 0; i < 60 && w.transition < 0; i++) step(w, DT * 4, { ...idle(), my: -1 });
+}
+
+test("clearing a room's wave opens its doorway; the run goes on", () => {
+  const w = createWorld(1);
+  assert.equal(w.doorOpen, false);
+  clearWave(w);
   assert.equal(alive(w), 0);
+  assert.equal(w.doorOpen, true);
+  assert.equal(w.phase, "play");
+});
+
+test("a closed doorway goes nowhere; an open one loads the next room, hearts kept", () => {
+  const w = createWorld(1);
+  walkToDoor(w);
+  run(w, 0.5);
+  assert.equal(w.roomIndex, 0, "closed: still room 1");
+  clearWave(w);
+  w.player.hearts = 2;
+  walkToDoor(w);
+  assert.ok(w.transition >= 0, "the fade starts at the door");
+  run(w, TUNE.door.fade + 0.05);
+  assert.equal(w.roomIndex, 1);
+  assert.equal(w.roomReached, 2);
+  assert.equal(w.player.hearts, 2, "hearts carry over");
+  assert.equal(w.doorOpen, false, "the new room's door is shut");
+  assert.ok(alive(w) > 0, "and it has its wave");
+});
+
+test("clearing the last room ends the run as clear; R starts again at room 1", () => {
+  const w = createWorld(1);
+  for (let r = 0; r < ROOMS.length; r++) {
+    clearWave(w);
+    if (r < ROOMS.length - 1) {
+      walkToDoor(w);
+      run(w, TUNE.door.fade + 0.05);
+    }
+  }
+  assert.equal(w.roomIndex, ROOMS.length - 1);
   assert.equal(w.phase, "clear");
+  restart(w);
+  assert.equal(w.roomIndex, 0);
+  assert.equal(w.phase, "play");
+  assert.equal(w.player.hearts, TUNE.hurt.hearts);
+});
+
+test("every room fits 3x on a 1280x720 screen, and its doorway is reachable from the spawn", () => {
+  for (let i = 0; i < ROOMS.length; i++) {
+    const room = buildRoom(i);
+    const b = roomBounds(room);
+    assert.ok(b.x1 - b.x0 + 8 <= 1280 / 3 && b.y1 - b.y0 + 8 <= 720 / 3, `room ${i + 1} is ${b.x1 - b.x0}x${b.y1 - b.y0}`);
+    assert.ok(iceAt(room, room.spawnX, room.spawnY), `room ${i + 1} spawn on ice`);
+    // Flood fill over ice tiles from the spawn
+    const seen = new Uint8Array(COLS * ROWS);
+    const q = [Math.floor(room.spawnY / TILE) * COLS + Math.floor(room.spawnX / TILE)];
+    seen[q[0]] = 1;
+    while (q.length) {
+      const k = q.pop()!;
+      for (const n of [k - 1, k + 1, k - COLS, k + COLS]) if (n >= 0 && n < COLS * ROWS && room.ice[n] && !seen[n]) { seen[n] = 1; q.push(n); }
+    }
+    const dc = room.door.x / TILE, dr = room.door.y / TILE;
+    assert.ok(seen[dr * COLS + dc] && seen[dr * COLS + dc + 1], `room ${i + 1}'s doorway reachable`);
+  }
 });
 
 /* ── CHARGER ── */

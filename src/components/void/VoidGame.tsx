@@ -6,7 +6,7 @@ import {
   ENEMY_NAMES, TUNE, VIEW, createWorld, restart, roomBounds, step,
   type EnemyName, type Input, type Phase, type Wave, type World,
 } from "./engine";
-import { COLOR, buildAtlas, createAmbient, drawWorld } from "./render";
+import { COLOR, buildAtlas, createAmbient, drawWorld, rebuildIsland } from "./render";
 
 /**
  * THE VOID, step 1: the shell. Same contract as the Archive (ArchiveSlot
@@ -75,6 +75,8 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   /** The run's phase, mirrored for the card (set only when it changes). */
   const [phase, setPhase] = useState<Phase>("play");
   const [stats, setStats] = useState({ room: 1, kills: 0 });
+  /** The room on screen and whether its doorway is open, for the HUD line. */
+  const [hudRoom, setHudRoom] = useState({ room: 1, open: false });
   /** Counts phase changes, so a second death waits for its own fade. */
   const [endKey, setEndKey] = useState(0);
   const [shownKey, setShownKey] = useState(-1);
@@ -101,6 +103,8 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     worldRef.current = world;
     reducedRef.current = reduced;
     let lastPhase: Phase = "play";
+    let lastRoom = 0;
+    let lastHud = "1:false";
     const atlas = buildAtlas(world.room);
     const amb = createAmbient();
     const off = document.createElement("canvas");
@@ -288,6 +292,17 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         if (world.player.atkAge === 0) attackAt = -1;
         if (world.player.dashCd === TUNE.dash.cooldown) dashAt = -1;
       }
+      // A new room: bake its island, re-fit the scale to it
+      if (world.roomIndex !== lastRoom) {
+        lastRoom = world.roomIndex;
+        rebuildIsland(atlas, world.room);
+        resize();
+      }
+      const hudKey = `${world.roomIndex + 1}:${world.doorOpen}`;
+      if (hudKey !== lastHud) {
+        lastHud = hudKey;
+        setHudRoom({ room: world.roomIndex + 1, open: world.doorOpen });
+      }
       if (world.phase !== lastPhase) {
         lastPhase = world.phase;
         setPhase(world.phase);
@@ -361,7 +376,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       </div>
 
       <p className="pointer-events-none absolute left-1/2 top-[max(1.4rem,calc(env(safe-area-inset-top)+0.9rem))] -translate-x-1/2 whitespace-nowrap font-mono text-label uppercase tracking-[0.2em] text-white/80">
-        The void · Room 1
+        The void · Room {hudRoom.room} / 3{hudRoom.open ? " · the way is open" : ""}
       </p>
 
       <button
@@ -388,10 +403,10 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         >
           <div className="flex flex-col items-center gap-5 text-center">
             <h2 id="void-end-title" className="font-mono text-[clamp(1.75rem,3.2vw,2.75rem)] uppercase tracking-[0.3em] text-white">
-              {phase === "dead" ? "You woke" : "Room clear"}
+              {phase === "dead" ? "You woke" : "All rooms clear"}
             </h2>
             <p id="void-end-detail" className="font-mono text-label uppercase tracking-[0.2em] text-white/70">
-              {phase === "dead" ? `Room ${stats.room} reached · ${stats.kills} shattered` : `All ${stats.kills} drifters shattered`}
+              {phase === "dead" ? `Room ${stats.room} of 3 reached · ${stats.kills} shattered` : `3 rooms · ${stats.kills} shattered`}
             </p>
             <div className="mt-2 flex gap-3">
               <button
