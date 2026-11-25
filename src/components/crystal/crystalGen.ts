@@ -25,9 +25,10 @@ export const FBM_AMP = 0.14;
 export const FBM_FREQ = 1.6;
 export const FBM_OCTAVES = 4;
 /** Fine relief: [frequency, amplitude] pairs (amplitude on the unit
- * sphere), one value-noise octave each. Geometry on the intact mesh
- * (after the clip, so it erodes the flat cuts too); baked into the
- * shards' normal map instead (crystalMaterial). */
+ * sphere), one value-noise octave each. Geometry on the intact mesh,
+ * but only on the uncut surface: it fades to nothing within RELIEF_CLEAR
+ * of any clip plane, so a cut face stays flat and its edges stay hard.
+ * Baked into the shards' normal map instead (crystalMaterial). */
 export const DETAIL_OCTAVES: [number, number][] = [[6, 0.025], [11, 0.012]];
 
 /** Fine relief height at a unit direction (see DETAIL_OCTAVES). */
@@ -39,14 +40,19 @@ export function reliefHeight(x: number, y: number, z: number): number {
   return dr;
 }
 export const AXIS_SCALE: [number, number, number] = [1.08, 1.0, 0.92];
-export const PLANE_COUNT = 8;
-export const PLANE_MIN = 0.66;
-export const PLANE_MAX = 0.92;
+/** Clip planes: more and deeper than a pebble's, so the outline is
+ * straight segments and corners (the chunk, not a ball). */
+export const PLANE_COUNT = 12;
+export const PLANE_MIN = 0.56;
+export const PLANE_MAX = 0.82;
+/** Relief fades in over this distance from the nearest clip plane
+ * (pre-fit units): zero on a cut face. */
+export const RELIEF_CLEAR = 0.08;
 /** Largest bounding-box side in world units; matches the previous rock so
  * hover radius, park layout and logo sizing keep their tuning. */
 export const TARGET_SIZE = 2.426;
 /** Faces meeting sharper than this get split normals (crisp cut edges). */
-export const CREASE_DEG = 35;
+export const CREASE_DEG = 30;
 export const SHARD_COUNT = 10;
 
 /* ── Seeded randomness ────────────────────────────────────────── */
@@ -199,9 +205,14 @@ export function buildChunk(levels = ICO_SUBDIVISIONS, relief = true): THREE.Buff
   const p = verts.map((v) => {
     const q = coarsePoint(v, planes);
     if (relief) {
-      // Fine relief on top, along the radial direction
+      // Fine relief on top, along the radial direction, only away from
+      // the cuts: a cut face is never rounded
+      let clear = Infinity;
+      for (const pl of planes) clear = Math.min(clear, pl.d - q.dot(pl.n));
+      const t = Math.min(1, Math.max(0, clear / RELIEF_CLEAR));
+      const w = t * t * (3 - 2 * t);
       const len = q.length();
-      q.multiplyScalar((len + reliefHeight(v.x, v.y, v.z)) / len);
+      q.multiplyScalar((len + w * reliefHeight(v.x, v.y, v.z)) / len);
     }
     return q;
   });
