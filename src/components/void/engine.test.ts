@@ -243,7 +243,7 @@ test("a closed doorway goes nowhere; an open one loads the next room, hearts kep
   assert.ok(alive(w) > 0, "and it has its wave");
 });
 
-test("clearing the last room ends the run as clear; R starts again at room 1", () => {
+test("freeing room 3's seal wins the run (no door); R starts again at room 1", () => {
   const w = createWorld(1);
   for (let r = 0; r < ROOMS.length; r++) {
     clearRoom(w);
@@ -253,7 +253,9 @@ test("clearing the last room ends the run as clear; R starts again at room 1", (
     }
   }
   assert.equal(w.roomIndex, ROOMS.length - 1);
-  assert.equal(w.phase, "clear");
+  assert.equal(w.phase, "won");
+  assert.equal(w.doorOpen, false, "the last room has no way on: the run is over");
+  assert.deepEqual(w.freed, [true, true, true]);
   restart(w);
   assert.equal(w.roomIndex, 0);
   assert.equal(w.phase, "play");
@@ -539,6 +541,18 @@ test("seal 2: two rings a cycle, spinning opposite ways, and a 5-bolt fan", () =
   until(w, SealState.Recover);
   assert.equal(w.bolts.filter((b) => b.alive).length, 5);
   assert.equal(sealPattern(w).recover, 1.3);
+});
+
+test("seal 3: three alternating rings a cycle, a 7-bolt fan, a 1.1 s window", () => {
+  const w = atSeal(2);
+  until(w, SealState.Rings);
+  const rings = w.rings.filter((r) => r.alive);
+  assert.equal(rings.length, 3);
+  assert.ok(Math.sign(rings[0].spin) !== Math.sign(rings[1].spin) && Math.sign(rings[1].spin) !== Math.sign(rings[2].spin), "alternating");
+  until(w, SealState.AimWarn);
+  until(w, SealState.Recover);
+  assert.equal(w.bolts.filter((b) => b.alive).length, 7);
+  assert.equal(sealPattern(w).recover, 1.1);
 });
 
 test("R after a death starts at the first unfreed room", () => {

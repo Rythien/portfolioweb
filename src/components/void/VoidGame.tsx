@@ -101,11 +101,13 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   const worldRef = useRef<World | null>(null);
   const reducedRef = useRef(false);
   const fallAgainRef = useRef<HTMLButtonElement | null>(null);
+  const wakeFnRef = useRef(onWake);
 
   useEffect(() => {
     activeRef.current = active;
     openRef.current = open;
     wakeFn.current = onWake;
+    wakeFnRef.current = onWake;
   }, [active, open, onWake]);
 
   // Focus the stage once DREAM settles, so the keyboard plays at once
@@ -229,8 +231,8 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         return;
       }
       resume();
-      // R: fall again, from the card (dead or cleared)
-      if (e.code === "KeyR" && world.phase !== "play") {
+      // R: fall again, from the death card (a won run is over)
+      if (e.code === "KeyR" && world.phase === "dead") {
         e.preventDefault();
         restart(world, startRoom());
         recorded.fill(false);
@@ -387,9 +389,20 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   }, [phase, endKey]);
   const cardOn = phase !== "play" && shownKey === endKey;
 
+  // Won: all three freed. The card says so, then the flood wakes the
+  // visitor at Contact (the Archive's ending), from the middle of the screen
+  useEffect(() => {
+    if (phase !== "won") return;
+    const id = window.setTimeout(
+      () => wakeFnRef.current({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, { to: "contact" }),
+      reducedRef.current ? 1200 : 2400,
+    );
+    return () => window.clearTimeout(id);
+  }, [phase]);
+
   const fallAgain = () => {
     const w = worldRef.current;
-    if (!w || w.phase === "play") return;
+    if (!w || w.phase !== "dead") return;
     restart(w, startRoom());
     stageRef.current?.focus({ preventScroll: true });
   };
@@ -448,11 +461,12 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         >
           <div className="flex flex-col items-center gap-5 text-center">
             <h2 id="void-end-title" className="font-mono text-[clamp(1.75rem,3.2vw,2.75rem)] uppercase tracking-[0.3em] text-white">
-              {phase === "dead" ? "You woke" : "All rooms clear"}
+              {phase === "dead" ? "You woke" : "All three freed"}
             </h2>
             <p id="void-end-detail" className="font-mono text-label uppercase tracking-[0.2em] text-white/70">
-              {phase === "dead" ? `Room ${stats.room} of 3 reached · ${stats.kills} shattered` : `3 rooms · ${stats.kills} shattered`}
+              {phase === "dead" ? `Room ${stats.room} of 3 reached · ${stats.kills} shattered` : "Waking at Contact"}
             </p>
+            {phase === "dead" && (
             <div className="mt-2 flex gap-3">
               <button
                 ref={fallAgainRef}
@@ -470,6 +484,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
                 Esc · Wake
               </button>
             </div>
+            )}
           </div>
         </div>
       )}
