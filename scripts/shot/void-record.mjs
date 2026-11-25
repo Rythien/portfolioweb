@@ -25,6 +25,8 @@ const VIDEO = !args.includes("--novideo");
 const [VW, VH] = (args.find((a) => a.startsWith("--size="))?.slice(7) ?? "1280x720").split("x").map(Number);
 /** --wave=charger:4 (the game's ?voidwave test hook): film one enemy type. */
 const WAVE = args.find((a) => a.startsWith("--wave="))?.slice(7) ?? "";
+/** --room=2: start in that room (the game's ?voidroom test hook). */
+const ROOM = args.find((a) => a.startsWith("--room="))?.slice(7) ?? "";
 /** --name=step2-charger: output file stem (default step1). */
 const NAME = args.find((a) => a.startsWith("--name="))?.slice(7) ?? "step1";
 mkdirSync(OUT, { recursive: true });
@@ -38,7 +40,7 @@ const ctx = await browser.newContext({
   ...(VIDEO ? { recordVideo: { dir: tmp, size: { width: VW, height: VH } } } : {}),
 });
 const page = await ctx.newPage();
-await page.goto(`${BASE}/?nopreload=1&mode=dream&dream=void${WAVE ? `&voidwave=${WAVE}` : ""}`, { waitUntil: "load" });
+await page.goto(`${BASE}/?nopreload=1&mode=dream&dream=void${WAVE ? `&voidwave=${WAVE}` : ""}${ROOM ? `&voidroom=${ROOM}` : ""}`, { waitUntil: "load" });
 await page.waitForFunction(() => window.__void?.count?.() > 30, null, { timeout: 30000 });
 
 // Logical (480x270) -> CSS px, from the canvas's own box (integer scale, letterbox)
@@ -63,14 +65,25 @@ const t0 = Date.now();
 let still = false;
 let mouseDown = false;
 let deaths = 0, clears = 0, rooms = 0, lastRoom = 0;
+let sealFrom = null;
+const sealTimes = [];
+const TRACE = args.includes("--trace");
+let lastHearts = 3;
 while (Date.now() - t0 < SECONDS * 1000) {
+  if (!still && Date.now() - t0 > SECONDS * 500) {
+    still = true;
+    await page.screenshot({ path: join(OUT, NAME + "-still.png") });
+  }
   const s = await page.evaluate(() => {
     const w = window.__void.world;
     const p = w.player;
     // [x, y, kind, state, ax, ay]
     const ds = w.enemies.filter((d) => d.alive && d.arrive <= 0).map((d) => [d.x, d.y, d.kind, d.state, d.ax, d.ay]);
     const bs = w.bolts.filter((b) => b.alive).map((b) => [b.x, b.y, b.vx, b.vy]);
-    return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts, open: w.doorOpen, room: w.roomIndex, moving: w.transition >= 0 };
+    const sl = w.seal;
+    const seal = sl.state === 0 || sl.state === 7 ? null : { x: sl.x, y: sl.y, state: sl.state, rings: w.rings.filter((q) => q.alive).map((q) => [q.r, q.gapA]) };
+    return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts, open: w.doorOpen, room: w.roomIndex, moving: w.transition >= 0,
+      seal, sealState: sl.state, t: w.t };
   });
   if (s.room !== lastRoom) { if (s.room > lastRoom) rooms++; lastRoom = s.room; }
   // The run cleared (or lost): fall again (R), so the take keeps playing.
@@ -84,8 +97,41 @@ while (Date.now() - t0 < SECONDS * 1000) {
     await page.keyboard.press("KeyR");
     continue;
   }
+  if (TRACE && s.hearts < lastHearts && s.seal) {
+    const sx0 = s.seal.x, sy0 = s.seal.y - 8, pd = Math.hypot(s.x - sx0, s.y - 6 - sy0);
+    const near = s.bs.map(([bx, by]) => Math.hypot(bx - s.x, by - s.y + 6)).sort((a, b) => a - b)[0];
+    console.log(`hurt: seal state ${s.seal.state}, gem ${pd.toFixed(0)} px from it, rings ${JSON.stringify(s.seal.rings.map(([r, g]) => [Math.round(r), +g.toFixed(2)]))}, nearest bolt ${near?.toFixed(0) ?? "-"} px, dash cd ${s.cd.toFixed(2)}`);
+  }
+  lastHearts = s.hearts;
   const want = new Set();
   if (s.moving) { await hold(want); await page.waitForTimeout(40); continue; }
+  // Seal timing: from its rising to its freeing, in game time
+  if (s.phase !== "play") sealFrom = null; // a death: that attempt does not count
+  if (s.sealState === 1 && sealFrom === null) sealFrom = s.t;
+  if (s.sealState === 7 && sealFrom !== null) { sealTimes.push(s.t - sealFrom); sealFrom = null; }
+  if (s.seal) {
+    const sx = s.seal.x, sy = s.seal.y - 8;
+    const gx = s.x - sx, gy = s.y - 6 - sy, pd = Math.hypot(gx, gy);
+    // A ring about to sweep over us outside its gap: dash through it, or back off
+    let sting = false;
+    for (const [rr, gapA] of s.seal.rings) {
+      let da = Math.atan2(gy, gx) - gapA;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      if (rr < pd + 2 && pd - rr < 11 && Math.abs(da) > 0.95 / 2 - 0.08) sting = true;
+    }
+    if (sting) {
+      // Dash ready: INWARD through the band (it travels outward, and is then
+      // behind us). Cooling: outrun it outward (95 vs 34 px/s), cross later
+      const inward = s.cd === 0 ? 1 : -1;
+      if (gx * inward > 3) want.add("KeyA"); else if (gx * inward < -3) want.add("KeyD");
+      if (gy * inward > 3) want.add("KeyW"); else if (gy * inward < -3) want.add("KeyS");
+      await hold(want);
+      if (s.cd === 0) await page.keyboard.press("Space");
+      if (mouseDown) { await page.mouse.up(); mouseDown = false; }
+      await page.waitForTimeout(30);
+      continue;
+    }
+  }
   // Wave cleared, the doorway open: walk to it (a path over the ice tiles)
   if (s.open && s.ds.length === 0) {
     if (mouseDown) { await page.mouse.up(); mouseDown = false; }
@@ -147,6 +193,29 @@ while (Date.now() - t0 < SECONDS * 1000) {
     await page.waitForTimeout(40);
     continue;
   }
+  // Its window: once the fan's bolts are past our post, close to the edge of
+  // reach (~30 px; the burst reaches ~43) and hit; never into the muzzle
+  const fanOut = s.seal && s.bs.some(([bx, by]) => Math.hypot(bx - s.seal.x, by - (s.seal.y - 8)) < 70);
+  if (s.seal && s.seal.state === 5 && !fanOut) {
+    const tx = s.seal.x, ty = s.seal.y + 28;
+    if (tx - s.x > 3) want.add("KeyD"); else if (tx - s.x < -3) want.add("KeyA");
+    if (ty - s.y > 3) want.add("KeyS"); else if (ty - s.y < -3) want.add("KeyW");
+    await hold(want);
+    await page.mouse.move(sx(s.seal.x), sy(s.seal.y - 10));
+    if (Math.hypot(tx - s.x, ty - s.y) < 16) { await page.mouse.down(); await page.mouse.up(); }
+    await page.waitForTimeout(30);
+    continue;
+  }
+  if (s.seal && s.ds.length === 0) {
+    // A post ~60 px out: a ring gives over a second's notice, the fan room to read
+    const tx = s.seal.x, ty = s.seal.y + 58;
+    if (tx - s.x > 4) want.add("KeyD"); else if (tx - s.x < -4) want.add("KeyA");
+    if (ty - s.y > 4) want.add("KeyS"); else if (ty - s.y < -4) want.add("KeyW");
+    await hold(want);
+    if (mouseDown) { await page.mouse.up(); mouseDown = false; }
+    await page.waitForTimeout(30);
+    continue;
+  }
   let near = null, nd = 1e9;
   for (const [x, y, kind, state] of s.ds) {
     // A recovering charger is the opening: go for it first
@@ -182,10 +251,6 @@ while (Date.now() - t0 < SECONDS * 1000) {
     await hold(want);
     if (mouseDown) { await page.mouse.up(); mouseDown = false; }
   }
-  if (!still && Date.now() - t0 > SECONDS * 500) {
-    still = true;
-    await page.screenshot({ path: join(OUT, NAME + "-still.png") });
-  }
   await page.waitForTimeout(40);
 }
 await hold(new Set());
@@ -216,3 +281,4 @@ console.log(VIDEO ? `recorded ${SECONDS}s -> ${join(OUT, NAME + ".webm")}` : `pl
 console.log(`frame interval (game + browser compositing): ${stats.frames} frames, ${r(stats.fps)} fps sustained; p50 ${r(stats.p50)} ms, p95 ${r(stats.p95)}, p99 ${r(stats.p99)}, max ${r(stats.max)}; ${stats.over20} over 20 ms`);
 console.log(`game work per frame (rules + draw + blit): p50 ${stats.w50.toFixed(2)} ms, p95 ${stats.w95.toFixed(2)}, p99 ${stats.w99.toFixed(2)}, max ${stats.wmax.toFixed(2)}`);
 console.log(`doorways walked through ${rooms}, runs cleared ${clears}, deaths ${deaths}, kills this run ${stats.kills}, hearts left ${stats.hearts}`);
+if (sealTimes.length) console.log(`seals freed ${sealTimes.length}: ${sealTimes.map((t) => t.toFixed(1) + " s").join(", ")} (game time, rising to freed)`);

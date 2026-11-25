@@ -1,6 +1,7 @@
 /**
  * THE VOID: the rules. The player (the pixel gem), move / dash / attack,
- * and the enemies: DRIFTERS, CHARGERS and SPITTERS (and their bolts).
+ * the enemies: DRIFTERS, CHARGERS and SPITTERS (and their bolts), and
+ * each room's SEAL.
  * Pure (no DOM): the shell feeds it
  * input and a frame time, render.ts draws the state, engine.test.ts pins
  * the numbers. Everything lives in pre-allocated pools: nothing is
@@ -102,7 +103,82 @@ export const TUNE = {
   spawn: { wave: 8, minDist: 80 },
   /** Walking through an open doorway: the screen fades to the void and back. */
   door: { fade: 0.4 },
+  /**
+   * SEAL: each room's mini-boss, after its wave. A loop, every attack
+   * told the way the charger and spitter tell theirs:
+   *   ring: a danger ring pulses at its base with the gap left clear
+   *     (`ringWarn`), then a ring of shards spins outward with that gap
+   *     (in the gap, or dashing, it passes you);
+   *   fire: it blinks danger and dotted lines show a locked fan (`aimWarn`),
+   *     then fires slow bolts along them (dash through them);
+   *   recover: its core opens, pale ice (the "hit me" colour) for
+   *     `recover`: the one window it can be hit. A hit closes it.
+   * Three hits free it. The per-seal pattern is in ROOMS.
+   */
+  seal: {
+    radius: 13,
+    hits: 3,
+    arrive: 1.0,
+    ringWarn: 0.5,
+    ringStart: 16,
+    ringSpeed: 34,
+    ringEnd: 118,
+    /** The gap's angular width (rad). */
+    gap: 0.95,
+    /** Half-thickness of a ring's sting band (px, to the gem's centre). */
+    ringHit: 4,
+    /** After the last ring leaves: wait until it is this far out before aiming. */
+    clearRadius: 70,
+    aimWarn: 0.6,
+    boltSpeed: 75,
+    flinch: 0.3,
+    /** The project's cover blooming into the room, before the doorway opens. */
+    bloom: 3.0,
+  },
 } as const;
+
+/** One seal's pattern (ROOMS[i].seal). */
+export interface SealPattern {
+  /** Rings per cycle, launched `ringEvery` s apart. */
+  rings: number;
+  ringEvery: number;
+  /** Spin (rad/s); `alternate` flips it ring by ring. */
+  spin: number;
+  alternate: boolean;
+  /** Bolts in the fan, and its spread (rad). */
+  fan: number;
+  spread: number;
+  /** The vulnerable window (s). */
+  recover: number;
+}
+
+/** Seal states. */
+export const SealState = { Off: 0, Arrive: 1, RingWarn: 2, Rings: 3, AimWarn: 4, Recover: 5, Flinch: 6, Freed: 7 } as const;
+
+export interface Ring {
+  alive: boolean;
+  r: number;
+  /** The gap's centre angle now, and its spin (rad/s). */
+  gapA: number;
+  spin: number;
+}
+export const MAX_RINGS = 6;
+
+export interface Seal {
+  state: number;
+  t: number;
+  x: number;
+  y: number;
+  hp: number;
+  flash: number;
+  /** Rings still to launch this cycle, and the gap angle of the next (shown in its warning). */
+  ringsLeft: number;
+  nextGap: number;
+  /** The fan's locked centre angle. */
+  aimA: number;
+  /** Since it was freed (drives the bloom), or -1. */
+  freedT: number;
+}
 
 /** Enemy kinds (plain object: node's type stripping has no enums). */
 export const EnemyKind = { Drifter: 0, Charger: 1, Spitter: 2 } as const;
@@ -122,6 +198,9 @@ export const Spit = { Move: 0, Windup: 1 } as const;
 const RADIUS = [TUNE.drifter.radius, TUNE.charger.radius, TUNE.spitter.radius] as const;
 /** Hit points per kind. */
 const HP = [1, TUNE.charger.hp, TUNE.spitter.hp] as const;
+
+/** Where every room's seal rises: above the spawn, on the ice. */
+export const SEAL_SPOT = { x: 240, y: 108 } as const;
 
 /** The gem's collision: feet half-extents (px). */
 const FEET = { x: 4, y: 3 } as const;
@@ -161,10 +240,11 @@ export interface Room {
  * the wave that fills it. Later rooms are tighter, and each adds a kind:
  * room 1 drifters only, room 2 adds chargers, room 3 adds spitters.
  */
-export const ROOMS: { half: [number, number]; pits: [number, number, number, number][]; wave: Wave }[] = [
-  { half: [13, 5.5], pits: [[14, 9, 3, 3], [31, 15, 4, 2]], wave: { drifter: 8 } },
-  { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 6, charger: 3 } },
-  { half: [11.5, 4.8], pits: [[15, 10, 2, 3], [21, 8, 3, 2], [28, 15, 3, 2], [32, 10, 2, 3]], wave: { drifter: 4, charger: 2, spitter: 3 } },
+const SEAL_1: SealPattern = { rings: 1, ringEvery: 0, spin: 0.9, alternate: false, fan: 3, spread: 0.5, recover: 1.5 };
+export const ROOMS: { half: [number, number]; pits: [number, number, number, number][]; wave: Wave; seal: SealPattern }[] = [
+  { half: [13, 5.5], pits: [[14, 9, 3, 3], [31, 15, 4, 2]], wave: { drifter: 8 }, seal: SEAL_1 },
+  { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 6, charger: 3 }, seal: SEAL_1 },
+  { half: [11.5, 4.8], pits: [[15, 10, 2, 3], [21, 8, 3, 2], [28, 15, 3, 2], [32, 10, 2, 3]], wave: { drifter: 4, charger: 2, spitter: 3 }, seal: SEAL_1 },
 ];
 
 /**
@@ -360,8 +440,12 @@ export interface World {
   waveOverride: Wave | null;
   /** The room this run is in (index into ROOMS). */
   roomIndex: number;
-  /** The wave is cleared and the doorway is open. */
+  /** The seal is freed and the doorway is open. */
   doorOpen: boolean;
+  seal: Seal;
+  rings: Ring[];
+  /** Rooms whose seal this run freed (the shell unlocks their projects). */
+  freed: boolean[];
   /** < 0: no room change; else seconds into the fade through a doorway. */
   transition: number;
   particles: Particle[];
@@ -396,8 +480,8 @@ export function waveFor(w: World, index: number): Wave {
   return w.waveOverride ?? ROOMS[index].wave;
 }
 
-export function createWorld(seed = 1, reduced = false, wave: Wave | null = null): World {
-  const room = buildRoom(0);
+export function createWorld(seed = 1, reduced = false, wave: Wave | null = null, startRoom = 0): World {
+  const room = buildRoom(startRoom);
   const w: World = {
     room,
     t: 0,
@@ -409,6 +493,9 @@ export function createWorld(seed = 1, reduced = false, wave: Wave | null = null)
     waveOverride: wave,
     roomIndex: 0,
     doorOpen: false,
+    seal: { state: SealState.Off, t: 0, x: SEAL_SPOT.x, y: SEAL_SPOT.y, hp: TUNE.seal.hits, flash: 0, ringsLeft: 0, nextGap: 0, aimA: 0, freedT: -1 },
+    rings: Array.from({ length: MAX_RINGS }, (): Ring => ({ alive: false, r: 0, gapA: 0, spin: 0 })),
+    freed: ROOMS.map(() => false),
     transition: -1,
     bolts: Array.from({ length: MAX_BOLTS }, (): Bolt => ({ alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 })),
     particles: Array.from({ length: MAX_PARTICLES }, () => ({
@@ -427,8 +514,7 @@ export function createWorld(seed = 1, reduced = false, wave: Wave | null = null)
     random: rng(seed * 7919 + 3),
     reduced,
   };
-  resetTrail(w);
-  spawnWave(w, waveFor(w, 0));
+  loadRoom(w, startRoom);
   return w;
 }
 
@@ -446,8 +532,35 @@ export function loadRoom(w: World, index: number): void {
   for (const b of w.bolts) b.alive = false;
   for (const q of w.particles) q.alive = false;
   w.doorOpen = false;
+  w.seal.state = SealState.Off;
+  w.seal.freedT = -1;
+  for (const r of w.rings) r.alive = false;
   resetTrail(w);
   spawnWave(w, waveFor(w, index));
+  // An empty wave (a test hook) goes straight to the seal
+  if (!w.enemies.some((d) => d.alive)) startSeal(w);
+}
+
+/** The wave is down: the room's seal rises. */
+function startSeal(w: World): void {
+  const s = w.seal;
+  s.state = SealState.Arrive;
+  s.t = TUNE.seal.arrive * (w.reduced ? 1.5 : 1);
+  s.x = SEAL_SPOT.x;
+  s.y = SEAL_SPOT.y;
+  s.hp = TUNE.seal.hits;
+  s.flash = 0;
+  s.freedT = -1;
+}
+
+/** The pattern of the seal in this room. */
+export function sealPattern(w: World): SealPattern {
+  return ROOMS[w.roomIndex].seal;
+}
+
+/** Is the seal open to a hit right now? */
+export function sealOpen(w: World): boolean {
+  return w.seal.state === SealState.Recover;
 }
 
 function resetTrail(w: World): void {
@@ -457,9 +570,13 @@ function resetTrail(w: World): void {
   }
 }
 
-/** R ("fall again"): a fresh run from room 1, same world objects (no allocation churn). */
-export function restart(w: World): void {
-  w.room = buildRoom(0);
+/**
+ * R ("fall again"): a fresh run, same world objects (no allocation churn).
+ * `startRoom`: the first room whose project is not yet freed (the shell
+ * knows which), so a death never makes you refight what you freed.
+ */
+export function restart(w: World, startRoom = 0): void {
+  w.room = buildRoom(startRoom);
   Object.assign(w.player, freshPlayer(w.room));
   w.phase = "play";
   w.endT = 0;
@@ -468,8 +585,9 @@ export function restart(w: World): void {
   w.kills = 0;
   w.hits = 0;
   w.transition = -1;
-  w.roomReached = 1;
-  loadRoom(w, 0);
+  w.roomReached = startRoom + 1;
+  w.freed.fill(false);
+  loadRoom(w, startRoom);
 }
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -533,15 +651,8 @@ export function spawnWave(w: World, wave: Wave): void {
 function killEnemy(w: World, d: Enemy): void {
   d.alive = false;
   w.kills++;
-  // The wave is the room: the last one down opens the doorway (the last
-  // room's clears the run)
-  if (!w.enemies.some((o) => o.alive)) {
-    if (w.roomIndex < ROOMS.length - 1) w.doorOpen = true;
-    else {
-      w.phase = "clear";
-      w.endT = 0;
-    }
-  }
+  // The wave is down: the room's seal rises (it, not the wave, opens the door)
+  if (!w.enemies.some((o) => o.alive) && w.seal.state === SealState.Off) startSeal(w);
   // Chips: ice and energy, flung outward, slowed by friction
   // Two-hit kinds burst bigger
   for (let i = 0; i < (d.kind === EnemyKind.Drifter ? 9 : 13); i++) {
@@ -675,7 +786,20 @@ export function step(w: World, dt: number, input: Input): void {
   // Attack: a shard burst in the facing (or aimed) direction
   if (input.attack && p.atkCd <= 0) attack(w, input);
 
+  // The seal is solid: the gem is pushed out of its body
+  const sl = w.seal;
+  if (sl.state !== SealState.Off && sl.state !== SealState.Freed) {
+    const ox = p.x - sl.x, oy = p.y - sl.y;
+    const ol = Math.hypot(ox, oy);
+    const min = TUNE.seal.radius + 4;
+    if (ol < min) {
+      const k = (min - ol) / (ol || 1);
+      moveOnIce(w, (ol ? ox : 0) * k, (ol ? oy : 1) * k);
+    }
+  }
+
   stepEnemies(w, dt);
+  stepSeal(w, dt);
   stepBolts(w, dt);
   stepParticles(w, dt);
 
@@ -734,7 +858,160 @@ function attack(w: World, input: Input): void {
       shove(w, d, ax * TUNE.hit.shove, ay * TUNE.hit.shove);
     }
   }
+  // The seal: only while its core is open; otherwise the burst clinks off
+  const sl = w.seal;
+  if (sl.state !== SealState.Off && sl.state !== SealState.Freed && sl.state !== SealState.Arrive) {
+    const dx = sl.x - p.x, dy = sl.y - 8 - (p.y - 6);
+    const dist = Math.hypot(dx, dy);
+    if (dist <= TUNE.attack.range + TUNE.seal.radius && (dist < 10 || (dx * ax + dy * ay) / dist >= cosHalf)) {
+      if (sl.state === SealState.Recover) {
+        connected = true;
+        w.hits++;
+        sl.hp--;
+        sl.flash = TUNE.hit.flash;
+        w.shake = Math.max(w.shake, TUNE.feel.shakeTime);
+        if (sl.hp <= 0) freeSeal(w);
+        else {
+          // A hit closes the window: one hit per opening
+          sl.state = SealState.Flinch;
+          sl.t = TUNE.seal.flinch;
+        }
+      } else {
+        // Armoured: a clink of sparks, no damage
+        for (let i = 0; i < 4; i++) {
+          const a = Math.atan2(-dy, -dx) + (w.random() - 0.5) * 1.4;
+          emit(w, Kind.Spark, sl.x - (dx / (dist || 1)) * 10, sl.y - 8 - (dy / (dist || 1)) * 10, Math.cos(a) * 90, Math.sin(a) * 90, 0.18, 1, 10);
+        }
+      }
+    }
+  }
   if (connected) w.hitStop = TUNE.feel.hitStop;
+}
+
+/** Three hits: the seal shatters, its project is freed; the bloom, then the door. */
+function freeSeal(w: World): void {
+  const s = w.seal;
+  s.state = SealState.Freed;
+  s.freedT = 0;
+  w.freed[w.roomIndex] = true;
+  for (const r of w.rings) r.alive = false;
+  for (const b of w.bolts) b.alive = false;
+  w.hitStop = TUNE.death.hitStop;
+  w.shake = Math.max(w.shake, TUNE.feel.shakeTime * 2);
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * Math.PI * 2 + w.random() * 0.2;
+    const v = 60 + w.random() * 140;
+    emit(w, Kind.Chip, s.x, s.y - 12, Math.cos(a) * v, Math.sin(a) * v - 30, 0.6 + w.random() * 0.5, i % 3, 4);
+  }
+}
+
+function stepSeal(w: World, dt: number): void {
+  const s = w.seal;
+  const S = TUNE.seal;
+  const P = sealPattern(w);
+  const p = w.player;
+  const slow = w.reduced ? 0.75 : 1;
+  const tell = w.reduced ? 1.5 : 1;
+  s.flash = Math.max(0, s.flash - dt);
+  // Rings spin outward whatever the seal is doing
+  for (const r of w.rings) {
+    if (!r.alive) continue;
+    r.r += S.ringSpeed * slow * dt;
+    r.gapA += r.spin * dt;
+    if (r.r > S.ringEnd) {
+      r.alive = false;
+      continue;
+    }
+    // The sting: on the ring's band, outside its gap, not dashing
+    if (w.phase !== "play" || isInvulnerable(p)) continue;
+    const gx = p.x - s.x, gy = p.y - 6 - (s.y - 8);
+    if (Math.abs(Math.hypot(gx, gy) - r.r) > S.ringHit) continue;
+    let da = Math.atan2(gy, gx) - r.gapA;
+    da = Math.atan2(Math.sin(da), Math.cos(da));
+    if (Math.abs(da) > S.gap / 2) hurt(w, s.x, s.y - 8);
+  }
+  if (s.state === SealState.Off) return;
+  if (s.state === SealState.Freed) {
+    s.freedT += dt;
+    if (s.freedT >= S.bloom && !w.doorOpen && w.phase === "play") {
+      if (w.roomIndex < ROOMS.length - 1) w.doorOpen = true;
+      else {
+        w.phase = "clear";
+        w.endT = 0;
+      }
+    }
+    return;
+  }
+  s.t -= dt;
+  if (s.t > 0) return;
+  switch (s.state) {
+    case SealState.Arrive:
+    case SealState.Flinch:
+      // A cycle begins: the first ring's warning, its gap shown
+      s.ringsLeft = P.rings;
+      s.nextGap = Math.atan2(p.y - 6 - (s.y - 8), p.x - s.x) + Math.PI + (w.random() - 0.5) * 2;
+      s.state = SealState.RingWarn;
+      s.t = S.ringWarn * tell;
+      break;
+    case SealState.RingWarn: {
+      // Launch the ring the warning showed
+      const k = P.rings - s.ringsLeft;
+      for (const r of w.rings) {
+        if (r.alive) continue;
+        r.alive = true;
+        r.r = S.ringStart;
+        r.gapA = s.nextGap;
+        r.spin = P.spin * slow * (P.alternate && k % 2 ? -1 : 1);
+        break;
+      }
+      s.ringsLeft--;
+      if (s.ringsLeft > 0) {
+        s.nextGap += Math.PI * (0.6 + w.random() * 0.8);
+        s.state = SealState.RingWarn;
+        s.t = Math.max(S.ringWarn * tell, P.ringEvery);
+      } else {
+        s.state = SealState.Rings;
+        s.t = (S.clearRadius - S.ringStart) / (S.ringSpeed * slow);
+      }
+      break;
+    }
+    case SealState.Rings:
+      // The fan is aimed (and LOCKED) at the gem now; the lines show it
+      s.aimA = Math.atan2(p.y - 6 - (s.y - 8), p.x - s.x);
+      s.state = SealState.AimWarn;
+      s.t = S.aimWarn * tell;
+      break;
+    case SealState.AimWarn: {
+      for (let k = 0; k < P.fan; k++) {
+        const a = s.aimA + (P.fan > 1 ? (k / (P.fan - 1) - 0.5) * P.spread * 2 : 0);
+        for (const b of w.bolts) {
+          if (b.alive) continue;
+          b.alive = true;
+          b.x = s.x + Math.cos(a) * 14;
+          b.y = s.y - 8 + Math.sin(a) * 14;
+          b.vx = Math.cos(a) * S.boltSpeed * slow;
+          b.vy = Math.sin(a) * S.boltSpeed * slow;
+          b.life = 4 / slow;
+          break;
+        }
+      }
+      s.state = SealState.Recover;
+      s.t = P.recover * (w.reduced ? 1.25 : 1);
+      break;
+    }
+    case SealState.Recover:
+      // The window passed unhit: straight into the next cycle
+      s.state = SealState.Flinch;
+      s.t = 0;
+      break;
+  }
+}
+
+/** The fan's bolt angles while it aims (for the tell), written into `out`. */
+export function sealFan(w: World, out: number[]): number {
+  const P = sealPattern(w);
+  for (let k = 0; k < P.fan; k++) out[k] = w.seal.aimA + (P.fan > 1 ? (k / (P.fan - 1) - 0.5) * P.spread * 2 : 0);
+  return P.fan;
 }
 
 /** Moves an enemy; walkers (chargers) never step off the ice. Returns false if blocked. */

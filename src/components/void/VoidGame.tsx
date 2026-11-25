@@ -3,10 +3,28 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
-  ENEMY_NAMES, TUNE, VIEW, createWorld, restart, roomBounds, step,
+  ENEMY_NAMES, ROOMS, SealState, TUNE, VIEW, createWorld, restart, roomBounds, step,
   type EnemyName, type Input, type Phase, type Wave, type World,
 } from "./engine";
-import { COLOR, buildAtlas, createAmbient, drawWorld, rebuildIsland } from "./render";
+import { COLOR, buildAtlas, createAmbient, drawWorld, rebuildIsland, setCover } from "./render";
+import { archiveProjects } from "@/content/projects";
+import { useArchiveProgress } from "@/store/useArchiveProgress";
+
+/** The project each room's seal holds (the Archive's order: seal i, project i). */
+const SEAL_PROJECTS = ROOMS.map((_, i) => archiveProjects[i]);
+
+/**
+ * The room a run starts in: the first whose project is not yet freed (a
+ * death never makes you refight what you freed). All freed: room 1.
+ * Test hook ?voidroom=N overrides it.
+ */
+function startRoom(): number {
+  const q = Number(new URLSearchParams(window.location.search).get("voidroom"));
+  if (q >= 1 && q <= ROOMS.length) return q - 1;
+  const freed = useArchiveProgress.getState().freed;
+  const i = SEAL_PROJECTS.findIndex((p) => p && !freed.includes(p.slug));
+  return i < 0 ? 0 : i;
+}
 
 /**
  * THE VOID, step 1: the shell. Same contract as the Archive (ArchiveSlot
@@ -75,8 +93,8 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   /** The run's phase, mirrored for the card (set only when it changes). */
   const [phase, setPhase] = useState<Phase>("play");
   const [stats, setStats] = useState({ room: 1, kills: 0 });
-  /** The room on screen and whether its doorway is open, for the HUD line. */
-  const [hudRoom, setHudRoom] = useState({ room: 1, open: false });
+  /** The room on screen and what is happening in it, for the HUD line. */
+  const [hudRoom, setHudRoom] = useState({ room: 1, note: "" });
   /** Counts phase changes, so a second death waits for its own fade. */
   const [endKey, setEndKey] = useState(0);
   const [shownKey, setShownKey] = useState(-1);
@@ -99,13 +117,24 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     const cvs = canvasRef.current;
     if (!cvs) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const world: World = createWorld(1, reduced, waveFromUrl());
+    if (!useArchiveProgress.getState().hydrated) useArchiveProgress.getState().hydrate();
+    const world: World = createWorld(1, reduced, waveFromUrl(), startRoom());
     worldRef.current = world;
     reducedRef.current = reduced;
     let lastPhase: Phase = "play";
-    let lastRoom = 0;
-    let lastHud = "1:false";
+    let lastRoom = world.roomIndex;
+    let lastHud = "";
     const atlas = buildAtlas(world.room);
+    // The freed projects' DREAM covers, for the bloom (pixelated at its size)
+    SEAL_PROJECTS.forEach((p, i) => {
+      if (!p) return;
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => setCover(atlas, i, img);
+      img.src = `/projects/${p.slug}/cover-dream-800.webp`;
+    });
+    /** Rooms whose freeing has been recorded (unlocks happen once). */
+    const recorded = ROOMS.map(() => false);
     const amb = createAmbient();
     const off = document.createElement("canvas");
     off.width = VIEW.w;
@@ -203,7 +232,8 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       // R: fall again, from the card (dead or cleared)
       if (e.code === "KeyR" && world.phase !== "play") {
         e.preventDefault();
-        restart(world);
+        restart(world, startRoom());
+        recorded.fill(false);
         return;
       }
       if (e.code in MOVE_KEYS || e.code === "Space" || e.code === "KeyJ") e.preventDefault();
@@ -298,10 +328,25 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         rebuildIsland(atlas, world.room);
         resize();
       }
-      const hudKey = `${world.roomIndex + 1}:${world.doorOpen}`;
+      // A seal freed: its project unlocks on the awake page (as the Archive's did)
+      world.freed.forEach((f, i) => {
+        if (!f || recorded[i]) return;
+        recorded[i] = true;
+        const p = SEAL_PROJECTS[i];
+        if (p) useArchiveProgress.getState().free(p.slug);
+      });
+      const s = world.seal;
+      const note = world.doorOpen
+        ? "the way is open"
+        : s.state === SealState.Freed
+          ? `freed · ${SEAL_PROJECTS[world.roomIndex]?.title ?? ""}`
+          : s.state !== SealState.Off
+            ? "the seal wakes"
+            : "";
+      const hudKey = `${world.roomIndex + 1}:${note}`;
       if (hudKey !== lastHud) {
         lastHud = hudKey;
-        setHudRoom({ room: world.roomIndex + 1, open: world.doorOpen });
+        setHudRoom({ room: world.roomIndex + 1, note });
       }
       if (world.phase !== lastPhase) {
         lastPhase = world.phase;
@@ -345,7 +390,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   const fallAgain = () => {
     const w = worldRef.current;
     if (!w || w.phase === "play") return;
-    restart(w);
+    restart(w, startRoom());
     stageRef.current?.focus({ preventScroll: true });
   };
 
@@ -376,7 +421,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       </div>
 
       <p className="pointer-events-none absolute left-1/2 top-[max(1.4rem,calc(env(safe-area-inset-top)+0.9rem))] -translate-x-1/2 whitespace-nowrap font-mono text-label uppercase tracking-[0.2em] text-white/80">
-        The void · Room {hudRoom.room} / 3{hudRoom.open ? " · the way is open" : ""}
+        The void · Room {hudRoom.room} / 3{hudRoom.note ? ` · ${hudRoom.note}` : ""}
       </p>
 
       <button

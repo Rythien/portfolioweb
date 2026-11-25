@@ -10,7 +10,8 @@
  * enemies outlined dark, and the gem, white, the brightest thing there.
  */
 import {
-  COLS, Charge, EnemyKind, Kind, ROWS, Spit, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, shakeOffset, transitionVeil,
+  COLS, Charge, EnemyKind, Kind, ROWS, SealState, Spit, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, sealFan,
+  shakeOffset, transitionVeil,
   type Enemy, type Room, type World,
 } from "./engine";
 import { COLOR } from "./palette";
@@ -146,6 +147,13 @@ export interface Atlas {
   /** The tell: the mouth lit. */
   spitterTell: HTMLCanvasElement;
   bolt: HTMLCanvasElement;
+  /** The seal: shut, open (its window), told (danger), hit (white). */
+  seal: HTMLCanvasElement;
+  sealOpen: HTMLCanvasElement;
+  sealTell: HTMLCanvasElement;
+  sealFlash: HTMLCanvasElement;
+  /** Each room's freed project, downsampled to the bloom's size (null until loaded). */
+  covers: (HTMLCanvasElement | null)[];
   heart: HTMLCanvasElement;
   heartEmpty: HTMLCanvasElement;
   shadow: HTMLCanvasElement;
@@ -187,12 +195,78 @@ export function buildAtlas(room: Room): Atlas {
     spitterFlash: silhouette(spitter, COLOR.white),
     spitterTell,
     bolt: sprite(BOLT, { v: COLOR.energy0, V: COLOR.energy1, W: COLOR.ice1 }),
+    seal: buildSeal(false),
+    sealOpen: buildSeal(true),
+    sealTell: silhouette(buildSeal(false), COLOR.danger),
+    sealFlash: silhouette(buildSeal(false), COLOR.white),
+    covers: [null, null, null],
     heart,
     heartEmpty: silhouette(heart, COLOR.energy0),
     shadow,
     island: buildIsland(room),
     sky: buildSky(),
   };
+}
+
+export const SEAL_SIZE = { w: 27, h: 33 } as const;
+/** The bloom's full size (logical px, 16:9). */
+export const BLOOM_SIZE = { w: 112, h: 63 } as const;
+
+/**
+ * The seal: a tall faceted crystal (pale ice faces, violet underside, a dark
+ * outline), its core a dark diamond. Open, the core is lit pale ice and
+ * cracks run from it: the window, in the "hit me" colour.
+ */
+function buildSeal(open: boolean): HTMLCanvasElement {
+  const { w: W, h: H } = SEAL_SIZE;
+  const c = canvas(W, H);
+  const x = c.getContext("2d")!;
+  const cx = 13;
+  const half = (y: number) => (y < 10 ? (y / 10) * 12 : y < 22 ? 12 : ((32 - y) / 10) * 12);
+  const inside = (i: number, j: number) => j >= 0 && j < H && Math.abs(i + 0.5 - (cx + 0.5)) <= half(j) + 0.01;
+  for (let j = 0; j < H; j++)
+    for (let i = 0; i < W; i++) {
+      if (!inside(i, j)) {
+        // the outline: any outside pixel touching the body
+        if (inside(i - 1, j) || inside(i + 1, j) || inside(i, j - 1) || inside(i, j + 1)) {
+          x.fillStyle = COLOR.void0;
+          x.fillRect(i, j, 1, 1);
+        }
+        continue;
+      }
+      const left = i < cx;
+      x.fillStyle = j > 21 ? (left ? COLOR.energy1 : COLOR.energy0) : left ? COLOR.ice1 : COLOR.ice0;
+      if (i === cx) x.fillStyle = COLOR.energy1; // the ridge
+      if (j > 9 && j < 22 && (i === cx - 6 || i === cx + 6)) x.fillStyle = COLOR.energy1; // facet edges
+      x.fillRect(i, j, 1, 1);
+    }
+  // The core
+  const cy = 15;
+  for (let j = -5; j <= 5; j++)
+    for (let i = -4; i <= 4; i++) {
+      if (Math.abs(i) / 4 + Math.abs(j) / 5 > 1) continue;
+      const edge = Math.abs(i) / 4 + Math.abs(j) / 5 > 0.7;
+      x.fillStyle = open ? (edge ? COLOR.ice0 : COLOR.ice1) : edge ? COLOR.energy0 : COLOR.deep;
+      x.fillRect(cx + i, cy + j, 1, 1);
+    }
+  if (open) {
+    // Cracks from the core out to the faces
+    x.fillStyle = COLOR.ice1;
+    for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1]]) {
+      for (let k = 5; k < 11; k++) x.fillRect(cx + Math.round(dx * k * 0.9), cy + Math.round(dy * k * (dx ? 0.7 : 1.4)), 1, 1);
+    }
+  }
+  return c;
+}
+
+/** A freed project's cover, downsampled once to the bloom's size. */
+export function setCover(A: Atlas, index: number, img: CanvasImageSource): void {
+  const c = canvas(BLOOM_SIZE.w, BLOOM_SIZE.h);
+  const x = c.getContext("2d")!;
+  x.imageSmoothingEnabled = true;
+  x.imageSmoothingQuality = "high";
+  x.drawImage(img, 0, 0, BLOOM_SIZE.w, BLOOM_SIZE.h);
+  A.covers[index] = c;
 }
 
 /** The void: flat, the darkest value on screen (no smooth gradient: pixels only). */
@@ -422,6 +496,8 @@ export function drawWorld(
   }
   x.globalAlpha = 1;
 
+  drawSealTells(x, w);
+
   // Spitter telegraph: rings swelling round its mouth, and a short dotted
   // aim line (locked) toward where the bolt will go
   for (const d of w.enemies) {
@@ -456,6 +532,18 @@ export function drawWorld(
   let n = 0;
   amb.order[n] = 0;
   amb.depth[n++] = p.y;
+  // The seal stands among the bodies (order -1)
+  const sl = w.seal;
+  if (sl.state !== SealState.Off && sl.state !== SealState.Freed) {
+    let j = n++;
+    while (j > 0 && amb.depth[j - 1] > sl.y) {
+      amb.order[j] = amb.order[j - 1];
+      amb.depth[j] = amb.depth[j - 1];
+      j--;
+    }
+    amb.order[j] = -1;
+    amb.depth[j] = sl.y;
+  }
   for (let k = 0; k < w.enemies.length; k++) {
     const d = w.enemies[k];
     if (!d.alive || d.arrive > 0) continue;
@@ -471,6 +559,7 @@ export function drawWorld(
   for (let j = 0; j < n; j++) {
     const o = amb.order[j];
     if (o === 0) drawGem(x, w, A);
+    else if (o === -1) drawSeal(x, w, A);
     else drawEnemy(x, w, A, w.enemies[o - 1]);
   }
 
@@ -534,6 +623,45 @@ export function drawWorld(
 
   x.restore();
 
+  // Rings of shards over the floor and bodies: pale crosses, danger centres
+  for (const r of w.rings) {
+    if (!r.alive) continue;
+    const n = Math.max(12, Math.floor((r.r * Math.PI * 2) / 6));
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      let da = a - r.gapA;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      if (Math.abs(da) < TUNE.seal.gap / 2) continue;
+      const px = Math.round(sl.x + Math.cos(a) * r.r), py = Math.round(sl.y - 8 + Math.sin(a) * r.r);
+      x.fillStyle = COLOR.ice0;
+      x.fillRect(px - 1, py, 3, 1);
+      x.fillRect(px, py - 1, 1, 3);
+      x.fillStyle = COLOR.danger;
+      x.fillRect(px, py, 1, 1);
+    }
+  }
+
+  // The freed project's cover blooms out of the seal, framed in pale ice
+  if (sl.state === SealState.Freed && sl.freedT >= 0 && sl.freedT < TUNE.seal.bloom) {
+    const cover = A.covers[w.roomIndex];
+    const k = easeOut(Math.min(1, sl.freedT / 0.6));
+    const fade = Math.min(1, (TUNE.seal.bloom - sl.freedT) / 0.4);
+    const bw = Math.max(8, Math.round(BLOOM_SIZE.w * k)), bh = Math.max(5, Math.round(BLOOM_SIZE.h * k));
+    const bx = Math.round(Math.min(VIEW.w - bw / 2 - 30, Math.max(bw / 2 + 30, sl.x)) - bw / 2);
+    const by = Math.round(Math.max(24, sl.y - 18 - bh / 2));
+    x.globalAlpha = fade;
+    x.fillStyle = COLOR.energy1;
+    x.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+    x.fillStyle = COLOR.ice1;
+    x.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+    if (cover) x.drawImage(cover, bx, by, bw, bh);
+    else {
+      x.fillStyle = COLOR.void1;
+      x.fillRect(bx, by, bw, bh);
+    }
+    x.globalAlpha = 1;
+  }
+
   // Through a doorway: the screen fades to the void and back
   const veil = transitionVeil(w);
   if (veil > 0) {
@@ -591,6 +719,74 @@ function drawDoor(x: CanvasRenderingContext2D, w: World): void {
       x.fillRect(Math.round(cx + 1), y + 2, 2, 1);
     }
   }
+}
+
+/** The seal's tells, under the bodies: arrival, ring warning, the fan's lines, its open window. */
+const _fan: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+function drawSealTells(x: CanvasRenderingContext2D, w: World): void {
+  const s = w.seal;
+  const cx = s.x, cy = s.y - 8;
+  const tell = w.reduced ? 1.5 : 1;
+  if (s.state === SealState.Arrive) {
+    // A great danger ring contracting onto where it rises
+    const k = 1 - Math.max(0, s.t) / (TUNE.seal.arrive * tell);
+    x.fillStyle = COLOR.danger;
+    x.globalAlpha = 0.4 + 0.6 * k;
+    pixelRing(x, cx, cy + 8, 44 - k * 30, 0, Math.PI * 2);
+  } else if (s.state === SealState.RingWarn) {
+    // A danger ring blinking at its base, the coming gap left clear
+    const on = w.reduced || Math.floor(s.t / 0.07) % 2 === 0;
+    if (on) {
+      x.fillStyle = COLOR.danger;
+      const r = TUNE.seal.ringStart;
+      const n = Math.ceil(r * Math.PI * 2);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        let da = a - s.nextGap;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (Math.abs(da) < TUNE.seal.gap / 2) continue;
+        x.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), 1, 1);
+      }
+    }
+  } else if (s.state === SealState.AimWarn) {
+    // Dotted danger lines: the fan, locked
+    const n = sealFan(w, _fan);
+    const k = 1 - Math.max(0, s.t) / (TUNE.seal.aimWarn * tell);
+    x.fillStyle = COLOR.danger;
+    x.globalAlpha = 0.5 + 0.5 * k;
+    for (let f = 0; f < n; f++)
+      for (let d = 16; d < 52; d += 4) x.fillRect(Math.round(cx + Math.cos(_fan[f]) * d), Math.round(cy + Math.sin(_fan[f]) * d), 1, 1);
+  } else if (s.state === SealState.Recover) {
+    // The window: a pale ring pulsing round it ("hit me")
+    const pulse = w.reduced ? 0 : Math.floor(w.t * 10) % 2;
+    x.fillStyle = COLOR.ice1;
+    x.globalAlpha = 0.85;
+    pixelRing(x, cx, cy, 19 + pulse, 0, Math.PI * 2);
+  }
+  x.globalAlpha = 1;
+}
+
+function drawSeal(x: CanvasRenderingContext2D, w: World, A: Atlas): void {
+  const s = w.seal;
+  const X = Math.round(s.x - SEAL_SIZE.w / 2), Y = Math.round(s.y - SEAL_SIZE.h + 4);
+  if (s.state === SealState.Arrive) {
+    // Rising out of the floor as its ring closes
+    const k = 1 - Math.max(0, s.t) / (TUNE.seal.arrive * (w.reduced ? 1.5 : 1));
+    x.globalAlpha = k;
+    x.drawImage(A.seal, X, Y + Math.round((1 - k) * 10));
+    x.globalAlpha = 1;
+    return;
+  }
+  if (s.flash > 0) {
+    x.drawImage(A.sealFlash, X, Y);
+    return;
+  }
+  if (s.state === SealState.AimWarn) {
+    const on = w.reduced || Math.floor(s.t / 0.06) % 2 === 0;
+    x.drawImage(on ? A.sealTell : A.seal, X, Y);
+    return;
+  }
+  x.drawImage(s.state === SealState.Recover ? A.sealOpen : A.seal, X, Y);
 }
 
 function drawEnemy(x: CanvasRenderingContext2D, w: World, A: Atlas, d: Enemy): void {

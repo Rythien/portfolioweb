@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  COLS, Charge, EnemyKind, ROOMS, ROWS, Spit, TILE, TUNE, buildRoom, createWorld, iceAt, isInvulnerable, restart, roomBounds, step,
+  COLS, Charge, EnemyKind, ROOMS, ROWS, SEAL_SPOT, SealState, Spit, TILE, TUNE, buildRoom, createWorld, iceAt, isInvulnerable, restart,
+  roomBounds, sealPattern, step,
   type Input, type World,
 } from "./engine.ts";
 
@@ -179,6 +180,32 @@ function clearWave(w: World) {
   step(w, DT, { ...idle(), attack: true });
   run(w, 0.1);
 }
+/** Stands the gem just below the seal, facing it. */
+function underSeal(w: World) {
+  w.player.x = w.seal.x;
+  w.player.y = w.seal.y + 22;
+  w.player.faceX = 0;
+  w.player.faceY = -1;
+}
+/** Frees the room's seal through three real windows (waiting for each), then the bloom. */
+function freeSeal(w: World) {
+  for (let hit = 0; hit < TUNE.seal.hits; hit++) {
+    for (let i = 0; i < 4000 && w.seal.state !== SealState.Recover; i++) {
+      w.player.invuln = 9; // the test is about the seal's rules, not dodging
+      step(w, DT, idle());
+    }
+    underSeal(w);
+    w.player.atkCd = 0;
+    step(w, DT, { ...idle(), attack: true });
+  }
+  w.player.invuln = 0;
+  run(w, TUNE.seal.bloom + 0.1);
+}
+/** A room done the real way: its wave, then its seal, then the bloom. */
+function clearRoom(w: World) {
+  clearWave(w);
+  freeSeal(w);
+}
 /** Walks the gem straight up into the doorway from its spawn column. */
 function walkToDoor(w: World) {
   const d = w.room.door;
@@ -187,11 +214,14 @@ function walkToDoor(w: World) {
   for (let i = 0; i < 60 && w.transition < 0; i++) step(w, DT * 4, { ...idle(), my: -1 });
 }
 
-test("clearing a room's wave opens its doorway; the run goes on", () => {
+test("clearing a room's wave raises its SEAL, not the door; freeing the seal opens the door after the bloom", () => {
   const w = createWorld(1);
-  assert.equal(w.doorOpen, false);
   clearWave(w);
   assert.equal(alive(w), 0);
+  assert.equal(w.seal.state, SealState.Arrive, "the seal rises");
+  assert.equal(w.doorOpen, false, "the door waits for the seal");
+  freeSeal(w);
+  assert.equal(w.freed[0], true, "room 1's project is freed");
   assert.equal(w.doorOpen, true);
   assert.equal(w.phase, "play");
 });
@@ -201,7 +231,7 @@ test("a closed doorway goes nowhere; an open one loads the next room, hearts kep
   walkToDoor(w);
   run(w, 0.5);
   assert.equal(w.roomIndex, 0, "closed: still room 1");
-  clearWave(w);
+  clearRoom(w);
   w.player.hearts = 2;
   walkToDoor(w);
   assert.ok(w.transition >= 0, "the fade starts at the door");
@@ -216,7 +246,7 @@ test("a closed doorway goes nowhere; an open one loads the next room, hearts kep
 test("clearing the last room ends the run as clear; R starts again at room 1", () => {
   const w = createWorld(1);
   for (let r = 0; r < ROOMS.length; r++) {
-    clearWave(w);
+    clearRoom(w);
     if (r < ROOMS.length - 1) {
       walkToDoor(w);
       run(w, TUNE.door.fade + 0.05);
@@ -242,7 +272,7 @@ test("the waves mix in: room 1 drifters, room 2 adds chargers, room 3 adds spitt
     }
     assert.deepEqual(got, expect[r], `room ${r + 1}: drifter, charger, spitter`);
     if (r < ROOMS.length - 1) {
-      clearWave(w);
+      clearRoom(w);
       walkToDoor(w);
       run(w, TUNE.door.fade + 0.05);
     }
@@ -406,4 +436,104 @@ test("a spitter takes two hits, and R clears every bolt", () => {
   Object.assign(w.bolts[3], { alive: true, x: 10, y: 10, vx: 1, vy: 0, life: 4 });
   restart(w);
   assert.equal(bolts(w).length, 0);
+});
+
+/* ── SEALS ── */
+
+/** A world straight at room `i`'s seal (no wave), the gem out of harm's way. */
+function atSeal(i = 0) {
+  const w = createWorld(1, false, {}, i);
+  assert.equal(w.seal.state, SealState.Arrive);
+  return w;
+}
+/** Steps until the seal enters `state` (or a time limit), returning the seconds taken. */
+function until(w: World, state: number, limit = 20) {
+  let t = 0;
+  while (w.seal.state !== state && t < limit) {
+    w.player.invuln = 9;
+    step(w, DT, idle());
+    t += DT;
+  }
+  w.player.invuln = 0;
+  return t;
+}
+
+test("every room's seal rises on the ice, clear of its pits", () => {
+  for (let i = 0; i < ROOMS.length; i++) {
+    const room = buildRoom(i);
+    for (let a = 0; a < Math.PI * 2; a += 0.3)
+      assert.ok(iceAt(room, SEAL_SPOT.x + Math.cos(a) * 14, SEAL_SPOT.y + Math.sin(a) * 6), `room ${i + 1}: the seal stands on ice`);
+  }
+});
+
+test("a seal's cycle, every attack told: ring warning, ring, aim lines, fan along them, then its window", () => {
+  const w = atSeal(0);
+  const P = sealPattern(w);
+  const arrive = until(w, SealState.RingWarn);
+  assert.ok(Math.abs(arrive - TUNE.seal.arrive) < 0.02, `arrival ${arrive.toFixed(2)} s`);
+  const gap = w.seal.nextGap;
+  const warn = until(w, SealState.Rings);
+  assert.ok(warn >= TUNE.seal.ringWarn - 0.02, "the ring is told before it comes");
+  const ring = w.rings.find((r) => r.alive)!;
+  assert.ok(Math.abs(Math.atan2(Math.sin(ring.gapA - gap), Math.cos(ring.gapA - gap))) < 0.1, "with the gap its warning showed");
+  until(w, SealState.AimWarn);
+  const aim = w.seal.aimA;
+  const bolts0 = w.bolts.filter((b) => b.alive).length;
+  const tell = until(w, SealState.Recover);
+  assert.ok(tell >= TUNE.seal.aimWarn - 0.02, "the fan is told before it fires");
+  const fan = w.bolts.filter((b) => b.alive);
+  assert.equal(fan.length - bolts0, P.fan, `${P.fan} bolts`);
+  const mid = fan[Math.floor(fan.length / 2)];
+  assert.ok(Math.abs(Math.atan2(mid.vy, mid.vx) - aim) < 1e-6, "along the locked lines");
+});
+
+test("a seal is armoured outside its window, and takes one hit per window", () => {
+  const w = atSeal(0);
+  until(w, SealState.RingWarn);
+  underSeal(w);
+  step(w, DT, { ...idle(), attack: true });
+  assert.equal(w.seal.hp, TUNE.seal.hits, "clink: no damage outside the window");
+  until(w, SealState.Recover);
+  underSeal(w);
+  w.player.atkCd = 0;
+  step(w, DT, { ...idle(), attack: true });
+  run(w, TUNE.attack.cooldown + TUNE.feel.hitStop + 0.02);
+  underSeal(w);
+  step(w, DT, { ...idle(), attack: true });
+  assert.equal(w.seal.hp, TUNE.seal.hits - 1, "one hit, and the window shut");
+});
+
+test("three hits free it: its room is marked freed, and nothing hurts after", () => {
+  const w = atSeal(0);
+  freeSeal(w);
+  assert.equal(w.seal.state, SealState.Freed);
+  assert.equal(w.freed[0], true);
+  assert.equal(w.rings.filter((r) => r.alive).length, 0);
+  assert.equal(w.player.hearts, TUNE.hurt.hearts);
+});
+
+test("a ring stings on its band, passes you in its gap, and passes a dash", () => {
+  for (const where of ["band", "gap", "dash"]) {
+    const w = atSeal(0);
+    w.seal.state = SealState.Rings;
+    w.seal.t = 99;
+    const ring = w.rings[0];
+    Object.assign(ring, { alive: true, r: 40, spin: 0, gapA: where === "gap" ? Math.PI / 2 : -Math.PI / 2 });
+    // The gem straight below the seal, just outside the ring: it sweeps over
+    w.player.x = w.seal.x;
+    w.player.y = w.seal.y - 8 + 46 + 6;
+    if (where === "dash") step(w, DT, { ...idle(), mx: 1, dash: true });
+    run(w, 0.3);
+    assert.equal(w.player.hearts, TUNE.hurt.hearts - (where === "band" ? 1 : 0), where);
+  }
+});
+
+test("R after a death starts at the first unfreed room", () => {
+  const w = createWorld(1);
+  w.player.hearts = 0;
+  w.phase = "dead";
+  restart(w, 2);
+  assert.equal(w.roomIndex, 2);
+  assert.equal(w.roomReached, 3);
+  assert.equal(w.phase, "play");
 });

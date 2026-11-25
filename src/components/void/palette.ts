@@ -47,6 +47,12 @@ export const ENEMY_COLORS = {
   "spitter mouth tell": COLOR.dangerHot,
   "bolt": COLOR.energy1,
   "bolt core": COLOR.ice1,
+  "seal face": COLOR.ice1,
+  "seal face, shade": COLOR.ice0,
+  "seal underside": COLOR.energy1,
+  "seal core (shut)": COLOR.deep,
+  "seal ring shard": COLOR.ice0,
+  "seal ring sting": COLOR.danger,
 } as const;
 
 /** The gem: its fill (darkest facet first) and its 1px outline. */
