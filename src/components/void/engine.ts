@@ -99,8 +99,9 @@ export function buildRoom(seed = 1): Room {
   for (let y = 0; y < ROWS; y++)
     for (let x = 0; x < COLS; x++) {
       // A rounded rectangle, its edge bitten by noise
-      const dx = Math.max(0, Math.abs(x + 0.5 - cx) - 15) / 6;
-      const dy = Math.max(0, Math.abs(y + 0.5 - cy) - 6) / 4.2;
+      // ~40 x 20 tiles: narrow enough that 3x fits a 1280-wide screen
+      const dx = Math.max(0, Math.abs(x + 0.5 - cx) - 13) / 5;
+      const dy = Math.max(0, Math.abs(y + 0.5 - cy) - 5.5) / 3.6;
       const d = Math.hypot(dx, dy);
       if (d < 0.75 + 0.5 * r()) ice[y * COLS + x] = 1;
     }
@@ -110,10 +111,30 @@ export function buildRoom(seed = 1): Room {
   };
   pit(14, 9, 3, 3);
   pit(31, 15, 4, 2);
-  // Keep the outer two rows/columns void (the island floats)
+  // Keep the outer rows/columns void (the island floats; its cliffs hang below)
   for (let y = 0; y < ROWS; y++)
-    for (let x = 0; x < COLS; x++) if (x < 2 || y < 2 || x >= COLS - 2 || y >= ROWS - 2) ice[y * COLS + x] = 0;
+    for (let x = 0; x < COLS; x++) if (x < 3 || y < 3 || x >= COLS - 3 || y >= ROWS - 3) ice[y * COLS + x] = 0;
   return { ice, spawnX: VIEW.w / 2, spawnY: VIEW.h / 2 + 20 };
+}
+
+/** Cliffs hang this far below a south edge (render.ts draws up to 15). */
+export const CLIFF_DROP = 16;
+
+/**
+ * The island's extent in logical px (cliffs included): what the shell must
+ * keep on screen. Everything outside it is empty void, safe to crop.
+ */
+export function roomBounds(room: Room): { x0: number; y0: number; x1: number; y1: number } {
+  let x0: number = VIEW.w, y0: number = VIEW.h, x1 = 0, y1 = 0;
+  for (let j = 0; j < ROWS; j++)
+    for (let i = 0; i < COLS; i++) {
+      if (!room.ice[j * COLS + i]) continue;
+      x0 = Math.min(x0, i * TILE);
+      x1 = Math.max(x1, (i + 1) * TILE);
+      y0 = Math.min(y0, j * TILE);
+      y1 = Math.max(y1, (j + 1) * TILE + CLIFF_DROP);
+    }
+  return { x0, y0, x1, y1 };
 }
 
 export function iceAt(room: Room, x: number, y: number): boolean {

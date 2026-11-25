@@ -283,7 +283,13 @@ function pixelRing(x: CanvasRenderingContext2D, cx: number, cy: number, r: numbe
 
 const easeOut = (k: number) => 1 - (1 - k) * (1 - k) * (1 - k);
 
-export function drawWorld(x: CanvasRenderingContext2D, w: World, A: Atlas, amb: Ambient, dt: number): void {
+/**
+ * `hud` is the top-left of the logical frame that is actually on screen
+ * (the shell may crop empty void at the edges): the hearts sit there.
+ */
+export function drawWorld(
+  x: CanvasRenderingContext2D, w: World, A: Atlas, amb: Ambient, dt: number, hud: { x: number; y: number },
+): void {
   const p = w.player;
   x.imageSmoothingEnabled = false;
   x.globalAlpha = 1;
@@ -419,7 +425,7 @@ export function drawWorld(x: CanvasRenderingContext2D, w: World, A: Atlas, amb: 
   }
 
   // Hearts (screen-fixed)
-  for (let i = 0; i < TUNE.hurt.hearts; i++) x.drawImage(i < p.hearts ? A.heart : A.heartEmpty, 10 + i * 9, 10);
+  for (let i = 0; i < TUNE.hurt.hearts; i++) x.drawImage(i < p.hearts ? A.heart : A.heartEmpty, hud.x + 8 + i * 9, hud.y + 8);
 }
 
 function drawGem(x: CanvasRenderingContext2D, w: World, A: Atlas): void {

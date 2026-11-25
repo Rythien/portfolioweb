@@ -37,10 +37,11 @@ await page.waitForFunction(() => window.__void?.count?.() > 30, null, { timeout:
 const toScreen = await page.evaluate(() => {
   const c = document.querySelector(".archive-root canvas");
   const r = c.getBoundingClientRect();
-  const s = Math.max(1, Math.floor(Math.min(r.width / 480, r.height / 270) * 1.02)); // as VoidGame
-  return { s, dx: r.left + (r.width - 480 * s) / 2, dy: r.top + (r.height - 270 * s) / 2, w: r.width, h: r.height, buf: c.width + "x" + c.height };
+  const k = r.width / c.width; // device px -> CSS px
+  const v = window.__void.view;
+  return { s: v.s * k, dx: r.left + v.dx * k, dy: r.top + v.dy * k, w: r.width, h: r.height, scale: v.s, fill: window.__void.fill() };
 });
-console.log(`canvas box ${toScreen.w}x${toScreen.h}, buffer ${toScreen.buf}, scale ${toScreen.s}`);
+console.log(`canvas ${toScreen.w}x${toScreen.h}, scale ${toScreen.scale}x, island fills ${(toScreen.fill * 100).toFixed(0)}% of the height`);
 const sx = (x) => toScreen.dx + x * toScreen.s;
 const sy = (y) => toScreen.dy + y * toScreen.s;
 

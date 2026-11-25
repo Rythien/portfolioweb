@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { TUNE, VIEW, createWorld, restart, step, type Input, type Phase, type World } from "./engine";
+import { TUNE, VIEW, createWorld, restart, roomBounds, step, type Input, type Phase, type World } from "./engine";
 import { COLOR, buildAtlas, createAmbient, drawWorld } from "./render";
 
 /**
@@ -85,21 +85,31 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
 
     /* ── Display: integer scale, letterbox, scanlines, vignette ── */
     const view = { s: 1, dx: 0, dy: 0, dw: VIEW.w as number, dh: VIEW.h as number, overlay: null as HTMLCanvasElement | null };
+    const hud = { x: 0, y: 0 };
+    /** Share of the viewport height the island takes (test hook). */
+    let fill = 0;
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 3);
       const cw = Math.round(cvs.clientWidth * dpr), ch = Math.round(cvs.clientHeight * dpr);
       if (cw === 0 || ch === 0) return;
       cvs.width = cw;
       cvs.height = ch;
-      // The largest integer scale that fits, allowed to overflow by up to
-      // 2%: that only crops the room's outer void (two empty tiles, 60
-      // device px at 3x), and a scrollbar gutter (1436 of 1440) must not
-      // drop a full-window game from 3x to 2x
-      view.s = Math.max(1, Math.floor(Math.min(cw / VIEW.w, ch / VIEW.h) * 1.02));
+      // The largest integer scale at which the ISLAND (cliffs included,
+      // plus a 4 px margin) fits, centred on it. The logical frame around
+      // it is empty void, so cropping it costs nothing, and fitting the
+      // island instead of the whole 480 x 270 frame is what lets 3x reach
+      // 1280-wide screens (it fell to 2x, the arena at half the height)
+      const b = roomBounds(world.room);
+      const need = { w: b.x1 - b.x0 + 8, h: b.y1 - b.y0 + 8 };
+      view.s = Math.max(1, Math.floor(Math.min(cw / need.w, ch / need.h)));
       view.dw = VIEW.w * view.s;
       view.dh = VIEW.h * view.s;
-      view.dx = Math.floor((cw - view.dw) / 2);
-      view.dy = Math.floor((ch - view.dh) / 2);
+      view.dx = Math.round(cw / 2 - ((b.x0 + b.x1) / 2) * view.s);
+      view.dy = Math.round(ch / 2 - ((b.y0 + b.y1) / 2) * view.s);
+      // The on-screen part of the logical frame, for the hearts
+      hud.x = Math.max(0, Math.ceil(-view.dx / view.s));
+      hud.y = Math.max(0, Math.ceil(-view.dy / view.s));
+      fill = Math.min(1, ((b.y1 - b.y0) * view.s) / ch);
       // The letterbox is the DREAM void, painted once: frames only blit
       // over the game's own rectangle
       ctx.fillStyle = COLOR.void0;
@@ -199,10 +209,13 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     const work = new Float32Array(FRAME_LOG);
     let frameN = 0;
     const hook = window as unknown as {
-      __void?: { world: World; frames: Float32Array; work: Float32Array; count: () => number; off: HTMLCanvasElement };
+      __void?: {
+        world: World; frames: Float32Array; work: Float32Array; count: () => number; off: HTMLCanvasElement;
+        view: { s: number; dx: number; dy: number }; fill: () => number;
+      };
     };
     // off: the logical 480 x 270 frame (scripts/verify/void-contrast.mjs reads its pixels)
-    hook.__void = { world, frames, work, count: () => frameN, off };
+    hook.__void = { world, frames, work, count: () => frameN, off, view, fill: () => fill };
     let raf = 0;
     let prev = performance.now();
     const loop = (now: number) => {
@@ -242,7 +255,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         setStats({ room: world.roomReached, kills: world.kills });
         setEndKey((k) => k + 1);
       }
-      drawWorld(octx, world, atlas, amb, playing ? dt : 0);
+      drawWorld(octx, world, atlas, amb, playing ? dt : 0, hud);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(off, view.dx, view.dy, view.dw, view.dh);
       if (view.overlay) ctx.drawImage(view.overlay, view.dx, view.dy);
