@@ -27,8 +27,8 @@ function startRoom(): number {
 }
 
 /**
- * THE VOID, step 1: the shell. Same contract as the Archive (ArchiveSlot
- * mounts one or the other): a full-screen root it can clip to the flood,
+ * THE VOID: DREAM's game, and its shell. The contract ArchiveSlot holds
+ * it by (the same one the retired 3D Archive had): a full-screen root it can clip to the flood,
  * `active` while any of it is on screen, `open` once DREAM has settled
  * (the page behind is suspended), `onWake` to leave.
  *

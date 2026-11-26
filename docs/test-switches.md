@@ -9,8 +9,19 @@ changes their own view.
 | Switch | Read in | Effect | Used by |
 | --- | --- | --- | --- |
 | `nopreload=1` | `common/Preloader.tsx` | Skips the preloader. | almost every script |
-| `mode=wake\|dream` | `store/useThemeStore.ts` | Starts in that mode. In DREAM the Archive opens at once. | most scripts |
-| `noarchive=1` | `archive/ArchiveSlot.tsx` | Keeps the DREAM page visible instead of opening the Archive (DREAM hero and finish shots, logo tests). | `shot/crystal`, `shot/hero-logos`, `verify/logo-contrast`, `verify/glass-tone`, `verify/freeing`, `verify/ending`, `perf/*` |
+| `mode=wake\|dream` | `store/useThemeStore.ts` | Starts in that mode. In DREAM the game (THE VOID) opens at once. | most scripts |
+| `noarchive=1` | `archive/ArchiveSlot.tsx` | Keeps the DREAM page visible instead of opening the game (DREAM hero and finish shots, logo tests). | `shot/crystal`, `shot/hero-logos`, `verify/logo-contrast`, `verify/glass-tone`, `verify/freeing`, `verify/ending`, `perf/*` |
+| `dream=archive` | `archive/ArchiveSlot.tsx` | TEMPORARY (2026-11-26 to 2026-12-03): opens the retired 3D Archive instead of THE VOID. Every Archive switch below needs it. (`dream=void`, the old opt-in, is now a no-op.) | none yet: Archive scripts predate it |
+
+## THE VOID
+
+| Switch | Read in | Effect | Used by |
+| --- | --- | --- | --- |
+| `voidroom=<n>` | `void/VoidGame.tsx` | Starts the run in room `n` (1-3). | `shot/void-record`, `verify/void-end` |
+| `voidwave=none\|<name>:<n>,…` | `void/VoidGame.tsx` | Replaces the room's wave (`none`: straight to the seal). | `shot/void-record`, `verify/void-end` |
+
+The game exposes `window.__void` (world, frame and work logs, the logical
+480 x 270 canvas, the view transform).
 
 ## Hero crystal
 
@@ -21,7 +32,7 @@ changes their own view.
 | `crystallogo=0` | `crystal/GlassCrystal.tsx` | Hides the hero logo, to sample the bare glass. | `verify/glass-tone` |
 | `crystallogo=matte` | `crystal/GlassCrystal.tsx` | Paints the logo and its contour flat magenta, so a test can find the logo's exact refracted silhouette. | `verify/logo-contrast` |
 
-## Archive
+## Archive (retired; only with `dream=archive`)
 
 | Switch | Read in | Effect | Used by |
 | --- | --- | --- | --- |

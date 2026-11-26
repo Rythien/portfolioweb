@@ -10,33 +10,42 @@ import { useArchiveStore } from "@/store/useArchiveStore";
 import { getGfxProfile, whenSettled } from "@/components/scene/warm";
 import { crystalEvents } from "@/hooks/crystalState";
 
-// The Archive (and three.js for it) is fetched on the visitor's first
+// THE VOID (the pixel-art game) is fetched on the visitor's first
 // interaction with the WAKE page, never during the initial load, so
 // Lighthouse (which never interacts) pays nothing for it
-const Archive = dynamic(() => import("./Archive"), { ssr: false });
-// THE VOID: the pixel-art game replacing the Archive, in development.
-// Step 1 (one room, the gem, drifters) is behind ?dream=void until it
-// carries the seals and the freed-project reward; the Archive stays the
-// default till then
 const VoidGame = dynamic(() => import("@/components/void/VoidGame"), { ssr: false });
-const USE_VOID =
-  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("dream") === "void";
+// TEMPORARY (added 2026-11-26, delete on or after 2026-12-03): the retired
+// 3D Archive, behind ?dream=archive only, as an escape hatch in case THE
+// VOID turns out wrong in its first week as the default. When it goes,
+// delete it with Archive.tsx and the rest of components/archive/ except
+// this slot, plus the Archive-only scripts and test hooks
+const Archive = dynamic(() => import("./Archive"), { ssr: false });
+const USE_ARCHIVE =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("dream") === "archive";
 
-/** The Archive's clip leads the ink edge by a hair, so no page shows at the rim. */
+/** No idle pre-mount: only the Archive, and only on the reduced profile. */
+const skipWarm = () => USE_ARCHIVE && getGfxProfile() === "reduced";
+
+/** The game's clip leads the ink edge by a hair, so no page shows at the rim. */
 const CLIP_LEAD = 1.02;
 
 /**
- * DREAM is THE ARCHIVE.
+ * DREAM is THE VOID, the pixel-art game (components/void/VoidGame.tsx).
+ * This slot owns everything around the game, so it holds whatever the
+ * game is: it once held THE ARCHIVE (3D), now behind ?dream=archive until
+ * that is deleted (see above).
  *
- * Warm: on the first interaction (idle callback) the Archive mounts
- * hidden, compiles its shaders and allocates its buffers, then sleeps.
- * Enter: as the flood heads for DREAM the Archive starts rendering and is
+ * Warm: on the first interaction (idle callback, once the hero is
+ * compiled) the game mounts hidden, builds its atlas and covers, then
+ * sleeps (its loop draws nothing until `active`).
+ * Enter: as the flood heads for DREAM the game starts drawing and is
  * revealed through a circle that tracks the flood itself, so the flood
- * IS the Archive arriving and the page underneath is never seen dimmed.
+ * IS the game arriving and the page underneath is never seen dimmed.
  * Once the flood settles the page is suspended (useArchiveStore.open:
- * scroll locked, inert, its R3F scene paused).
- * WAKE: the page resumes at its scroll position, the flood runs back from
- * the WAKE control and the Archive's circle shrinks into it.
+ * scroll locked, inert, its R3F scene paused, Lenis stopped).
+ * WAKE: the page resumes at its scroll position (or at Contact, when the
+ * run is won), the flood runs back from the WAKE control and the game's
+ * circle shrinks into it.
  */
 /** Where the visitor lands on waking: back where they were, or at Contact (the ending). */
 export interface WakeOptions {
@@ -51,10 +60,12 @@ export default function ArchiveSlot() {
   const [active, setActive] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Pre-mount (hidden) on the first interaction, but only on the full
-  // profile and only once the hero, its shards and the flood are compiled
-  // (scene/warm.ts): the Archive is never warmed ahead of the hero. A mode
-  // switch or a load in DREAM mounts it at once, whatever the profile.
+  // Pre-mount (hidden) on the first interaction, once the hero, its shards
+  // and the flood are compiled (scene/warm.ts): DREAM is never warmed ahead
+  // of the hero. The 3D Archive skipped this on the reduced profile (its
+  // shader links were what a slow renderer could not afford); the game is
+  // a 2D canvas, so it warms there too. A mode switch or a load in DREAM
+  // mounts it at once, whatever the profile (skipWarm, below).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     // Test hook (Playwright finish shots of the DREAM page): never in the UI
@@ -68,9 +79,9 @@ export default function ArchiveSlot() {
     let cancelSettle = () => {};
     const go = () => {
       events.forEach((e) => window.removeEventListener(e, go));
-      if (getGfxProfile() === "reduced") return;
+      if (skipWarm()) return;
       cancelSettle = whenSettled("page", 30, () => {
-        if (getGfxProfile() === "reduced") return;
+        if (skipWarm()) return;
         const ric = window.requestIdleCallback;
         idle = ric ? ric(() => setWarm(true), { timeout: 1500 }) : window.setTimeout(() => setWarm(true), 200);
       });
@@ -183,6 +194,6 @@ export default function ArchiveSlot() {
   }, [router]);
 
   if (!warm) return null;
-  if (USE_VOID) return <VoidGame rootRef={rootRef} active={active} open={open} onWake={wake} />;
-  return <Archive rootRef={rootRef} active={active} open={open} onWake={wake} />;
+  if (USE_ARCHIVE) return <Archive rootRef={rootRef} active={active} open={open} onWake={wake} />;
+  return <VoidGame rootRef={rootRef} active={active} open={open} onWake={wake} />;
 }
