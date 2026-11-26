@@ -290,10 +290,22 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     hook.__void = { world, frames, work, count: () => frameN, off, view, fill: () => fill };
     let raf = 0;
     let prev = performance.now();
+    let wasActive = activeRef.current;
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       const rawDt = (now - prev) / 1000;
       prev = now;
+      // DREAM entered again after a won run (the game stays mounted across
+      // visits): that run is over, so a new one begins as the flood starts
+      // in, instead of the button-less "waking at Contact" card sitting
+      // there for good
+      if (activeRef.current !== wasActive) {
+        wasActive = activeRef.current;
+        if (wasActive && world.phase === "won") {
+          restart(world, startRoom());
+          recorded.fill(false);
+        }
+      }
       if (!activeRef.current) return;
       const dt = Math.min(rawDt, MAX_DT);
       const playing = openRef.current && !pausedRef.current;
