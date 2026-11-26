@@ -1,100 +1,97 @@
-# Handover: 2026-11-26
+# Handover: 2026-11-27
 
 ## Where we are
 
-Two streams of work, both on GitHub:
+**THE VOID is the default DREAM experience, on `master`.** Clicking DREAM
+floods the page into the pixel-art game (three rooms, a seal mini-boss in
+each, each seal frees one project). The 3D Archive is retired.
 
-1. **The hero (done, on `master`).** The crystal was re-aimed from "clear" to
-   "solid with structure": angular cuts, opaque brown-black and blue veins
-   (about 29% of the glass below L* 30), hard blown speculars, matte worn
-   faces at the bottom, a chromatic fringe where the clear side bends the
-   headline, the logo as a solid mark, and a warm pool of light underneath. The orbit
-   ring is a tight halo with fine engraved lettering. Measured by
-   `scripts/verify/crystal-values.mjs`: both modes span L* ≤ 10 to 100.
-2. **THE VOID (in progress, on `dream-game`).** The pixel-art game that
-   replaces the 3D Archive in DREAM. It is behind `?dream=void`; the Archive
-   is still the default. Steps 1–2 are done and seals are mostly done (see below).
+- `?dream=void` no longer does anything (it used to opt in to the game).
+- `?dream=archive` opens the old 3D Archive. **This is a temporary escape
+  hatch: delete it on or after 2026-12-03**, with everything in
+  `src/components/archive/` except `ArchiveSlot.tsx`, plus the Archive-only
+  scripts and test hooks. The dated comment is at the top of `ArchiveSlot.tsx`.
 
-## What's on `master`
+`master` and `dream-game` point at the same commit. The hero (the crystal
+re-aim, the orbit ring) is unchanged since the last handover.
 
-Everything up to `492590f`: the hero work above, plus THE VOID step 1 (one
-room, the gem, drifters, death card, input fix), hidden behind `?dream=void`.
+## Where the game lives
 
-## What's on `dream-game` (ahead of `master`)
+| File | What it is |
+|---|---|
+| `src/components/archive/ArchiveSlot.tsx` | The slot around DREAM: warm-up on the first interaction, the flood-tracked reveal, page suspension (scroll lock, inert, R3F paused, Lenis stopped), scroll restore on WAKE, waking at Contact. Holds the game (or the Archive with `?dream=archive`). |
+| `src/components/void/VoidGame.tsx` | The shell: canvas, input, loop, HUD, end cards, unlocking freed projects. |
+| `src/components/void/engine.ts` | The rules (rooms, enemies, seals, `TUNE`). No DOM; `engine.test.ts` covers them. |
+| `src/components/void/render.ts`, `palette.ts` | Pixel drawing and colours. |
+| `src/store/useArchiveProgress.ts` | Saved progress (`archive-progress-v1`). A freed seal calls `recover(slug, { openOnWake: false })`, which marks its Works card "Recovered from the dream". |
 
-| Piece | Commit | State |
-|---|---|---|
-| Charger (0.4 s tell, locked line, two hits) | `af1205e` | done |
-| Spitter (keeps distance, 0.5 s tell, slow bolt) | `6645777` | done |
-| Three rooms with doorways | `89b8d04` | done |
-| Wave mix: room 1 8D; room 2 6D+3C; room 3 4D+2C+3S | `9585343` | done |
-| Island bake perf (30 ms → 7 ms per room change) | `2a770e7` | done |
-| Seal 1 (one ring, 3-bolt fan, 1.5 s window) | `20082f1` | done, recorded, ~12 s to free |
-| Seal 2 (two crossing rings, 5-bolt fan, 1.3 s) | `7466d8f` | done, recorded, ~16 s to free |
-| Seal 3 + the ending (wake at Contact) | `552263e` | **logic done and tested; not yet played through** |
-| Recording bot rides ring gaps | `f0e0d8b` | **WIP, untested** |
+## What landed this session
 
-The seal loop: **ring** (a danger ring warns at its base with the gap shown,
-then a ring of shards spins outward), **fire** (it blinks danger, dotted
-lines show a locked fan, then slow bolts), **window** (its core opens in pale
-ice; one hit per window; three hits free it). Freeing it blooms the
-project's DREAM cover and unlocks it through `useArchiveProgress.free`
-(the store the awake page reads), then opens the door. Room 3's seal wins
-the run and wakes the visitor at Contact.
-
-Time to free each seal, from its rising (floor = a perfect hitter; bot = a
-scripted competent player in Edge):
-
-| Seal | Floor | Bot |
-|---|---|---|
-| 1 | 9.8 s | 11.9–12.4 s, no damage |
-| 2 | 13.4 s | 15.7–15.8 s, 0–2 hearts lost |
-| 3 | 15.9 s | not yet measured (the bot died twice) |
+| Commit | What |
+|---|---|
+| `1d11a7d` | A freed seal marks its Works card (the game wrote `freed`, the card reads `recovered`) |
+| `c635285` | DREAM after a won run starts a new run (it showed a button-less card for good) |
+| `992e6c0` | THE VOID is the default; the Archive goes behind `?dream=archive` |
+| `405f56c` | Shared bot `scripts/shot/_voidbot.mjs`; Firefox end-to-end `scripts/verify/void-run.mjs` |
 
 ## Checks
 
 - `npm run test:void`: 34/34 rules tests (no server needed).
-- Browser checks against `next build && next start -p 3100` (kill any old
+- Browser checks against `next build && next start -p 3100` (stop any old
   :3100 server first, or it serves a replaced `.next` and the game never
-  boots): `scripts/verify/void-input.mjs`, `void-death.mjs`,
-  `void-contrast.mjs`, `void-end.mjs`, each with `--url=http://localhost:3100`.
+  boots):
+  - **`node scripts/verify/void-run.mjs --url=http://localhost:3100`**: Firefox,
+    cold load, real preloader and mode pill, a full run. Takes about 6 min.
+    Last result: all passed. Warm-up 0.7 s after the first interaction; reveal
+    through a growing circle; page suspended (5/5 siblings inert, 0 page
+    WebGL draws); scroll restored on WAKE; all three seals freed in 375 s
+    with 14 deaths; woke at Contact; three Works cards marked, the fourth not.
+  - `void-input.mjs`, `void-death.mjs`, `void-contrast.mjs`, `void-end.mjs`
+    (Edge), each with `--url=http://localhost:3100`.
 - Recordings: `node scripts/shot/void-record.mjs http://localhost:3100
-  --room=N --wave=none --name=sealN [--trace] [--novideo]`. Test hooks:
-  `?voidroom=N`, `?voidwave=none|charger:4,…`. Videos land in `shots/void/`
-  (git-ignored).
-- In headless Edge, frame intervals stall around 40 ms on any full-window
-  repaint (the browser's compositor, not the game). Judge the game by its own work per
-  frame (`__void.work`; p95 ≈ 0.5 ms).
+  --room=N --wave=none --name=... [--trace] [--novideo]`. Videos land in
+  `shots/void/` (git-ignored).
+- Lighthouse, home: `node scripts/perf/lh-home.mjs <label> 5`. Only a
+  back-to-back A/B means anything on this machine: the same build scored
+  0.96 and 0.73 hours apart. Back to back, old master 0.73 (TBT 1444 ms) vs
+  new 0.75 (TBT 1170 ms), 1338 KB both. The home page loads the same 21
+  scripts as before; the game loads only on interaction, which Lighthouse
+  never makes.
 
-## Next step
+## Open items
 
-1. **Seal 3:** run the WIP bot (`--room=3 --wave=none --trace`, several
-   times). If it survives, record `shots/void/seal3.webm` and measure its
-   time to free. If even a gap-riding player can't do it cleanly, retune
-   seal 3 (rings 1.0 s apart are only 34 px apart: try 1.2 s or a wider gap).
-2. **The WAKE-page shard clamp (not started):** broken shards drift up over
-   the fixed header and sit on top of the nav. Cause: their drift targets
-   (`GlassCrystal.tsx`, `driftCenter`, biased to the top band) ignore the
-   header. Planned fix: each frame, convert the header's bottom edge to a
-   world height at the shard's depth (portal camera, perspective) and clamp
-   the drift target so the shard's top stays below it. Its own branch off
-   `master`.
-3. Then, as agreed: **boons**, then **feel and sound**.
-
-## Open questions waiting on you
-
-- **Seal 3 difficulty:** keep it hard (the run's finale) or ease it once the
-  bot's numbers are in?
-- **Merging `dream-game`:** merge after seal 3 is played through, or wait
-  for boons? The game stays behind `?dream=void` either way.
-- **When THE VOID replaces the Archive** as DREAM's default (and the 3D
-  Archive code is retired).
-- **`chore/next-16.4.6`** (the Next 16.4.6 upgrade, its own worktree at
-  `../portfolioweb-next-16.4.6`) has never been merged into `master`. Merge it,
-  or drop it?
+- **Seal 3 difficulty: unresolved.** In the passing Firefox run the bot died
+  14 times, almost all in room 3 (seal 3 plus its wave of 4 drifters,
+  2 chargers, 3 spitters, after which a death restarts the room with the wave
+  again). Seal 3 alone, no wave: freed in 3/3 tries, 0-3 deaths each. The
+  rules are passable (the dash's 0.12 s i-frames cross any ring band and its
+  0.55 s cooldown beats the 1.0 s ring spacing), but whether a person
+  finds it fair is untested. Keep it hard (the finale) or ease it
+  (`SEAL_3` in `engine.ts`: `ringEvery` 1.2, or a wider `gap`)?
+- **Freeing a seal no longer opens that project's case study on wake.** The
+  Archive did this (floating into a panel meant "open this"). The game marks
+  the card instead (`openOnWake: false`). Decide whether that is right.
+- **The Archive's own test scripts don't pass `?dream=archive`**
+  (`verify/archive`, `freeing`, `ending`, `archive-audio`, `shot/archive`,
+  `perf/*`), so they can't reach it this week. Fix them or let them go with
+  the Archive on 2026-12-03.
+- **The WAKE-page shard clamp (not started):** broken shards drift up over
+  the fixed header. Cause: their drift targets (`GlassCrystal.tsx`,
+  `driftCenter`) ignore the header. Planned fix: clamp the drift target
+  below the header's bottom edge, converted to a world height at the
+  shard's depth. Its own branch off `master`.
+- **`chore/next-16.4.6`** (Next 16.4.6 upgrade, worktree
+  `../portfolioweb-next-16.4.6`) has never been merged. Merge or drop?
 - Two checks still fail by design since the crystal re-aim:
-  `logo-contrast.mjs` (WAKE edge 9.8, needs 15) and `glass-tone.mjs` (WAKE
-  halves 20 L* apart, needs ≤ 3). Lower their thresholds to match the new
-  look, or retire them?
-- Your note on the crystal: its dark area reads as one solid mass on the
-  right, where the reference has narrower streaks. Not yet addressed.
+  `logo-contrast.mjs` (WAKE edge 9.8, needs 15) and `glass-tone.mjs`
+  (WAKE halves 20 L* apart, needs ≤ 3). Lower their thresholds or retire them?
+- Your crystal note: its dark area reads as one solid mass on the right,
+  where the reference has narrower streaks. Not yet addressed.
+
+## Next steps
+
+1. **Boons** (one after each room, named for the freed project).
+2. **The feel-and-sound pass** (hit feel, sounds behind the Sound toggle).
+3. **Delete the Archive** on or after 2026-12-03, if nothing turned up.
+4. **The launch list:** mobile check, meta and social, deploy (deploy is
+   still blocked on a Vercel login).
