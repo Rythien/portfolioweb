@@ -6,10 +6,11 @@ import { create } from "zustand";
  *
  * - freed:     seals broken open (three facet hits); counts toward
  *              "PROJECTS RECOVERED n / 3" and stays freed next visit
- * - recovered: projects whose panel the visitor floated into; their card
- *              on the awake page carries "Recovered from the dream"
- * - pendingCase: the last panel floated into this visit; its case study
- *              opens once the visitor wakes (not persisted)
+ * - recovered: projects the visitor won back in DREAM (THE VOID: its
+ *              seal freed; the Archive: its panel floated into); their
+ *              card on the awake page carries "Recovered from the dream"
+ * - pendingCase: the last Archive panel floated into this visit; its case
+ *              study opens once the visitor wakes (not persisted)
  * - hintSeen:  the one-line hint shows on a first visit only
  */
 
@@ -26,7 +27,8 @@ interface ArchiveProgress extends Saved {
   hydrated: boolean;
   hydrate: () => void;
   free: (slug: string) => void;
-  recover: (slug: string) => void;
+  /** openOnWake (default true, the Archive's panel): its case study opens on waking. */
+  recover: (slug: string, opts?: { openOnWake?: boolean }) => void;
   takePendingCase: () => string | null;
   seeHint: () => void;
 }
@@ -70,11 +72,11 @@ export const useArchiveProgress = create<ArchiveProgress>((set, get) => ({
     write(next);
     set(next);
   },
-  recover: (slug) => {
+  recover: (slug, { openOnWake = true } = {}) => {
     const s = get();
     const next = { freed: add(s.freed, slug), recovered: add(s.recovered, slug), hintSeen: s.hintSeen };
     write(next);
-    set({ ...next, pendingCase: slug });
+    set(openOnWake ? { ...next, pendingCase: slug } : next);
   },
   takePendingCase: () => {
     const slug = get().pendingCase;

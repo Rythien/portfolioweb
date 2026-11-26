@@ -330,12 +330,15 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         rebuildIsland(atlas, world.room);
         resize();
       }
-      // A seal freed: its project unlocks on the awake page (as the Archive's did)
+      // A seal freed: its project is recovered, so its Works card carries
+      // "Recovered from the dream" (RecoveredMark reads `recovered`; `free`
+      // alone never marked it). Freeing is not a request to read the case
+      // study, so waking does not open it (the Archive's panel did)
       world.freed.forEach((f, i) => {
         if (!f || recorded[i]) return;
         recorded[i] = true;
         const p = SEAL_PROJECTS[i];
-        if (p) useArchiveProgress.getState().free(p.slug);
+        if (p) useArchiveProgress.getState().recover(p.slug, { openOnWake: false });
       });
       const s = world.seal;
       const note = world.doorOpen

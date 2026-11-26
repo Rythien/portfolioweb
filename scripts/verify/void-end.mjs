@@ -7,8 +7,8 @@
 // last hit through the __void hook, and lands that hit with a real J press
 // in its real window. Then checks: the run is "won"; the card reads ALL
 // THREE FREED / WAKING AT CONTACT with no "fall again"; the project is
-// recorded freed (localStorage archive-progress-v1, the store the awake page
-// reads); and the page wakes on its own, scrolled to #contact.
+// recorded freed and recovered (localStorage archive-progress-v1;
+// RecoveredMark on the awake page reads `recovered`); and the page wakes on its own, scrolled to #contact.
 // Edge (Chromium), 1280x720.
 import { chromium } from "playwright";
 
@@ -49,8 +49,11 @@ const card = await page.evaluate(() => {
 check(await page.evaluate(() => window.__void.world.phase === "won"), "freeing room 3's seal wins the run");
 check(card && /all three freed/i.test(card.text) && /waking at contact/i.test(card.text) && card.buttons === 0,
   `the card: "${card?.text}" with ${card?.buttons} buttons`);
-const slug = await page.evaluate(() => window.__void && JSON.parse(localStorage.getItem("archive-progress-v1") || "{}").freed);
-check(Array.isArray(slug) && slug.length >= 1, `the project is recorded freed (archive-progress-v1 freed: ${JSON.stringify(slug)})`);
+const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("archive-progress-v1") || "{}"));
+check(Array.isArray(saved.freed) && saved.freed.length >= 1, `the project is recorded freed (archive-progress-v1 freed: ${JSON.stringify(saved.freed)})`);
+// The Works card's "Recovered from the dream" reads `recovered`, not `freed`
+check(Array.isArray(saved.recovered) && saved.freed.every((s) => saved.recovered.includes(s)),
+  `every freed project is recovered, so its Works card is marked (recovered: ${JSON.stringify(saved.recovered)})`);
 await page.keyboard.press("KeyR");
 check(await page.evaluate(() => window.__void.world.phase === "won"), "R does nothing on a won run");
 
