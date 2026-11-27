@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  COLS, Charge, EnemyKind, ROOMS, ROWS, SEAL_SPOT, SealState, Spit, TILE, TUNE, buildRoom, createWorld, iceAt, isInvulnerable, restart,
+  COLS, Charge, EnemyKind, ROOMS, ROWS, SEAL_SPOT, SealState, Spit, TILE, TUNE, buildRoom, createWorld, iceAt, isInvulnerable, restart, resumesAtSeal,
   roomBounds, sealPattern, step,
   type Input, type World,
 } from "./engine.ts";
@@ -563,4 +563,44 @@ test("R after a death starts at the first unfreed room", () => {
   assert.equal(w.roomIndex, 2);
   assert.equal(w.roomReached, 3);
   assert.equal(w.phase, "play");
+});
+
+test("the checkpoint: a death at a seal falls again at that seal, its wave already cleared", () => {
+  const w = createWorld(1, false, null, 2);
+  assert.equal(resumesAtSeal(w, 2), false, "no checkpoint before the wave is down");
+  clearWave(w);
+  assert.equal(alive(w), 0);
+  assert.equal(w.seal.state, SealState.Arrive, "the wave is down, the seal rises");
+  w.seal.hp = 1; // a hit landed before the death: the seal still starts whole
+  w.player.hearts = 0;
+  w.phase = "dead";
+  assert.equal(resumesAtSeal(w, 2), true);
+  restart(w, 2);
+  assert.equal(w.roomIndex, 2);
+  assert.equal(w.phase, "play");
+  assert.equal(w.player.hearts, TUNE.hurt.hearts, "full hearts");
+  assert.equal(alive(w), 0, "no wave to refight");
+  assert.equal(w.seal.state, SealState.Arrive, "the seal rises again");
+  assert.equal(w.seal.hp, TUNE.seal.hits, "its own numbers, unchanged");
+  assert.deepEqual(sealPattern(w), ROOMS[2].seal);
+  // It holds for every later death in this room
+  w.phase = "dead";
+  restart(w, 2);
+  assert.equal(alive(w), 0);
+  assert.equal(w.seal.state, SealState.Arrive);
+});
+
+test("the checkpoint is per room: a death before the wave is down refights the wave", () => {
+  const w = createWorld(1, false, null, 1);
+  w.phase = "dead";
+  restart(w, 1);
+  assert.ok(alive(w) > 0, "the wave again");
+  assert.equal(w.seal.state, SealState.Off);
+  // A checkpoint in room 2 does not carry to another start room
+  clearWave(w);
+  assert.equal(resumesAtSeal(w, 1), true);
+  assert.equal(resumesAtSeal(w, 0), false);
+  w.phase = "dead";
+  restart(w, 0);
+  assert.ok(alive(w) > 0, "room 1 has its wave");
 });

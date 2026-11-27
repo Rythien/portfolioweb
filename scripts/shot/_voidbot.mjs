@@ -9,14 +9,14 @@
 //   const bot = createVoidBot(page, { trace });
 //   while (...) { const s = await bot.tick(); ... }   // s: the state it acted on
 //   await bot.release();
-//   bot.stats: { deaths, rooms, sealTimes, wonAt }
+//   bot.stats: { deaths, deathsByRoom: [r1, r2, r3], deathsAtSeal, rooms, sealTimes, wonAt }
 
 export function createVoidBot(page, { trace = false } = {}) {
   const keys = new Set();
   let mouseDown = false;
   let lastRoom = null, lastHearts = 3, sealFrom = null;
   let counted = false; // this death already counted
-  const stats = { deaths: 0, rooms: 0, sealTimes: [], wonAt: 0 };
+  const stats = { deaths: 0, deathsByRoom: [0, 0, 0], deathsAtSeal: 0, rooms: 0, sealTimes: [], wonAt: 0 };
 
   async function hold(want) {
     for (const k of keys) if (!want.has(k)) { await page.keyboard.up(k); keys.delete(k); }
@@ -64,7 +64,12 @@ export function createVoidBot(page, { trace = false } = {}) {
     }
     // Dead: counted once, the card shown, then R (fall again)
     if (s.phase !== "play") {
-      if (!counted) { stats.deaths++; counted = true; }
+      if (!counted) {
+        stats.deaths++;
+        stats.deathsByRoom[s.room]++;
+        if (s.sealState !== 0) stats.deathsAtSeal++;
+        counted = true;
+      }
       sealFrom = null; // that attempt does not count
       await release();
       await page.waitForTimeout(700);

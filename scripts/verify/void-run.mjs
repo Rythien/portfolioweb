@@ -156,7 +156,7 @@ await session(async () => {
   }
   await bot.release();
   const st = bot.stats;
-  console.log(`run: ${t(tRun)}, doorways ${st.rooms}, deaths ${st.deaths}, seals ${st.sealTimes.map((x) => x.toFixed(1) + " s").join(", ") || "-"} (game time, rising to freed)`);
+  console.log(`run: ${t(tRun)}, doorways ${st.rooms}, deaths ${st.deaths} (by room ${st.deathsByRoom.join(" / ")}; ${st.deathsAtSeal} during a seal fight), seals ${st.sealTimes.map((x) => x.toFixed(1) + " s").join(", ") || "-"} (game time, rising to freed)`);
   check(last?.phase === "won", `the run is won (phase ${last?.phase}, room ${last ? last.room + 1 : "-"})`);
   check(st.rooms >= 2, `played through all three rooms (${st.rooms} doorways walked through)`);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("archive-progress-v1") || "{}"));

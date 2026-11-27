@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
-  ENEMY_NAMES, ROOMS, SealState, TUNE, VIEW, createWorld, restart, roomBounds, step,
+  ENEMY_NAMES, ROOMS, SealState, TUNE, VIEW, createWorld, restart, resumesAtSeal, roomBounds, step,
   type EnemyName, type Input, type Phase, type Wave, type World,
 } from "./engine";
 import { COLOR, buildAtlas, createAmbient, drawWorld, rebuildIsland, setCover } from "./render";
@@ -92,7 +92,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   const pausedRef = useRef(false);
   /** The run's phase, mirrored for the card (set only when it changes). */
   const [phase, setPhase] = useState<Phase>("play");
-  const [stats, setStats] = useState({ room: 1, kills: 0 });
+  const [stats, setStats] = useState({ room: 1, kills: 0, atSeal: false });
   /** The room on screen and what is happening in it, for the HUD line. */
   const [hudRoom, setHudRoom] = useState({ room: 1, note: "" });
   /** Counts phase changes, so a second death waits for its own fade. */
@@ -368,7 +368,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       if (world.phase !== lastPhase) {
         lastPhase = world.phase;
         setPhase(world.phase);
-        setStats({ room: world.roomReached, kills: world.kills });
+        setStats({ room: world.roomReached, kills: world.kills, atSeal: resumesAtSeal(world, startRoom()) });
         setEndKey((k) => k + 1);
       }
       drawWorld(octx, world, atlas, amb, playing ? dt : 0, hud);
@@ -489,7 +489,7 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
                 onClick={fallAgain}
                 className="pressable min-h-11 rounded-full border border-white/40 bg-white/10 px-5 font-mono text-label uppercase tracking-[0.16em] text-white focus-visible:outline-offset-4"
               >
-                R · Fall again
+                {stats.atSeal ? "R · Back to the seal" : "R · Fall again"}
               </button>
               <button
                 type="button"

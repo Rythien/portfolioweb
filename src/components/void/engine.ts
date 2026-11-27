@@ -466,6 +466,12 @@ export interface World {
   endT: number;
   /** The room this run reached (1-based, for the cards). */
   roomReached: number;
+  /**
+   * The checkpoint: the room (index) whose wave this run cleared, so its
+   * seal is up; -1 before. A death there falls again AT the seal, the wave
+   * already cleared: each death costs one seal fight, never the whole room.
+   */
+  checkpoint: number;
   kills: number;
   hits: number;
   random: () => number;
@@ -515,6 +521,7 @@ export function createWorld(seed = 1, reduced = false, wave: Wave | null = null,
     phase: "play",
     endT: 0,
     roomReached: 1,
+    checkpoint: -1,
     kills: 0,
     hits: 0,
     random: rng(seed * 7919 + 3),
@@ -524,8 +531,11 @@ export function createWorld(seed = 1, reduced = false, wave: Wave | null = null,
   return w;
 }
 
-/** Enter room `index`: its island, the gem at its spawn (hearts kept), its wave. */
-export function loadRoom(w: World, index: number): void {
+/**
+ * Enter room `index`: its island, the gem at its spawn (hearts kept), its
+ * wave; or, `atSeal` (the checkpoint), no wave and its seal rising.
+ */
+export function loadRoom(w: World, index: number, atSeal = false): void {
   w.roomIndex = index;
   w.roomReached = Math.max(w.roomReached, index + 1);
   w.room = buildRoom(index);
@@ -542,7 +552,8 @@ export function loadRoom(w: World, index: number): void {
   w.seal.freedT = -1;
   for (const r of w.rings) r.alive = false;
   resetTrail(w);
-  spawnWave(w, waveFor(w, index));
+  w.checkpoint = -1;
+  if (!atSeal) spawnWave(w, waveFor(w, index));
   // An empty wave (a test hook) goes straight to the seal
   if (!w.enemies.some((d) => d.alive)) startSeal(w);
 }
@@ -550,6 +561,7 @@ export function loadRoom(w: World, index: number): void {
 /** The wave is down: the room's seal rises. */
 function startSeal(w: World): void {
   const s = w.seal;
+  w.checkpoint = w.roomIndex;
   s.state = SealState.Arrive;
   s.t = TUNE.seal.arrive * (w.reduced ? 1.5 : 1);
   s.x = SEAL_SPOT.x;
@@ -579,9 +591,11 @@ function resetTrail(w: World): void {
 /**
  * R ("fall again"): a fresh run, same world objects (no allocation churn).
  * `startRoom`: the first room whose project is not yet freed (the shell
- * knows which), so a death never makes you refight what you freed.
+ * knows which), so a death never makes you refight what you freed. If
+ * that room's wave was cleared this run, it starts at the seal.
  */
 export function restart(w: World, startRoom = 0): void {
+  const atSeal = resumesAtSeal(w, startRoom);
   w.room = buildRoom(startRoom);
   Object.assign(w.player, freshPlayer(w.room));
   w.phase = "play";
@@ -593,7 +607,12 @@ export function restart(w: World, startRoom = 0): void {
   w.transition = -1;
   w.roomReached = startRoom + 1;
   w.freed.fill(false);
-  loadRoom(w, startRoom);
+  loadRoom(w, startRoom, atSeal);
+}
+
+/** Will restart(w, startRoom) fall again at the seal (the checkpoint)? */
+export function resumesAtSeal(w: World, startRoom = 0): boolean {
+  return w.checkpoint === startRoom;
 }
 
 /* ── Helpers ───────────────────────────────────────────────────── */
