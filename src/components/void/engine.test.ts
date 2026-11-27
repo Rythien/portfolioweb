@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  COLS, Charge, EnemyKind, ROOMS, ROWS, SEAL_SPOT, SealState, Spit, TILE, TUNE, buildRoom, createWorld, iceAt, isInvulnerable, restart, resumesAtSeal,
+  COLS, Charge, EnemyKind, ROOMS, ROWS, SEAL_SPOT, SealState, Spit, TILE, TUNE, buildRoom, createWorld, iceAt, isInvulnerable, restart, resumesAtSeal, chooseBoon, BOON_IDS, BOONS, maxHearts, dashMax, offerBoons, type BoonId,
   roomBounds, sealPattern, step,
   type Input, type World,
 } from "./engine.ts";
@@ -188,7 +188,7 @@ function underSeal(w: World) {
   w.player.faceY = -1;
 }
 /** Frees the room's seal through three real windows (waiting for each), then the bloom. */
-function freeSeal(w: World) {
+function freeSeal(w: World, take = true) {
   for (let hit = 0; hit < TUNE.seal.hits; hit++) {
     for (let i = 0; i < 4000 && w.seal.state !== SealState.Recover; i++) {
       w.player.invuln = 9; // the test is about the seal's rules, not dodging
@@ -200,6 +200,8 @@ function freeSeal(w: World) {
   }
   w.player.invuln = 0;
   run(w, TUNE.seal.bloom + 0.1);
+  // The doorway opens on a boon offer (rooms 1 and 2): take the first
+  if (take && w.offer) chooseBoon(w, 0);
 }
 /** A room done the real way: its wave, then its seal, then the bloom. */
 function clearRoom(w: World) {
@@ -256,7 +258,7 @@ test("freeing room 3's seal wins the run (no door); R starts again at room 1", (
   assert.equal(w.phase, "won");
   assert.equal(w.doorOpen, false, "the last room has no way on: the run is over");
   assert.deepEqual(w.freed, [true, true, true]);
-  restart(w);
+  restart(w, 0, true);
   assert.equal(w.roomIndex, 0);
   assert.equal(w.phase, "play");
   assert.equal(w.player.hearts, TUNE.hurt.hearts);
@@ -627,4 +629,206 @@ test("seal 3 eased (1.2 s rings, 1.15 rad gap) and still the hardest of the thre
   const hearts = w.player.hearts;
   step(w, DT, idle());
   assert.equal(w.player.hearts, hearts, "passed in the wider gap");
+});
+
+/* ── Boons ─────────────────────────────────────────────────────── */
+
+/** An empty arena (empty()) with these boons taken. */
+function withBoons(...ids: BoonId[]): World {
+  const w = empty();
+  w.boons.push(...ids);
+  w.player.hearts = maxHearts(w);
+  w.player.dashCharges = dashMax(w);
+  return w;
+}
+/** Places a live, arrived enemy (a drifter unless `kind`). */
+function put(w: World, x: number, y: number, kind: number = EnemyKind.Drifter) {
+  const d = w.enemies.find((q) => !q.alive)!;
+  Object.assign(d, { alive: true, kind, hp: kind === EnemyKind.Drifter ? 1 : 2, x, y, vx: 0, vy: 0, arrive: 0, flash: 0, phase: 0, state: 0, t: 0, ax: 0, ay: 0, cool: 9, slow: 0 });
+  return d;
+}
+/** One attack aimed along (ax, ay). */
+function swing(w: World, ax = 1, ay = 0) {
+  w.player.atkCd = 0;
+  step(w, DT, { ...idle(), attack: true, aimX: ax, aimY: ay });
+}
+
+test("boons: a freed seal in room 1 or 2 pauses the run on three different boons; room 3's ends the run instead", () => {
+  const w = createWorld(1);
+  clearWave(w);
+  freeSeal(w, false);
+  assert.ok(w.offer, "an offer when the door opens");
+  assert.equal(w.offer!.length, 3);
+  assert.equal(new Set(w.offer).size, 3, "three different boons");
+  for (const id of w.offer!) assert.ok(BOON_IDS.includes(id));
+  // Paused: nothing moves while it is open
+  const t = w.t, x = w.player.x;
+  run(w, 1, { mx: 1 });
+  assert.equal(w.t, t);
+  assert.equal(w.player.x, x);
+  const pick = w.offer![1];
+  assert.equal(chooseBoon(w, 1), true);
+  assert.deepEqual(w.boons, [pick]);
+  assert.equal(w.offer, null);
+  run(w, 0.1);
+  assert.ok(w.t > t, "running again");
+  // Room 3: no offer, the run is won
+  const w3 = createWorld(1, false, null, 2);
+  clearWave(w3);
+  freeSeal(w3, false);
+  assert.equal(w3.offer, null);
+  assert.equal(w3.phase, "won");
+});
+
+test("boons: 6 to 8 in the pool, each with a name and a line; never offered again once taken", () => {
+  assert.ok(BOON_IDS.length >= 6 && BOON_IDS.length <= 8, `${BOON_IDS.length} boons`);
+  for (const id of BOON_IDS) assert.ok(BOONS[id].title && BOONS[id].text);
+  for (let seed = 1; seed <= 20; seed++) {
+    const w = createWorld(seed);
+    for (let k = 0; k < BOON_IDS.length; k++) {
+      offerBoons(w);
+      assert.ok(w.offer);
+      for (const id of w.offer!) assert.ok(!w.boons.includes(id), `seed ${seed}: ${id} offered again`);
+      chooseBoon(w, Math.floor(w.random() * w.offer!.length));
+    }
+    assert.equal(new Set(w.boons).size, BOON_IDS.length, "no duplicates");
+    offerBoons(w);
+    assert.equal(w.offer, null, "an empty pool offers nothing");
+  }
+});
+
+test("boons last through a death (and its checkpoint); a new run starts with none", () => {
+  const w = createWorld(1);
+  w.boons.push("heart", "dash");
+  w.phase = "dead";
+  restart(w, 1);
+  assert.deepEqual(w.boons, ["heart", "dash"]);
+  assert.equal(w.player.hearts, 4, "the fourth heart, refilled");
+  assert.equal(w.player.dashCharges, 2);
+  restart(w, 0, true);
+  assert.deepEqual(w.boons, []);
+  assert.equal(w.player.hearts, TUNE.hurt.hearts);
+  assert.equal(w.player.dashCharges, 1);
+});
+
+test("boon WIDE BURST: reaches 38 px (was 30) and 75 deg either side (was 55)", () => {
+  for (const wide of [false, true]) {
+    const w = wide ? withBoons("wide") : withBoons();
+    const p = w.player;
+    const far = put(w, p.x + 35 + TUNE.drifter.radius, p.y); // past 30 + r, inside 38 + r
+    const a = (65 * Math.PI) / 180; // outside 55, inside 75
+    const side = put(w, p.x + Math.cos(a) * 20, p.y + Math.sin(a) * 20);
+    swing(w);
+    assert.equal(far.alive, !wide, `far drifter ${wide ? "hit" : "missed"}`);
+    assert.equal(side.alive, !wide, `wide-angle drifter ${wide ? "hit" : "missed"}`);
+  }
+});
+
+test("boon SECOND DASH: two dashes back to back, each charge back after one cooldown", () => {
+  for (const two of [false, true]) {
+    const w = two ? withBoons("dash") : withBoons();
+    const p = w.player;
+    step(w, DT, { ...idle(), dash: true, mx: -1 });
+    assert.equal(p.dashes, 1);
+    run(w, TUNE.dash.time + 0.02, { mx: -1 });
+    step(w, DT, { ...idle(), dash: true, mx: 1 });
+    assert.equal(p.dashes, two ? 2 : 1, two ? "the second charge" : "on cooldown");
+    run(w, TUNE.dash.time + 0.02);
+  }
+  const w = withBoons("dash");
+  const p = w.player;
+  step(w, DT, { ...idle(), dash: true, mx: -1 });
+  run(w, 0.2);
+  step(w, DT, { ...idle(), dash: true, mx: 1 });
+  assert.equal(p.dashCharges, 0);
+  run(w, TUNE.dash.cooldown * 2 + 0.05);
+  assert.equal(p.dashCharges, 2, "both back after two cooldowns");
+  assert.equal(p.dashCd, 0);
+});
+
+test("boon SHATTER: a kill bursts into its neighbours, and the burst can chain", () => {
+  for (const on of [false, true]) {
+    const w = on ? withBoons("shatter") : withBoons();
+    const p = w.player;
+    const hit = put(w, p.x + 25, p.y);
+    const near = put(w, p.x + 50, p.y); // beyond the burst (30 + 5), 25 px from the kill
+    const chain = put(w, p.x + 75, p.y); // 25 px from `near`, 50 from the kill
+    swing(w);
+    assert.equal(hit.alive, false);
+    assert.equal(near.alive, !on, "the neighbour");
+    assert.equal(chain.alive, !on, "the chain");
+  }
+});
+
+test("boon SLOW WAKE: what a dash passes moves at 45% for 2 s", () => {
+  const moved = (on: boolean) => {
+    const w = on ? withBoons("frost") : withBoons();
+    const p = w.player;
+    const d = put(w, p.x - 30, p.y + 20);
+    step(w, DT, { ...idle(), dash: true, mx: -1 });
+    run(w, TUNE.dash.time);
+    if (on) assert.ok(d.slow > 1.5, `slowed (${d.slow.toFixed(2)} s left)`);
+    else assert.equal(d.slow, 0);
+    w.player.invuln = 9;
+    const x = d.x, y = d.y;
+    run(w, 0.5);
+    return Math.hypot(d.x - x, d.y - y);
+  };
+  const ratio = moved(true) / moved(false);
+  assert.ok(ratio < 0.6, `slowed drifter covers ${(ratio * 100).toFixed(0)}% of the distance`);
+});
+
+test("boon FOURTH HEART: one more heart, filled when taken", () => {
+  const w = createWorld(1);
+  w.player.hearts = 2;
+  w.offer = ["heart", "wide", "quick"];
+  chooseBoon(w, 0);
+  assert.equal(maxHearts(w), 4);
+  assert.equal(w.player.hearts, 3, "one heart added now");
+});
+
+test("boon QUICK HANDS: attack cooldown 0.16 s (was 0.25)", () => {
+  for (const on of [false, true]) {
+    const w = on ? withBoons("quick") : withBoons();
+    swing(w);
+    assert.equal(w.player.atkCd, on ? 0.16 : TUNE.attack.cooldown);
+  }
+});
+
+test("boon PIERCING SHARD: each attack throws a shard through every enemy in its line", () => {
+  for (const on of [false, true]) {
+    const w = on ? withBoons("pierce") : withBoons();
+    const p = w.player;
+    const line = [50, 75, 100].map((dx) => put(w, p.x + dx, p.y));
+    swing(w);
+    w.player.invuln = 9;
+    run(w, 0.45);
+    assert.deepEqual(line.map((d) => d.alive), [!on, !on, !on], on ? "all three pierced" : "all out of reach");
+  }
+  // Each enemy once: a charger (2 hp) in its line takes one hit, not one per frame
+  const w = withBoons("pierce");
+  const c = put(w, w.player.x + 60, w.player.y, EnemyKind.Charger);
+  swing(w);
+  run(w, 0.45);
+  assert.equal(c.hp, 1);
+});
+
+test("boon CLEARING WARD: when a room's wave falls, 3 s of shield", () => {
+  const w = createWorld(1);
+  w.boons.push("shield");
+  clearWave(w);
+  assert.equal(w.seal.state, SealState.Arrive);
+  assert.ok(w.player.shield > 2.85, `shield ${w.player.shield} s (3 s, less the 0.1 s clearWave runs on)`);
+  assert.ok(isInvulnerable(w.player));
+  const d = put(w, w.player.x + 3, w.player.y);
+  d.arrive = 0;
+  const hearts = w.player.hearts;
+  run(w, 0.5);
+  assert.equal(w.player.hearts, hearts, "a touch does nothing under the shield");
+  run(w, 3);
+  assert.equal(w.player.shield, 0);
+  // Without the boon: no shield
+  const v = createWorld(1);
+  clearWave(v);
+  assert.equal(v.player.shield, 0);
 });

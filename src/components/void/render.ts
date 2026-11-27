@@ -10,7 +10,7 @@
  * enemies outlined dark, and the gem, white, the brightest thing there.
  */
 import {
-  COLS, Charge, EnemyKind, Kind, ROWS, SealState, Spit, TILE, TRAIL, TUNE, VIEW, iceAt, isDashing, sealFan,
+  COLS, Charge, EnemyKind, Kind, ROWS, SealState, Spit, TILE, TRAIL, TUNE, VIEW, dashMax, iceAt, isDashing, maxHearts, sealFan,
   shakeOffset, transitionVeil,
   type Enemy, type Room, type World,
 } from "./engine";
@@ -560,7 +560,18 @@ export function drawWorld(
     const o = amb.order[j];
     if (o === 0) drawGem(x, w, A);
     else if (o === -1) drawSeal(x, w, A);
-    else drawEnemy(x, w, A, w.enemies[o - 1]);
+    else {
+      const d = w.enemies[o - 1];
+      drawEnemy(x, w, A, d);
+      // Slow wake (boon): a frost crown over a slowed enemy
+      if (d.slow > 0 && d.arrive <= 0) {
+        x.fillStyle = COLOR.ice0;
+        const cx = Math.round(d.x), cy = Math.round(d.y - 17);
+        x.fillRect(cx - 3, cy, 1, 1);
+        x.fillRect(cx, cy - 1, 1, 1);
+        x.fillRect(cx + 3, cy, 1, 1);
+      }
+    }
   }
 
   // Bolts, over everything on the ground (they fly), each with a short trail
@@ -592,6 +603,17 @@ export function drawWorld(
     x.globalAlpha = 1;
   }
 
+  // Piercing shards (boon): a pale streak with a violet tail
+  for (const q of w.pierces) {
+    if (!q.alive) continue;
+    const l = Math.hypot(q.vx, q.vy) || 1;
+    const ux = q.vx / l, uy = q.vy / l;
+    for (let k = 0; k < 5; k++) {
+      x.fillStyle = k < 2 ? COLOR.ice1 : COLOR.energy1;
+      x.fillRect(Math.round(q.x - ux * k * 1.5), Math.round(q.y - uy * k * 1.5), 1, 1);
+    }
+  }
+
   // Particles: shards streak along their flight, chips tumble
   for (const q of w.particles) {
     if (!q.alive) continue;
@@ -619,6 +641,18 @@ export function drawWorld(
     x.globalAlpha = cooling ? 0.85 : 1;
     pixelRing(x, p.x, p.y, 9, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
     x.globalAlpha = 1;
+  }
+  // Second dash (boon): a pip per charge under the gem, lit when ready
+  if (w.phase === "play" && dashMax(w) > 1) {
+    for (let i = 0; i < dashMax(w); i++) {
+      x.fillStyle = i < p.dashCharges ? COLOR.ice1 : COLOR.energy0;
+      x.fillRect(Math.round(p.x - 3 + i * 5), Math.round(p.y + 11), 2, 1);
+    }
+  }
+  // Clearing ward (boon): a pale ring round the gem, blinking as it ends
+  if (w.phase === "play" && p.shield > 0 && (p.shield > 0.6 || Math.floor(p.shield * 12) % 2 === 0)) {
+    x.fillStyle = COLOR.ice0;
+    pixelRing(x, p.x, p.y - 7, 12, 0, Math.PI * 2);
   }
 
   x.restore();
@@ -680,7 +714,7 @@ export function drawWorld(
   }
 
   // Hearts (screen-fixed)
-  for (let i = 0; i < TUNE.hurt.hearts; i++) x.drawImage(i < p.hearts ? A.heart : A.heartEmpty, hud.x + 8 + i * 9, hud.y + 8);
+  for (let i = 0; i < maxHearts(w); i++) x.drawImage(i < p.hearts ? A.heart : A.heartEmpty, hud.x + 8 + i * 9, hud.y + 8);
 }
 
 /**

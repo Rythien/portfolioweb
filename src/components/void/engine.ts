@@ -99,6 +99,26 @@ export const TUNE = {
   },
   /** A hit that does not kill: a white flash and a shove. */
   hit: { flash: 0.08, shove: 7 },
+  /** The boons' numbers (BOONS says what each does). */
+  boon: {
+    /** Wide burst: reach and half-angle (base 30 px, 55 deg). */
+    wideRange: 38,
+    wideHalfAngle: (75 * Math.PI) / 180,
+    /** Quick hands: attack cooldown (base 0.25 s). */
+    quickCooldown: 0.16,
+    /** Shatter: a kill hurts every enemy whose centre is this close. */
+    shatterRadius: 30,
+    /** Slow wake: enemies this close to a dashing gem move at frostFactor for frostTime. */
+    frostRadius: 36,
+    frostTime: 2,
+    frostFactor: 0.45,
+    /** Piercing shard: speed, life (reach ~ speed x life) and hit radius. */
+    pierceSpeed: 280,
+    pierceLife: 0.42,
+    pierceHit: 7,
+    /** Clearing ward: seconds of shield when a room's wave falls. */
+    shield: 3,
+  },
   /** ONE fixed wave per room, cleared to open its doorway (no trickle). */
   spawn: { wave: 8, minDist: 80 },
   /** Walking through an open doorway: the screen fades to the void and back. */
@@ -136,6 +156,28 @@ export const TUNE = {
     bloom: 3.0,
   },
 } as const;
+
+/**
+ * BOONS: after a room's seal is freed (rooms 1 and 2; room 3's ends the
+ * run), the run pauses on three of these, drawn at random from those not
+ * yet taken this run; one is chosen (chooseBoon). The shell names them for
+ * the project just freed. Taken boons last through deaths; a new run
+ * (after a win) starts with none.
+ */
+export const BOONS = {
+  wide: { title: "Wide burst", text: "Your shard burst reaches wider and farther." },
+  dash: { title: "Second dash", text: "Hold two dash charges." },
+  shatter: { title: "Shatter", text: "Whatever you shatter bursts, hurting everything near it." },
+  frost: { title: "Slow wake", text: "Enemies your dash passes move at half speed for 2 s." },
+  heart: { title: "Fourth heart", text: "One more heart, filled now." },
+  quick: { title: "Quick hands", text: "Attack again sooner." },
+  pierce: { title: "Piercing shard", text: "Each attack also throws a shard through every enemy in its line." },
+  shield: { title: "Clearing ward", text: "When a room's wave falls, a shield holds you for 3 s." },
+} as const;
+export type BoonId = keyof typeof BOONS;
+export const BOON_IDS = Object.keys(BOONS) as BoonId[];
+/** How many a room offers. */
+export const BOON_OFFER = 3;
 
 /** One seal's pattern (ROOMS[i].seal). */
 export interface SealPattern {
@@ -379,7 +421,22 @@ export interface Enemy {
   ay: number;
   /** Time before it may act again (charger rest). */
   cool: number;
+  /** Slow wake (boon): seconds left at reduced speed. */
+  slow: number;
 }
+
+/** A piercing shard (boon): flies straight, hurts each enemy it passes once. */
+export interface Pierce {
+  alive: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  /** Enemies (by index) it already hit. */
+  hit: Uint8Array;
+}
+export const MAX_PIERCES = 6;
 
 /** Particle kinds (a plain object: node's type stripping has no enums). */
 export const Kind = { Chip: 0, Shard: 1, Spark: 2 } as const;
@@ -409,7 +466,14 @@ export interface Player {
   dashAge: number; // < 0: not dashing
   dashX: number;
   dashY: number;
+  /** Time until the next dash charge returns (0: all charges ready). */
   dashCd: number;
+  /** Dash charges ready (1, or 2 with the Second dash boon). */
+  dashCharges: number;
+  /** Dashes made (the shell spends a buffered press when this changes). */
+  dashes: number;
+  /** Clearing ward (boon): seconds of shield left. */
+  shield: number;
   atkCd: number;
   /** Time since the last attack (for the burst draw), and its aim. */
   atkAge: number;
@@ -450,6 +514,11 @@ export interface World {
   player: Player;
   enemies: Enemy[];
   bolts: Bolt[];
+  pierces: Pierce[];
+  /** Boons taken this run, in order. */
+  boons: BoonId[];
+  /** The boons on offer (the run is paused until one is chosen), or null. */
+  offer: BoonId[] | null;
   /** Test hook: one wave for every room instead of ROOMS' own (or null). */
   waveOverride: Wave | null;
   /** The room this run is in (index into ROOMS). */
@@ -490,7 +559,7 @@ export interface World {
 function freshPlayer(room: Room): Player {
   return {
     x: room.spawnX, y: room.spawnY, vx: 0, vy: 0, faceX: 1, faceY: 0,
-    dashAge: -1, dashX: 1, dashY: 0, dashCd: 0, atkCd: 0, atkAge: 99, atkX: 1, atkY: 0,
+    dashAge: -1, dashX: 1, dashY: 0, dashCd: 0, dashCharges: 1, dashes: 0, shield: 0, atkCd: 0, atkAge: 99, atkX: 1, atkY: 0,
     squash: 0, hearts: TUNE.hurt.hearts, invuln: 0, kbX: 0, kbY: 0,
   };
 }
@@ -508,8 +577,11 @@ export function createWorld(seed = 1, reduced = false, wave: Wave | null = null,
     player: freshPlayer(room),
     enemies: Array.from({ length: MAX_ENEMIES }, (): Enemy => ({
       alive: false, kind: EnemyKind.Drifter, hp: 1, x: 0, y: 0, vx: 0, vy: 0, arrive: 0, flash: 0, phase: 0,
-      state: 0, t: 0, ax: 0, ay: 0, cool: 0,
+      state: 0, t: 0, ax: 0, ay: 0, cool: 0, slow: 0,
     })),
+    pierces: Array.from({ length: MAX_PIERCES }, (): Pierce => ({ alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, hit: new Uint8Array(MAX_ENEMIES) })),
+    boons: [],
+    offer: null,
     waveOverride: wave,
     roomIndex: 0,
     doorOpen: false,
@@ -554,6 +626,7 @@ export function loadRoom(w: World, index: number, atSeal = false): void {
   p.dashAge = 99;
   for (const d of w.enemies) d.alive = false;
   for (const b of w.bolts) b.alive = false;
+  for (const q of w.pierces) q.alive = false;
   for (const q of w.particles) q.alive = false;
   w.doorOpen = false;
   w.seal.state = SealState.Off;
@@ -603,10 +676,15 @@ function resetTrail(w: World): void {
  * knows which), so a death never makes you refight what you freed. If
  * that room's wave was cleared this run, it starts at the seal.
  */
-export function restart(w: World, startRoom = 0): void {
-  const atSeal = resumesAtSeal(w, startRoom);
+export function restart(w: World, startRoom = 0, fresh = false): void {
+  const atSeal = !fresh && resumesAtSeal(w, startRoom);
+  // A death keeps the boons taken (death keeps progress); a new run does not
+  if (fresh) w.boons.length = 0;
+  w.offer = null;
   w.room = buildRoom(startRoom);
   Object.assign(w.player, freshPlayer(w.room));
+  w.player.hearts = maxHearts(w);
+  w.player.dashCharges = dashMax(w);
   w.phase = "play";
   w.endT = 0;
   w.hitStop = 0;
@@ -624,6 +702,47 @@ export function resumesAtSeal(w: World, startRoom = 0): boolean {
   return w.checkpoint === startRoom;
 }
 
+/* ── Boons ─────────────────────────────────────────────────────── */
+
+export function hasBoon(w: World, id: BoonId): boolean {
+  return w.boons.includes(id);
+}
+export function maxHearts(w: World): number {
+  return TUNE.hurt.hearts + (hasBoon(w, "heart") ? 1 : 0);
+}
+export function dashMax(w: World): number {
+  return hasBoon(w, "dash") ? 2 : 1;
+}
+export function attackRange(w: World): number {
+  return hasBoon(w, "wide") ? TUNE.boon.wideRange : TUNE.attack.range;
+}
+export function attackHalfAngle(w: World): number {
+  return hasBoon(w, "wide") ? TUNE.boon.wideHalfAngle : TUNE.attack.halfAngle;
+}
+function attackCooldown(w: World): number {
+  return hasBoon(w, "quick") ? TUNE.boon.quickCooldown : TUNE.attack.cooldown;
+}
+
+/** Pauses the run on BOON_OFFER boons not yet taken (fewer if the pool runs short). */
+export function offerBoons(w: World): void {
+  const pool = BOON_IDS.filter((id) => !w.boons.includes(id));
+  const offer: BoonId[] = [];
+  while (offer.length < BOON_OFFER && pool.length) offer.push(pool.splice(Math.floor(w.random() * pool.length), 1)[0]);
+  w.offer = offer.length ? offer : null;
+}
+
+/** Takes the offered boon at `index` (its effect starts now) and resumes the run. */
+export function chooseBoon(w: World, index: number): boolean {
+  const id = w.offer?.[index];
+  if (!id) return false;
+  w.boons.push(id);
+  w.offer = null;
+  const p = w.player;
+  if (id === "heart") p.hearts = Math.min(maxHearts(w), p.hearts + 1);
+  if (id === "dash") p.dashCharges = Math.min(dashMax(w), p.dashCharges + 1);
+  return true;
+}
+
 /* ── Helpers ───────────────────────────────────────────────────── */
 
 const approach = (v: number, target: number, step: number) =>
@@ -634,7 +753,7 @@ export function isDashing(p: Player): boolean {
 }
 
 export function isInvulnerable(p: Player): boolean {
-  return p.invuln > 0 || (p.dashAge >= 0 && p.dashAge < TUNE.dash.invuln);
+  return p.invuln > 0 || p.shield > 0 || (p.dashAge >= 0 && p.dashAge < TUNE.dash.invuln);
 }
 
 function emit(w: World, kind: Kind, x: number, y: number, vx: number, vy: number, life: number, color: number, friction: number) {
@@ -675,7 +794,7 @@ export function spawnWave(w: World, wave: Wave): void {
       d.hp = HP[kind];
       d.arrive = tele + placed * 0.08; // a ripple, not a pop
       d.flash = 0; d.phase = w.random() * Math.PI * 2;
-      d.state = 0; d.t = 0; d.ax = 0; d.ay = 0; d.cool = 0.4 + w.random() * 0.8;
+      d.state = 0; d.t = 0; d.ax = 0; d.ay = 0; d.cool = 0.4 + w.random() * 0.8; d.slow = 0;
       placed++;
       n++;
     }
@@ -685,8 +804,26 @@ export function spawnWave(w: World, wave: Wave): void {
 function killEnemy(w: World, d: Enemy): void {
   d.alive = false;
   w.kills++;
+  // Shatter (boon): the kill bursts into everything near it (and may chain)
+  if (hasBoon(w, "shatter")) {
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      emit(w, Kind.Spark, d.x, d.y - 6, Math.cos(a) * 140, Math.sin(a) * 140, 0.16, 1, 8);
+    }
+    for (const o of w.enemies) {
+      if (!o.alive || o.arrive > 0) continue;
+      const dx = o.x - d.x, dy = o.y - d.y;
+      const l = Math.hypot(dx, dy);
+      if (l > TUNE.boon.shatterRadius) continue;
+      damageEnemy(w, o, l ? dx / l : 0, l ? dy / l : 0);
+    }
+  }
   // The wave is down: the room's seal rises (it, not the wave, opens the door)
-  if (!w.enemies.some((o) => o.alive) && w.seal.state === SealState.Off) startSeal(w);
+  if (!w.enemies.some((o) => o.alive) && w.seal.state === SealState.Off) {
+    startSeal(w);
+    // Clearing ward (boon)
+    if (hasBoon(w, "shield")) w.player.shield = TUNE.boon.shield;
+  }
   // Chips: ice and energy, flung outward, slowed by friction
   // Two-hit kinds burst bigger
   for (let i = 0; i < (d.kind === EnemyKind.Drifter ? 9 : 13); i++) {
@@ -695,6 +832,19 @@ function killEnemy(w: World, d: Enemy): void {
     emit(w, Kind.Chip, d.x, d.y - 6, Math.cos(a) * s, Math.sin(a) * s - 20, 0.35 + w.random() * 0.25, i % 3, 7);
   }
   w.shake = Math.max(w.shake, TUNE.feel.shakeTime);
+}
+
+/** One hit on an enemy: it dies, or flashes and is shoved along (ax, ay). */
+function damageEnemy(w: World, d: Enemy, ax: number, ay: number): void {
+  w.hits++;
+  d.hp--;
+  if (d.hp <= 0) {
+    d.flash = TUNE.drifter.flash;
+    killEnemy(w, d);
+  } else {
+    d.flash = TUNE.hit.flash;
+    shove(w, d, ax * TUNE.hit.shove, ay * TUNE.hit.shove);
+  }
 }
 
 function hurt(w: World, fromX: number, fromY: number): void {
@@ -727,6 +877,8 @@ function die(w: World): void {
 /* ── The step ──────────────────────────────────────────────────── */
 
 export function step(w: World, dt: number, input: Input): void {
+  // A boon on offer: the run is paused until one is chosen
+  if (w.offer) return;
   // Hit-stop freezes the world, chips included: the hit lands
   if (w.hitStop > 0) {
     w.hitStop = Math.max(0, w.hitStop - dt);
@@ -755,7 +907,16 @@ export function step(w: World, dt: number, input: Input): void {
     return;
   }
 
-  p.dashCd = Math.max(0, p.dashCd - dt);
+  // Dash charges come back one per cooldown
+  const charges = dashMax(w);
+  if (p.dashCharges < charges) {
+    p.dashCd -= dt;
+    if (p.dashCd <= 0) {
+      p.dashCharges++;
+      p.dashCd = p.dashCharges < charges ? TUNE.dash.cooldown : 0;
+    }
+  } else p.dashCd = 0;
+  p.shield = Math.max(0, p.shield - dt);
   p.atkCd = Math.max(0, p.atkCd - dt);
   p.invuln = Math.max(0, p.invuln - dt);
   p.squash = Math.max(0, p.squash - dt);
@@ -772,12 +933,15 @@ export function step(w: World, dt: number, input: Input): void {
   }
 
   // Dash: the core defensive verb
-  if (input.dash && p.dashCd <= 0 && !isDashing(p)) {
+  if (input.dash && p.dashCharges > 0 && !isDashing(p)) {
     // Along the held direction (the facing just took it), else the facing
     p.dashX = p.faceX;
     p.dashY = p.faceY;
     p.dashAge = 0;
-    p.dashCd = TUNE.dash.cooldown;
+    p.dashes++;
+    // A spent charge starts its cooldown (unless another is already on it)
+    if (p.dashCharges === charges) p.dashCd = TUNE.dash.cooldown;
+    p.dashCharges--;
     p.squash = TUNE.dash.squashTime;
   }
 
@@ -787,6 +951,12 @@ export function step(w: World, dt: number, input: Input): void {
     const used = Math.min(dt, TUNE.dash.time - p.dashAge);
     moveOnIce(w, p.dashX * s * used, p.dashY * s * used);
     p.dashAge += dt;
+    // Slow wake (boon): what the dash passes is slowed
+    if (hasBoon(w, "frost")) {
+      for (const d of w.enemies) {
+        if (d.alive && d.arrive <= 0 && Math.hypot(d.x - p.x, d.y - p.y) < TUNE.boon.frostRadius) d.slow = TUNE.boon.frostTime;
+      }
+    }
     // Leaves the dash at walking speed in the held direction: no slide
     p.vx = mx * TUNE.move.speed;
     p.vy = my * TUNE.move.speed;
@@ -835,6 +1005,7 @@ export function step(w: World, dt: number, input: Input): void {
   stepEnemies(w, dt);
   stepSeal(w, dt);
   stepBolts(w, dt);
+  stepPierces(w, dt);
   stepParticles(w, dt);
 
   // Walking into the open doorway (its tile row on the north rim) leaves
@@ -859,37 +1030,44 @@ function attack(w: World, input: Input): void {
     p.faceX = ax;
     p.faceY = ay;
   }
-  p.atkCd = TUNE.attack.cooldown;
+  p.atkCd = attackCooldown(w);
+  const range = attackRange(w);
+  const half = attackHalfAngle(w);
   p.atkAge = 0;
   p.atkX = ax;
   p.atkY = ay;
   // The burst's shards
   const base = Math.atan2(ay, ax);
   for (let i = 0; i < 7; i++) {
-    const a = base + (i / 6 - 0.5) * 2 * TUNE.attack.halfAngle * 0.9;
+    const a = base + (i / 6 - 0.5) * 2 * half * 0.9;
     const s = 230 + w.random() * 60;
     emit(w, Kind.Shard, p.x + ax * 4, p.y - 6 + ay * 4, Math.cos(a) * s, Math.sin(a) * s, TUNE.attack.show, 1, 16);
   }
   // Hits: enemies whose body centre is in the cone and in reach
-  const cosHalf = Math.cos(TUNE.attack.halfAngle);
+  const cosHalf = Math.cos(half);
   let connected = false;
   for (const d of w.enemies) {
     if (!d.alive || d.arrive > 0) continue;
     const dx = d.x - p.x, dy = d.y - p.y;
     const dist = Math.hypot(dx, dy);
-    if (dist > TUNE.attack.range + RADIUS[d.kind]) continue;
+    if (dist > range + RADIUS[d.kind]) continue;
     // Point blank always counts; otherwise it must be in the cone
     if (dist > 8 && (dx * ax + dy * ay) / dist < cosHalf) continue;
     connected = true;
-    w.hits++;
-    d.hp--;
-    if (d.hp <= 0) {
-      d.flash = TUNE.drifter.flash;
-      killEnemy(w, d);
-    } else {
-      // Survives: flashes white and is shoved back along the burst
-      d.flash = TUNE.hit.flash;
-      shove(w, d, ax * TUNE.hit.shove, ay * TUNE.hit.shove);
+    // Dies, or flashes white and is shoved back along the burst
+    damageEnemy(w, d, ax, ay);
+  }
+  // Piercing shard (boon): thrown along the aim
+  if (hasBoon(w, "pierce")) {
+    const q = w.pierces.find((o) => !o.alive);
+    if (q) {
+      q.alive = true;
+      q.x = p.x + ax * 4;
+      q.y = p.y - 6 + ay * 4;
+      q.vx = ax * TUNE.boon.pierceSpeed;
+      q.vy = ay * TUNE.boon.pierceSpeed;
+      q.life = TUNE.boon.pierceLife;
+      q.hit.fill(0);
     }
   }
   // The seal: only while its core is open; otherwise the burst clinks off
@@ -897,7 +1075,7 @@ function attack(w: World, input: Input): void {
   if (sl.state !== SealState.Off && sl.state !== SealState.Freed && sl.state !== SealState.Arrive) {
     const dx = sl.x - p.x, dy = sl.y - 8 - (p.y - 6);
     const dist = Math.hypot(dx, dy);
-    if (dist <= TUNE.attack.range + TUNE.seal.radius && (dist < 10 || (dx * ax + dy * ay) / dist >= cosHalf)) {
+    if (dist <= range + TUNE.seal.radius && (dist < 10 || (dx * ax + dy * ay) / dist >= cosHalf)) {
       if (sl.state === SealState.Recover) {
         connected = true;
         w.hits++;
@@ -968,7 +1146,11 @@ function stepSeal(w: World, dt: number): void {
   if (s.state === SealState.Freed) {
     s.freedT += dt;
     if (s.freedT >= S.bloom && !w.doorOpen && w.phase === "play") {
-      if (w.roomIndex < ROOMS.length - 1) w.doorOpen = true;
+      if (w.roomIndex < ROOMS.length - 1) {
+        w.doorOpen = true;
+        // The freed project's boons: the run pauses on the offer
+        offerBoons(w);
+      }
       else {
         // The last seal: the run is won; the shell wakes the visitor at Contact
         w.phase = "won";
@@ -1080,12 +1262,15 @@ function stepEnemies(w: World, dt: number): void {
       d.arrive -= dt;
       continue;
     }
+    // Slow wake (boon): reduced speed while it lasts
+    d.slow = Math.max(0, d.slow - dt);
+    const k = d.slow > 0 ? slow * TUNE.boon.frostFactor : slow;
     if (d.kind === EnemyKind.Charger) {
-      stepCharger(w, d, dt, slow);
+      stepCharger(w, d, dt, k);
       continue;
     }
     if (d.kind === EnemyKind.Spitter) {
-      stepSpitter(w, d, dt, slow);
+      stepSpitter(w, d, dt, k);
       continue;
     }
     d.phase += dt * 2.2;
@@ -1093,8 +1278,9 @@ function stepEnemies(w: World, dt: number): void {
     const l = Math.hypot(dx, dy) || 1;
     // Toward the gem, with a slow sideways sway (they float, they don't march)
     const sway = Math.sin(d.phase) * TUNE.drifter.wobble;
-    let vx = (dx / l) * speed + (-dy / l) * sway;
-    let vy = (dy / l) * speed + (dx / l) * sway;
+    const sp = d.slow > 0 ? speed * TUNE.boon.frostFactor : speed;
+    let vx = (dx / l) * sp + (-dy / l) * sway;
+    let vy = (dy / l) * sp + (dx / l) * sway;
     // Keep apart: a crowd, not a stack
     for (const o of w.enemies) {
       if (o === d || !o.alive || o.arrive > 0) continue;
@@ -1246,6 +1432,28 @@ function stepBolts(w: World, dt: number): void {
     if (Math.hypot(b.x - p.x, b.y - (p.y - 6)) < TUNE.spitter.boltHit) {
       b.alive = false;
       hurt(w, b.x - b.vx, b.y - b.vy);
+    }
+  }
+}
+
+/** Piercing shards fly straight and hurt each enemy they pass, once each. */
+function stepPierces(w: World, dt: number): void {
+  for (const q of w.pierces) {
+    if (!q.alive) continue;
+    q.life -= dt;
+    q.x += q.vx * dt;
+    q.y += q.vy * dt;
+    if (q.life <= 0) {
+      q.alive = false;
+      continue;
+    }
+    const l = Math.hypot(q.vx, q.vy) || 1;
+    for (let i = 0; i < w.enemies.length; i++) {
+      const d = w.enemies[i];
+      if (!d.alive || d.arrive > 0 || q.hit[i]) continue;
+      if (Math.hypot(d.x - q.x, d.y - 6 - q.y) > TUNE.boon.pierceHit + RADIUS[d.kind]) continue;
+      q.hit[i] = 1;
+      damageEnemy(w, d, q.vx / l, q.vy / l);
     }
   }
 }

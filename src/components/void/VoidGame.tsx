@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
-  ENEMY_NAMES, ROOMS, SealState, TUNE, VIEW, createWorld, restart, resumesAtSeal, roomBounds, step,
-  type EnemyName, type Input, type Phase, type Wave, type World,
+  BOONS, ENEMY_NAMES, ROOMS, SealState, TUNE, VIEW, chooseBoon, createWorld, restart, resumesAtSeal, roomBounds, step,
+  type BoonId, type EnemyName, type Input, type Phase, type Wave, type World,
 } from "./engine";
 import { COLOR, buildAtlas, createAmbient, drawWorld, rebuildIsland, setCover } from "./render";
 import { archiveProjects } from "@/content/projects";
@@ -101,6 +101,11 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
   const worldRef = useRef<World | null>(null);
   const reducedRef = useRef(false);
   const fallAgainRef = useRef<HTMLButtonElement | null>(null);
+  /** The boons on offer and the room whose project they are named for (the run is paused), or null. */
+  const [offer, setOffer] = useState<{ room: number; ids: BoonId[] } | null>(null);
+  const boonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  /** Takes boon `i` of the offer (the shell's loop clears the card). */
+  const takeBoonRef = useRef<(i: number) => void>(() => {});
   const wakeFnRef = useRef(onWake);
 
   useEffect(() => {
@@ -126,6 +131,11 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     let lastPhase: Phase = "play";
     let lastRoom = world.roomIndex;
     let lastHud = "";
+    let lastOffer = "";
+    takeBoonRef.current = (i: number) => {
+      if (!chooseBoon(world, i)) return;
+      stageRef.current?.focus({ preventScroll: true });
+    };
     const atlas = buildAtlas(world.room);
     // The freed projects' DREAM covers, for the bloom (pixelated at its size)
     SEAL_PROJECTS.forEach((p, i) => {
@@ -231,6 +241,34 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         return;
       }
       resume();
+      // A boon on offer: 1 / 2 / 3 take one; arrows move between them;
+      // Enter / Space press the focused one (native button). Nothing else
+      // reaches the game: the run is paused
+      if (world.offer) {
+        const n = world.offer.length;
+        const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+        if (digit && Number(digit[1]) <= n) {
+          e.preventDefault();
+          takeBoonRef.current(Number(digit[1]) - 1);
+          return;
+        }
+        const dir = e.code === "ArrowRight" || e.code === "ArrowDown" ? 1 : e.code === "ArrowLeft" || e.code === "ArrowUp" ? -1 : 0;
+        if (dir) {
+          e.preventDefault();
+          const at = boonRefs.current.findIndex((b) => b === document.activeElement);
+          boonRefs.current[((at < 0 ? (dir > 0 ? -1 : 0) : at) + dir + n) % n]?.focus({ preventScroll: true });
+          return;
+        }
+        if (e.code === "Enter" || e.code === "Space") {
+          // Focus is on the card: let the button take it; else take the first
+          if (!boonRefs.current.includes(document.activeElement as HTMLButtonElement)) {
+            e.preventDefault();
+            takeBoonRef.current(0);
+          }
+          return;
+        }
+        return;
+      }
       // R: fall again, from the death card (a won run is over)
       if (e.code === "KeyR" && world.phase === "dead") {
         e.preventDefault();
@@ -302,7 +340,8 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       if (activeRef.current !== wasActive) {
         wasActive = activeRef.current;
         if (wasActive && world.phase === "won") {
-          restart(world, startRoom());
+          // A new run: no boons carried over
+          restart(world, startRoom(), true);
           recorded.fill(false);
         }
       }
@@ -331,10 +370,11 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         } else {
           input.aimX = input.aimY = 0;
         }
+        const dashes = world.player.dashes;
         step(world, dt, input);
         // A press is spent once it has acted (the rules reset these the frame they fire)
         if (world.player.atkAge === 0) attackAt = -1;
-        if (world.player.dashCd === TUNE.dash.cooldown) dashAt = -1;
+        if (world.player.dashes !== dashes) dashAt = -1;
       }
       // A new room: bake its island, re-fit the scale to it
       if (world.roomIndex !== lastRoom) {
@@ -353,7 +393,9 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
         if (p) useArchiveProgress.getState().recover(p.slug, { openOnWake: false });
       });
       const s = world.seal;
-      const note = world.doorOpen
+      const note = world.offer
+        ? "choose a boon"
+        : world.doorOpen
         ? "the way is open"
         : s.state === SealState.Freed
           ? `freed · ${SEAL_PROJECTS[world.roomIndex]?.title ?? ""}`
@@ -364,6 +406,15 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
       if (hudKey !== lastHud) {
         lastHud = hudKey;
         setHudRoom({ room: world.roomIndex + 1, note });
+      }
+      const offerKey = world.offer ? `${world.roomIndex}:${world.offer.join()}` : "";
+      if (offerKey !== lastOffer) {
+        lastOffer = offerKey;
+        setOffer(world.offer ? { room: world.roomIndex, ids: [...world.offer] } : null);
+        // Keys held into the pause must not walk the gem off when it ends
+        held.clear();
+        pointerDown = false;
+        attackAt = dashAt = -1;
       }
       if (world.phase !== lastPhase) {
         lastPhase = world.phase;
@@ -414,6 +465,11 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
     );
     return () => window.clearTimeout(id);
   }, [phase]);
+
+  // The boon card takes focus as it opens (arrows / 1-3 / Enter work on it)
+  useEffect(() => {
+    if (offer) boonRefs.current[0]?.focus({ preventScroll: true });
+  }, [offer]);
 
   const fallAgain = () => {
     const w = worldRef.current;
@@ -500,6 +556,54 @@ export default function VoidGame({ rootRef, active, open, onWake }: VoidProps) {
               </button>
             </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {offer && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="void-boon-title"
+          aria-describedby="void-boon-hint"
+          className="absolute inset-0 grid place-items-center bg-[#07062B]/70 px-4"
+        >
+          <div
+            className="flex w-full max-w-[56rem] flex-col gap-5 border-2 p-5 sm:p-7"
+            style={{ borderColor: COLOR.ice1, background: COLOR.void0, boxShadow: `6px 6px 0 ${COLOR.energy0}`, imageRendering: "pixelated" }}
+          >
+            <div className="flex flex-col gap-2 text-center">
+              <p className="font-mono text-label uppercase tracking-[0.2em]" style={{ color: COLOR.energy1 }}>
+                Freed · {SEAL_PROJECTS[offer.room]?.title ?? `Room ${offer.room + 1}`}
+              </p>
+              <h2 id="void-boon-title" className="font-mono text-[clamp(1.25rem,2.4vw,1.75rem)] uppercase tracking-[0.24em] text-white">
+                Take one of its gifts
+              </h2>
+            </div>
+            <ul className="grid gap-3 sm:grid-cols-3">
+              {offer.ids.map((id, i) => (
+                <li key={id}>
+                  <button
+                    ref={(el) => {
+                      boonRefs.current[i] = el;
+                    }}
+                    type="button"
+                    onClick={() => takeBoonRef.current(i)}
+                    className="flex h-full w-full flex-col gap-2 border-2 bg-[#1a1050] p-4 text-left font-mono hover:bg-[#241764] focus-visible:bg-[#2c1d80] focus-visible:outline-2 focus-visible:outline-offset-4"
+                    style={{ borderColor: COLOR.energy1, outlineColor: COLOR.ice0 }}
+                  >
+                    <span className="text-label uppercase tracking-[0.16em]" style={{ color: COLOR.ice0 }}>
+                      [{i + 1}] {SEAL_PROJECTS[offer.room]?.title ?? ""}
+                    </span>
+                    <span className="text-[1.05rem] uppercase tracking-[0.12em] text-white">{BOONS[id].title}</span>
+                    <span className="text-sm leading-snug" style={{ color: COLOR.ice1 }}>{BOONS[id].text}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p id="void-boon-hint" className="text-center font-mono text-label uppercase tracking-[0.2em] text-white/70">
+              1 · 2 · 3 or arrows and Enter · the run waits
+            </p>
           </div>
         </div>
       )}

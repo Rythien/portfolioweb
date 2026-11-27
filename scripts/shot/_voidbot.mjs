@@ -9,14 +9,15 @@
 //   const bot = createVoidBot(page, { trace });
 //   while (...) { const s = await bot.tick(); ... }   // s: the state it acted on
 //   await bot.release();
-//   bot.stats: { deaths, deathsByRoom: [r1, r2, r3], deathsAtSeal, rooms, sealTimes, wonAt }
+//   bot.stats: { deaths, deathsByRoom: [r1, r2, r3], deathsAtSeal, rooms, sealTimes, wonAt, boons: [{ room, offered, took }] }
+// A boon offer is answered with the key 1 (the first boon offered).
 
 export function createVoidBot(page, { trace = false } = {}) {
   const keys = new Set();
   let mouseDown = false;
   let lastRoom = null, lastHearts = 3, sealFrom = null;
   let counted = false; // this death already counted
-  const stats = { deaths: 0, deathsByRoom: [0, 0, 0], deathsAtSeal: 0, rooms: 0, sealTimes: [], wonAt: 0 };
+  const stats = { deaths: 0, deathsByRoom: [0, 0, 0], deathsAtSeal: 0, rooms: 0, sealTimes: [], wonAt: 0, boons: [] };
 
   async function hold(want) {
     for (const k of keys) if (!want.has(k)) { await page.keyboard.up(k); keys.delete(k); }
@@ -47,7 +48,7 @@ export function createVoidBot(page, { trace = false } = {}) {
       const sl = w.seal;
       const seal = sl.state === 0 || sl.state === 7 ? null : { x: sl.x, y: sl.y, gap: sl.gap, state: sl.state, rings: w.rings.filter((q) => q.alive).map((q) => [q.r, q.gapA, q.spin]) };
       return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts, open: w.doorOpen, room: w.roomIndex, moving: w.transition >= 0,
-        seal, sealState: sl.state, t: w.t, freed: [...w.freed], view };
+        seal, sealState: sl.state, t: w.t, freed: [...w.freed], view, offer: w.offer ? [...w.offer] : null };
     });
     if (!s) return null;
     const sx = (x) => s.view.dx + x * s.view.s;
@@ -59,6 +60,15 @@ export function createVoidBot(page, { trace = false } = {}) {
     if (s.phase === "won") {
       if (!stats.wonAt) stats.wonAt = Date.now();
       await release();
+      await page.waitForTimeout(100);
+      return s;
+    }
+    // A boon on offer (the run is paused): take the first, by its key
+    if (s.offer) {
+      await release();
+      if (!stats.boons.some((b) => b.room === s.room + 1)) stats.boons.push({ room: s.room + 1, offered: s.offer, took: s.offer[0] });
+      await page.waitForTimeout(400);
+      await page.keyboard.press("Digit1");
       await page.waitForTimeout(100);
       return s;
     }

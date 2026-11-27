@@ -157,6 +157,9 @@ await session(async () => {
   await bot.release();
   const st = bot.stats;
   console.log(`run: ${t(tRun)}, doorways ${st.rooms}, deaths ${st.deaths} (by room ${st.deathsByRoom.join(" / ")}; ${st.deathsAtSeal} during a seal fight), seals ${st.sealTimes.map((x) => x.toFixed(1) + " s").join(", ") || "-"} (game time, rising to freed)`);
+  for (const b of st.boons) console.log(`  boon after room ${b.room}: offered ${b.offered.join(", ")}; took ${b.took}`);
+  check(st.boons.length === 2 && st.boons.every((b) => b.offered.length === 3 && new Set(b.offered).size === 3) && new Set(st.boons.map((b) => b.took)).size === 2,
+    `a boon offered after rooms 1 and 2, three different each time, none taken twice (${st.boons.length} offers)`);
   check(last?.phase === "won", `the run is won (phase ${last?.phase}, room ${last ? last.room + 1 : "-"})`);
   check(st.rooms >= 2, `played through all three rooms (${st.rooms} doorways walked through)`);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("archive-progress-v1") || "{}"));
