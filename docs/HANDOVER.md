@@ -58,40 +58,48 @@ re-aim, the orbit ring) is unchanged since the last handover.
   scripts as before; the game loads only on interaction, which Lighthouse
   never makes.
 
+## Later on 2026-11-27
+
+| Commit | What |
+|---|---|
+| `7d72650` | Every Playwright script launches through `scripts/_browser.mjs` (headless unless `--headed`, closes on exit); `scripts/strays.mjs` |
+| `fa8aa18` | Seal checkpoint: once a room's wave is down, a death there restarts at the seal ("R · Back to the seal") |
+| `e7dc100` | Broken shards stay below the fixed header (`headerBand.ts`; check `verify/shard-clamp.mjs`) |
+| `fc9e5f0` | `glass-tone` (dL* <= 55) and `logo-contrast` (edge >= 12) match the chosen crystal; each file says why |
+| `218f32d` | `.vercelignore` whitelist (verified: a staged copy builds the same 12 pages) |
+| `08d81c0` | Seal 3 eased: rings 1.2 s apart, its own gap 1.15 rad. Three Firefox runs: 3 / 3 / 2 deaths (was 8 / 18 / 4) |
+
+Decided by you: `openOnWake: false` stays (the Works card is marked, no
+case study is forced open). `chore/next-16.4.6` was dropped (branch,
+remote and worktree deleted): Next is upgraded deliberately, later.
+
+## Deployment: deferred
+
+**Deployment is deferred by your choice, not blocked by a problem.** You
+chose to skip it for now and come back to it. For the record: the Vercel
+CLI (67.0.0) is installed, but its login never completed on this machine
+(`vercel whoami` prints "Logged out"; there is no `auth.json` under
+`%APPDATA%com.vercel.cliData`). When you pick it up: `vercel login`,
+`vercel whoami`, `vercel link --yes` (project `portfolioweb`),
+`vercel deploy --prod`. Then production Lighthouse (home and one case
+study, mobile and desktop), DREAM and the game on the live URL, and the
+videos served from the CDN rather than inlined.
+
 ## Open items
 
-- **Seal 3 difficulty: unresolved.** In the passing Firefox run the bot died
-  14 times, almost all in room 3 (seal 3 plus its wave of 4 drifters,
-  2 chargers, 3 spitters, after which a death restarts the room with the wave
-  again). Seal 3 alone, no wave: freed in 3/3 tries, 0-3 deaths each. The
-  rules are passable (the dash's 0.12 s i-frames cross any ring band and its
-  0.55 s cooldown beats the 1.0 s ring spacing), but whether a person
-  finds it fair is untested. Keep it hard (the finale) or ease it
-  (`SEAL_3` in `engine.ts`: `ringEvery` 1.2, or a wider `gap`)?
-- **Freeing a seal no longer opens that project's case study on wake.** The
-  Archive did this (floating into a panel meant "open this"). The game marks
-  the card instead (`openOnWake: false`). Decide whether that is right.
 - **The Archive's own test scripts don't pass `?dream=archive`**
   (`verify/archive`, `freeing`, `ending`, `archive-audio`, `shot/archive`,
   `perf/*`), so they can't reach it this week. Fix them or let them go with
   the Archive on 2026-12-03.
-- **The WAKE-page shard clamp (not started):** broken shards drift up over
-  the fixed header. Cause: their drift targets (`GlassCrystal.tsx`,
-  `driftCenter`) ignore the header. Planned fix: clamp the drift target
-  below the header's bottom edge, converted to a world height at the
-  shard's depth. Its own branch off `master`.
-- **`chore/next-16.4.6`** (Next 16.4.6 upgrade, worktree
-  `../portfolioweb-next-16.4.6`) has never been merged. Merge or drop?
-- Two checks still fail by design since the crystal re-aim:
-  `logo-contrast.mjs` (WAKE edge 9.8, needs 15) and `glass-tone.mjs`
-  (WAKE halves 20 L* apart, needs ≤ 3). Lower their thresholds or retire them?
+- `logo-contrast.mjs` in DREAM sometimes catches a frame before the logo is
+  drawn (0 logo pixels: a load-timing flake, not a contrast reading).
 - Your crystal note: its dark area reads as one solid mass on the right,
   where the reference has narrower streaks. Not yet addressed.
 
 ## Next steps
 
-1. **Boons** (one after each room, named for the freed project).
+1. **Boons** (one after each room, named for the freed project): in progress.
 2. **The feel-and-sound pass** (hit feel, sounds behind the Sound toggle).
 3. **Delete the Archive** on or after 2026-12-03, if nothing turned up.
-4. **The launch list:** mobile check, meta and social, deploy (deploy is
-   still blocked on a Vercel login).
+4. **The launch list:** mobile check, meta and social, then the deploy
+   (deferred, see above).
