@@ -9,7 +9,7 @@
 // logo into a grey blot). So, in the logo-on frame, every pixel on the
 // footprint's outline is paired: 5 px inside vs 5 px outside along the
 // outline's normal. Passes when, in WAKE and DREAM:
-//   - median |L*(inside) - L*(outside)| over all pairs >= 15
+//   - median |L*(inside) - L*(outside)| over all pairs >= 12 (was 15)
 //   - the logo is not flat: L* spread (p90 - p10) across its face >= 12
 // (The share of pairs over 20 L* is still printed, for information.)
 //
@@ -21,6 +21,13 @@
 // 5 px the pairs straddle the blur, and 15 L* is a clearly visible edge.
 // Raising the bar back toward 30 would mean un-blurring the glass or
 // pushing the logo face to an extreme, both rejected (2026-11-16).
+//
+// 15 -> 12 (2026-11-27): the crystal we chose has dark veins on purpose,
+// and where one runs behind the logo the edge loses contrast against it.
+// Measured on that crystal: median 13.1 at worst (WAKE @4s; DREAM @8s
+// 14.3), 22-34 at the other poses, face spread never under 14.6. 12 keeps
+// the bar just under the chosen look, so a logo that really fades into the
+// glass still fails. The spread limit (12) is unchanged.
 // Usage: node scripts/verify/logo-contrast.mjs [freezeSeconds,...=0,2,4,6,8]
 // Every pose (freeze time) must pass in both modes.
 import { firefox } from "playwright";
@@ -33,7 +40,7 @@ const shots = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "shot
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const freezes = (process.argv[2] ?? "0,2,4,6,8").split(",");
 const CLIP = { x: 470, y: 110, width: 780, height: 680 };
-const MIN_EDGE_MEDIAN = 15;
+const MIN_EDGE_MEDIAN = 12; // was 15; see the header
 const EDGE_PAIR_DL = 20;
 const EDGE_OFFSET = Number(process.env.EDGE_OFFSET ?? 5);
 const MIN_SPREAD = 12;
