@@ -7,6 +7,7 @@
 // the lowest median frame time (best of N).
 //   node scripts/perf/ab.mjs <label=url> [label=url ...] [--rounds=3] [--no-archive=label,...]
 import { firefox } from "playwright";
+import { launch, session } from "../_browser.mjs";
 
 const args = process.argv.slice(2);
 const rounds = Number(args.find((a) => a.startsWith("--rounds="))?.split("=")[1] ?? 3);
@@ -44,36 +45,37 @@ const rate = (page, sel) => page.evaluate((sel) => new Promise((res) => {
   requestAnimationFrame(f);
 }), sel);
 
-const browser = await firefox.launch({ headless: true, firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false, "privacy.reduceTimerPrecision": false } });
-const results = {};
-for (let r = 0; r < rounds; r++) {
-  for (const scene of SCENES) {
-    for (const b of builds) {
-      if (scene.ready === "archive" && noArchive.includes(b.label)) continue;
-      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
-      const page = await ctx.newPage();
-      // Same saved state for every run: no Archive progress, hint seen
-      await page.goto(`${b.url}/?nopreload=1&noarchive=1`, { waitUntil: "domcontentloaded" });
-      await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
-      await page.goto(b.url + scene.q, { waitUntil: "domcontentloaded" });
-      if (scene.ready === "archive") await page.waitForFunction(() => (window.__archiveFrames ?? 0) > 30, null, { timeout: 60000 });
-      await page.waitForTimeout(scene.wait);
-      const m = await rate(page, scene.canvas);
-      const dpr = await page.evaluate((sel) => {
-        const c = [...document.querySelectorAll(sel)].sort((a, b) => b.width * b.height - a.width * a.height)[0];
-        return c ? (c.width / c.clientWidth).toFixed(2) : "?";
-      }, scene.canvas);
-      const key = `${scene.name}|${b.label}`;
-      (results[key] ??= []).push(m);
-      console.log(`round ${r + 1}  ${scene.name.padEnd(14)} ${b.label.padEnd(12)} ${m.fps.toFixed(1)} fps  median ${m.med.toFixed(1)} ms  p95 ${m.p95.toFixed(1)} ms  DPR ${dpr}${m.synced ? "" : "  (NO GL SYNC)"}`);
-      await ctx.close();
+await session(async () => {
+  const browser = await launch(firefox, { firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false, "privacy.reduceTimerPrecision": false } });
+  const results = {};
+  for (let r = 0; r < rounds; r++) {
+    for (const scene of SCENES) {
+      for (const b of builds) {
+        if (scene.ready === "archive" && noArchive.includes(b.label)) continue;
+        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+        const page = await ctx.newPage();
+        // Same saved state for every run: no Archive progress, hint seen
+        await page.goto(`${b.url}/?nopreload=1&noarchive=1`, { waitUntil: "domcontentloaded" });
+        await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
+        await page.goto(b.url + scene.q, { waitUntil: "domcontentloaded" });
+        if (scene.ready === "archive") await page.waitForFunction(() => (window.__archiveFrames ?? 0) > 30, null, { timeout: 60000 });
+        await page.waitForTimeout(scene.wait);
+        const m = await rate(page, scene.canvas);
+        const dpr = await page.evaluate((sel) => {
+          const c = [...document.querySelectorAll(sel)].sort((a, b) => b.width * b.height - a.width * a.height)[0];
+          return c ? (c.width / c.clientWidth).toFixed(2) : "?";
+        }, scene.canvas);
+        const key = `${scene.name}|${b.label}`;
+        (results[key] ??= []).push(m);
+        console.log(`round ${r + 1}  ${scene.name.padEnd(14)} ${b.label.padEnd(12)} ${m.fps.toFixed(1)} fps  median ${m.med.toFixed(1)} ms  p95 ${m.p95.toFixed(1)} ms  DPR ${dpr}${m.synced ? "" : "  (NO GL SYNC)"}`);
+        await ctx.close();
+      }
     }
   }
-}
-await browser.close();
-console.log("\nbest of", rounds);
-for (const [key, ms] of Object.entries(results)) {
-  // Best run = lowest median frame time (robust to a load spike mid-run)
-  const best = ms.reduce((a, b) => (b.med < a.med ? b : a));
-  console.log(`${key.padEnd(28)} median frame ${best.med.toFixed(2)} ms = ${(1000 / best.med).toFixed(1)} fps (p95 ${best.p95.toFixed(1)} ms)   all medians: ${ms.map((m) => m.med.toFixed(2)).join(", ")}`);
-}
+  console.log("\nbest of", rounds);
+  for (const [key, ms] of Object.entries(results)) {
+    // Best run = lowest median frame time (robust to a load spike mid-run)
+    const best = ms.reduce((a, b) => (b.med < a.med ? b : a));
+    console.log(`${key.padEnd(28)} median frame ${best.med.toFixed(2)} ms = ${(1000 / best.med).toFixed(1)} fps (p95 ${best.p95.toFixed(1)} ms)   all medians: ${ms.map((m) => m.med.toFixed(2)).join(", ")}`);
+  }
+});

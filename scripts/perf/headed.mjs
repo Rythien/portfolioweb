@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Frame rate in a VISIBLE Firefox window on the real GPU (headless Firefox
 // on this machine cannot A/B builds: it pins at its rAF ceiling or falls
-// back to software). Opens windows on screen for a few minutes.
+// back to software). Opens windows on screen for a few minutes, so it runs
+// only with --headed (and closes them when it ends or fails).
 //
 // Scenes: awake hero at rest, awake hero while wheel-scrolling, Archive at
 // spawn, Archive parked facing seal 0 (archiveat=0, the nearest seal).
@@ -11,8 +12,14 @@
 // --sync: end every frame with a 1x1 readPixels on the scene's canvas, so
 //   the interval includes the finished GPU work (the plain rate pins at
 //   Firefox's 200 Hz frame ceiling on a fast GPU). --dpr=2 for a HiDPI load.
-//   node scripts/perf/headed.mjs <label=url> [...] [--rounds=3] [--sync] [--dpr=1] [--no-archive=label,...] [--hero-only=label,...]
+//   node scripts/perf/headed.mjs --headed <label=url> [...] [--rounds=3] [--sync] [--dpr=1] [--no-archive=label,...] [--hero-only=label,...]
 import { firefox } from "playwright";
+import { HEADED, launch, session } from "../_browser.mjs";
+
+if (!HEADED) {
+  console.error("perf/headed.mjs measures a visible window: pass --headed to run it");
+  process.exit(1);
+}
 
 const args = process.argv.slice(2);
 const opt = (k, d) => args.find((a) => a.startsWith(`--${k}=`))?.split("=")[1] ?? d;
@@ -53,56 +60,57 @@ const measure = (page, sel) => page.evaluate(([ms, sel, sync]) => new Promise((r
   requestAnimationFrame(f);
 }), [MEASURE_MS, sel, sync]);
 
-const browser = await firefox.launch({ headless: false, firefoxUserPrefs: { "privacy.reduceTimerPrecision": false } });
-let renderer = "";
-const results = {};
-for (let r = 0; r < rounds; r++) {
-  for (const scene of SCENES) {
-    for (const b of builds) {
-      if (scene.archive && noArchive.includes(b.label)) continue;
-      if (!scene.archive && heroOnly.length && heroOnly[0] && !heroOnly.includes(b.label)) continue;
-      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: dpr });
-      const page = await ctx.newPage();
-      await page.goto(`${b.url}/?nopreload=1&noarchive=1`, { waitUntil: "domcontentloaded" });
-      await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
-      await page.goto(b.url + scene.q, { waitUntil: "domcontentloaded" });
-      if (scene.archive) await page.waitForFunction(() => (window.__archiveFrames ?? 0) > 30, null, { timeout: 60000 });
-      await page.waitForTimeout(scene.wait);
-      if (!renderer) {
-        renderer = await page.evaluate(() => {
-          const gl = document.createElement("canvas").getContext("webgl2");
-          const e = gl?.getExtension("WEBGL_debug_renderer_info");
-          return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER) ?? "none";
-        });
-        console.log(`renderer: ${renderer}, devicePixelRatio ${await page.evaluate(() => devicePixelRatio)}`);
+await session(async () => {
+  const browser = await launch(firefox, { firefoxUserPrefs: { "privacy.reduceTimerPrecision": false } });
+  let renderer = "";
+  const results = {};
+  for (let r = 0; r < rounds; r++) {
+    for (const scene of SCENES) {
+      for (const b of builds) {
+        if (scene.archive && noArchive.includes(b.label)) continue;
+        if (!scene.archive && heroOnly.length && heroOnly[0] && !heroOnly.includes(b.label)) continue;
+        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: dpr });
+        const page = await ctx.newPage();
+        await page.goto(`${b.url}/?nopreload=1&noarchive=1`, { waitUntil: "domcontentloaded" });
+        await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
+        await page.goto(b.url + scene.q, { waitUntil: "domcontentloaded" });
+        if (scene.archive) await page.waitForFunction(() => (window.__archiveFrames ?? 0) > 30, null, { timeout: 60000 });
+        await page.waitForTimeout(scene.wait);
+        if (!renderer) {
+          renderer = await page.evaluate(() => {
+            const gl = document.createElement("canvas").getContext("webgl2");
+            const e = gl?.getExtension("WEBGL_debug_renderer_info");
+            return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER) ?? "none";
+          });
+          console.log(`renderer: ${renderer}, devicePixelRatio ${await page.evaluate(() => devicePixelRatio)}`);
+        }
+        let scrolling = false;
+        let scroller = null;
+        if (scene.scroll) {
+          await page.mouse.move(720, 450);
+          scrolling = true;
+          // Steady wheel input through the whole window: hero -> break -> park
+          scroller = (async () => {
+            while (scrolling) {
+              await page.mouse.wheel(0, 45);
+              await page.waitForTimeout(60);
+            }
+          })();
+        }
+        const m = await measure(page, scene.canvas);
+        scrolling = false;
+        await scroller;
+        const key = `${scene.name}|${b.label}`;
+        (results[key] ??= []).push(m);
+        console.log(`round ${r + 1}  ${scene.name.padEnd(14)} ${b.label.padEnd(12)} ${m.fps.toFixed(1)} fps  median ${m.med.toFixed(1)} ms  p95 ${m.p95.toFixed(1)} ms`);
+        await ctx.close();
       }
-      let scrolling = false;
-      let scroller = null;
-      if (scene.scroll) {
-        await page.mouse.move(720, 450);
-        scrolling = true;
-        // Steady wheel input through the whole window: hero -> break -> park
-        scroller = (async () => {
-          while (scrolling) {
-            await page.mouse.wheel(0, 45);
-            await page.waitForTimeout(60);
-          }
-        })();
-      }
-      const m = await measure(page, scene.canvas);
-      scrolling = false;
-      await scroller;
-      const key = `${scene.name}|${b.label}`;
-      (results[key] ??= []).push(m);
-      console.log(`round ${r + 1}  ${scene.name.padEnd(14)} ${b.label.padEnd(12)} ${m.fps.toFixed(1)} fps  median ${m.med.toFixed(1)} ms  p95 ${m.p95.toFixed(1)} ms`);
-      await ctx.close();
     }
   }
-}
-await browser.close();
-console.log(`\n${sync ? "GPU-synced, " : ""}DPR ${dpr}, best of ${rounds} (spread = min..max fps across runs)`);
-for (const [key, ms] of Object.entries(results)) {
-  const fps = ms.map((m) => m.fps);
-  const best = ms.reduce((a, b) => (b.fps > a.fps ? b : a));
-  console.log(`${key.padEnd(26)} ${best.fps.toFixed(1)} fps (p95 frame ${best.p95.toFixed(1)} ms)   spread ${Math.min(...fps).toFixed(1)}..${Math.max(...fps).toFixed(1)}`);
-}
+  console.log(`\n${sync ? "GPU-synced, " : ""}DPR ${dpr}, best of ${rounds} (spread = min..max fps across runs)`);
+  for (const [key, ms] of Object.entries(results)) {
+    const fps = ms.map((m) => m.fps);
+    const best = ms.reduce((a, b) => (b.fps > a.fps ? b : a));
+    console.log(`${key.padEnd(26)} ${best.fps.toFixed(1)} fps (p95 frame ${best.p95.toFixed(1)} ms)   spread ${Math.min(...fps).toFixed(1)}..${Math.max(...fps).toFixed(1)}`);
+  }
+});

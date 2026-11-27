@@ -25,6 +25,7 @@
  */
 import { firefox } from "playwright";
 import sharp from "sharp";
+import { launch, session } from "../_browser.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const base = arg("url", "http://localhost:3000");
@@ -64,97 +65,98 @@ function diff(a, b, cursors, skip = [], noise = null) {
   return { n, box: n ? [x0, y0, x1, y1] : null };
 }
 
-const browser = await firefox.launch({ headless: true, firefoxUserPrefs: { "webgl.force-enabled": true } });
-let failed = 0;
-for (const mode of modes) {
-  for (const w of widths) {
-    const h = w < 768 ? 844 : 900;
-    const page = await browser.newPage({ viewport: { width: w, height: h } });
-    const park = { x: w - 2, y: h - 2 };
-    await page.mouse.move(park.x, park.y);
-    await page.goto(`${base}/?nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=2`, { waitUntil: "load", timeout: 120000 });
-    await page.addStyleTag({ content: ".z-\\[9999\\]{opacity:0!important}" });
-    await page.waitForFunction(() => window.__crystalBox?.(), null, { timeout: 60000 });
-    await page.waitForTimeout(mode === "dream" ? 15000 : 8000);
-    const b = await page.evaluate(() => window.__crystalBox());
-    // The floating mode pill is a magnetic control: leave it out
-    const pill = await page.evaluate(() => {
-      const r = document.querySelector(".mode-pill")?.getBoundingClientRect();
-      return r && r.width ? { left: r.left - 90, right: r.right + 90, top: r.top - 90, bottom: r.bottom + 90 } : null;
-    });
-    // Live HH:MM clocks tick on their own (a minute can roll over mid-run)
-    const clocks = await page.evaluate(() =>
-      [...document.querySelectorAll("body *")]
-        .filter((el) => el.childElementCount === 0 && /^\d\d:\d\d$/.test(el.textContent.trim()))
-        .map((el) => el.getBoundingClientRect())
-        .filter((r) => r.width && r.height)
-        .map((r) => ({ left: r.left - 4, right: r.right + 4, top: r.top - 4, bottom: r.bottom + 4 })),
-    );
-    const skip = [...(pill ? [pill] : []), ...clocks];
-    const cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
-    const hw = (b.right - b.left) / 2, hh = (b.bottom - b.top) / 2;
-    const tag = `${mode} ${w}`;
+await session(async () => {
+  const browser = await launch(firefox, { firefoxUserPrefs: { "webgl.force-enabled": true } });
+  let failed = 0;
+  for (const mode of modes) {
+    for (const w of widths) {
+      const h = w < 768 ? 844 : 900;
+      const page = await browser.newPage({ viewport: { width: w, height: h } });
+      const park = { x: w - 2, y: h - 2 };
+      await page.mouse.move(park.x, park.y);
+      await page.goto(`${base}/?nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=2`, { waitUntil: "load", timeout: 120000 });
+      await page.addStyleTag({ content: ".z-\\[9999\\]{opacity:0!important}" });
+      await page.waitForFunction(() => window.__crystalBox?.(), null, { timeout: 60000 });
+      await page.waitForTimeout(mode === "dream" ? 15000 : 8000);
+      const b = await page.evaluate(() => window.__crystalBox());
+      // The floating mode pill is a magnetic control: leave it out
+      const pill = await page.evaluate(() => {
+        const r = document.querySelector(".mode-pill")?.getBoundingClientRect();
+        return r && r.width ? { left: r.left - 90, right: r.right + 90, top: r.top - 90, bottom: r.bottom + 90 } : null;
+      });
+      // Live HH:MM clocks tick on their own (a minute can roll over mid-run)
+      const clocks = await page.evaluate(() =>
+        [...document.querySelectorAll("body *")]
+          .filter((el) => el.childElementCount === 0 && /^\d\d:\d\d$/.test(el.textContent.trim()))
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.width && r.height)
+          .map((r) => ({ left: r.left - 4, right: r.right + 4, top: r.top - 4, bottom: r.bottom + 4 })),
+      );
+      const skip = [...(pill ? [pill] : []), ...clocks];
+      const cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
+      const hw = (b.right - b.left) / 2, hh = (b.bottom - b.top) / 2;
+      const tag = `${mode} ${w}`;
 
-    // Control: the cursor parked, what changes on its own
-    await page.mouse.move(park.x, park.y);
-    await page.waitForTimeout(SETTLE);
-    const ref = await raw(page);
-    const noise = new Uint8Array(ref.w * ref.h);
-    for (let k = 0; k < 4; k++) {
-      await page.waitForTimeout(1500);
-      const f = await raw(page);
-      for (let j = 0; j < noise.length; j++) {
-        const i = j * 3;
-        if (Math.abs(f.data[i] - ref.data[i]) > TOL || Math.abs(f.data[i + 1] - ref.data[i + 1]) > TOL || Math.abs(f.data[i + 2] - ref.data[i + 2]) > TOL) noise[j] = 1;
+      // Control: the cursor parked, what changes on its own
+      await page.mouse.move(park.x, park.y);
+      await page.waitForTimeout(SETTLE);
+      const ref = await raw(page);
+      const noise = new Uint8Array(ref.w * ref.h);
+      for (let k = 0; k < 4; k++) {
+        await page.waitForTimeout(1500);
+        const f = await raw(page);
+        for (let j = 0; j < noise.length; j++) {
+          const i = j * 3;
+          if (Math.abs(f.data[i] - ref.data[i]) > TOL || Math.abs(f.data[i + 1] - ref.data[i + 1]) > TOL || Math.abs(f.data[i + 2] - ref.data[i + 2]) > TOL) noise[j] = 1;
+        }
       }
-    }
-    const noisy = noise.reduce((a, v) => a + v, 0);
-    let worst = { n: 0 };
-    let points = 0;
-    for (const fy of [0.35, 0.6]) {
-      for (const fx of [0.05, 0.25, 0.5, 0.75, 0.95]) {
-        const p = { x: Math.round(fx * w), y: Math.round(fy * h) };
-        if (Math.abs(p.x - cx) < hw * 1.6 && Math.abs(p.y - cy) < hh * 1.6) continue;
+      const noisy = noise.reduce((a, v) => a + v, 0);
+      let worst = { n: 0 };
+      let points = 0;
+      for (const fy of [0.35, 0.6]) {
+        for (const fx of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+          const p = { x: Math.round(fx * w), y: Math.round(fy * h) };
+          if (Math.abs(p.x - cx) < hw * 1.6 && Math.abs(p.y - cy) < hh * 1.6) continue;
+          await page.mouse.move(p.x, p.y, { steps: 4 });
+          await page.waitForTimeout(SETTLE);
+          const d = diff(ref, await raw(page), [park, p], skip, noise);
+          points++;
+          if (d.n > worst.n) worst = { ...d, at: p };
+        }
+      }
+      const offOk = worst.n === 0;
+      console.log(`${offOk ? "PASS" : "FAIL"} ${tag} off-crystal: ${points} cursor points, noise ${noisy} px, ${worst.n} moved px${worst.n ? ` (worst at ${JSON.stringify(worst.at)}, box ${worst.box})` : ""}`);
+
+      // On the crystal: break it, let it settle, then move inside the zone
+      const start = { x: Math.round(cx), y: Math.round(cy) };
+      await page.mouse.move(start.x, start.y, { steps: 6 });
+      await page.waitForTimeout(SETTLE);
+      // The break can finish settling late (one shard's cloud repaints once,
+      // seconds after the burst, with the cursor still): wait for two equal
+      // frames before taking the reference
+      let ref2 = await raw(page);
+      for (let k = 0; k < 8; k++) {
+        await page.waitForTimeout(1500);
+        const f = await raw(page);
+        const same = diff(ref2, f, [start], skip, noise).n === 0;
+        ref2 = f;
+        if (same) break;
+      }
+      worst = { n: 0 };
+      const inside = [[-0.3, 0], [0.3, 0], [0, -0.3], [0, 0.3]];
+      for (const [ox, oy] of inside) {
+        const p = { x: Math.round(cx + ox * hw), y: Math.round(cy + oy * hh) };
         await page.mouse.move(p.x, p.y, { steps: 4 });
         await page.waitForTimeout(SETTLE);
-        const d = diff(ref, await raw(page), [park, p], skip, noise);
-        points++;
+        const d = diff(ref2, await raw(page), [start, p], skip, noise);
         if (d.n > worst.n) worst = { ...d, at: p };
       }
+      const broke = await page.evaluate(() => document.body.innerText.includes("BREAK"));
+      const onOk = worst.n === 0;
+      console.log(`${onOk ? "PASS" : "FAIL"} ${tag} on-crystal: ${inside.length} cursor points, ${worst.n} moved px${worst.n ? ` (worst at ${JSON.stringify(worst.at)}, box ${worst.box})` : ""}${broke ? "" : " [cursor label not seen]"}`);
+      if (!offOk || !onOk) failed++;
+      await page.close();
     }
-    const offOk = worst.n === 0;
-    console.log(`${offOk ? "PASS" : "FAIL"} ${tag} off-crystal: ${points} cursor points, noise ${noisy} px, ${worst.n} moved px${worst.n ? ` (worst at ${JSON.stringify(worst.at)}, box ${worst.box})` : ""}`);
-
-    // On the crystal: break it, let it settle, then move inside the zone
-    const start = { x: Math.round(cx), y: Math.round(cy) };
-    await page.mouse.move(start.x, start.y, { steps: 6 });
-    await page.waitForTimeout(SETTLE);
-    // The break can finish settling late (one shard's cloud repaints once,
-    // seconds after the burst, with the cursor still): wait for two equal
-    // frames before taking the reference
-    let ref2 = await raw(page);
-    for (let k = 0; k < 8; k++) {
-      await page.waitForTimeout(1500);
-      const f = await raw(page);
-      const same = diff(ref2, f, [start], skip, noise).n === 0;
-      ref2 = f;
-      if (same) break;
-    }
-    worst = { n: 0 };
-    const inside = [[-0.3, 0], [0.3, 0], [0, -0.3], [0, 0.3]];
-    for (const [ox, oy] of inside) {
-      const p = { x: Math.round(cx + ox * hw), y: Math.round(cy + oy * hh) };
-      await page.mouse.move(p.x, p.y, { steps: 4 });
-      await page.waitForTimeout(SETTLE);
-      const d = diff(ref2, await raw(page), [start, p], skip, noise);
-      if (d.n > worst.n) worst = { ...d, at: p };
-    }
-    const broke = await page.evaluate(() => document.body.innerText.includes("BREAK"));
-    const onOk = worst.n === 0;
-    console.log(`${onOk ? "PASS" : "FAIL"} ${tag} on-crystal: ${inside.length} cursor points, ${worst.n} moved px${worst.n ? ` (worst at ${JSON.stringify(worst.at)}, box ${worst.box})` : ""}${broke ? "" : " [cursor label not seen]"}`);
-    if (!offOk || !onOk) failed++;
-    await page.close();
   }
-}
-await browser.close();
-process.exit(failed ? 1 : 0);
+  return failed ? 1 : 0;
+});

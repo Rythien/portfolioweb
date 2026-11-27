@@ -18,6 +18,7 @@
  * no easier to scrape than the site.
  */
 import { firefox } from "playwright";
+import { launch, session } from "../_browser.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const base = arg("url", "http://localhost:3000");
@@ -54,39 +55,40 @@ for (const path of ["/", "/cv"]) {
 }
 
 // 2. Still works in the browser
-const browser = await firefox.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-await page.addInitScript(() => {
-  window.__copied = [];
-  const stub = { writeText: (t) => (window.__copied.push(t), Promise.resolve()) };
-  Object.defineProperty(navigator, "clipboard", { value: stub, configurable: true });
+await session(async () => {
+  const browser = await launch(firefox);
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.addInitScript(() => {
+    window.__copied = [];
+    const stub = { writeText: (t) => (window.__copied.push(t), Promise.resolve()) };
+    Object.defineProperty(navigator, "clipboard", { value: stub, configurable: true });
+  });
+  await page.goto(`${base}/?nopreload=1`, { waitUntil: "load", timeout: 120000 });
+  await page.waitForTimeout(1500);
+  const links = await page.evaluate(() => ({
+    send: document.querySelector('#contact a[data-cursor="Email"]')?.getAttribute("href"),
+    touch: document.querySelector('footer a[data-cursor="Email"]')?.getAttribute("href"),
+    tel: document.querySelector('#contact a[href^="tel:"]')?.getAttribute("href"),
+    telText: document.querySelector('#contact a[href^="tel:"]')?.textContent,
+  }));
+  check(links.send === `mailto:${EMAIL}`, "Send Email is a mailto link to the address");
+  check(links.touch === `mailto:${EMAIL}`, '"Get in touch" is a mailto link to the address');
+  check(links.tel === `tel:+977${DIGITS}`, "phone link dials the number");
+  check(links.telText === `+977 ${DIGITS}`, "phone number is shown");
+  await page.evaluate(() => document.getElementById("contact").scrollIntoView());
+  await page.waitForTimeout(800);
+  await page.click('#contact button:has-text("Copy")');
+  await page.waitForTimeout(300);
+  const copied = await page.evaluate(() => window.__copied);
+  const label = await page.evaluate(() => document.querySelector('#contact button[aria-label]')?.textContent);
+  check(copied.length === 1 && copied[0] === EMAIL, "copy button copies the address");
+  check(/Copied/.test(label ?? ""), "copy button confirms");
+
+  await page.goto(`${base}/cv`, { waitUntil: "load", timeout: 120000 });
+  await page.waitForTimeout(1000);
+  const cv = await page.evaluate(() => [...document.querySelectorAll("a")].find((a) => a.href.startsWith("mailto:"))?.getAttribute("href"));
+  check(cv === `mailto:${EMAIL}`, "/cv email link works");
+
+  console.log(failures ? `\nFAIL: ${failures}` : "\nPASS");
+  return failures ? 1 : 0;
 });
-await page.goto(`${base}/?nopreload=1`, { waitUntil: "load", timeout: 120000 });
-await page.waitForTimeout(1500);
-const links = await page.evaluate(() => ({
-  send: document.querySelector('#contact a[data-cursor="Email"]')?.getAttribute("href"),
-  touch: document.querySelector('footer a[data-cursor="Email"]')?.getAttribute("href"),
-  tel: document.querySelector('#contact a[href^="tel:"]')?.getAttribute("href"),
-  telText: document.querySelector('#contact a[href^="tel:"]')?.textContent,
-}));
-check(links.send === `mailto:${EMAIL}`, "Send Email is a mailto link to the address");
-check(links.touch === `mailto:${EMAIL}`, '"Get in touch" is a mailto link to the address');
-check(links.tel === `tel:+977${DIGITS}`, "phone link dials the number");
-check(links.telText === `+977 ${DIGITS}`, "phone number is shown");
-await page.evaluate(() => document.getElementById("contact").scrollIntoView());
-await page.waitForTimeout(800);
-await page.click('#contact button:has-text("Copy")');
-await page.waitForTimeout(300);
-const copied = await page.evaluate(() => window.__copied);
-const label = await page.evaluate(() => document.querySelector('#contact button[aria-label]')?.textContent);
-check(copied.length === 1 && copied[0] === EMAIL, "copy button copies the address");
-check(/Copied/.test(label ?? ""), "copy button confirms");
-
-await page.goto(`${base}/cv`, { waitUntil: "load", timeout: 120000 });
-await page.waitForTimeout(1000);
-const cv = await page.evaluate(() => [...document.querySelectorAll("a")].find((a) => a.href.startsWith("mailto:"))?.getAttribute("href"));
-check(cv === `mailto:${EMAIL}`, "/cv email link works");
-await browser.close();
-
-console.log(failures ? `\nFAIL: ${failures}` : "\nPASS");
-process.exit(failures ? 1 : 0);

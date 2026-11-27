@@ -9,6 +9,7 @@ import { firefox } from "playwright";
 import sharp from "sharp";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { launch, session } from "../_browser.mjs";
 
 const shots = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "shots");
 const BASE = process.env.BASE ?? "http://localhost:3000";
@@ -43,26 +44,26 @@ async function patchLab(file, p) {
   return [L / n, A / n, B / n];
 }
 
-const browser = await firefox.launch({
-  headless: true,
-  firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false },
+await session(async () => {
+  const browser = await launch(firefox, {
+    firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false },
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  let fails = 0;
+  for (const freeze of freezes) {
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/?nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}&crystallogo=0${process.env.EXTRA_QUERY ? "&" + process.env.EXTRA_QUERY : ""}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    const file = resolve(shots, `glass-tone-${mode}-${freeze}.png`);
+    await page.screenshot({ path: file, clip: CLIP });
+    await page.close();
+    const u = await patchLab(file, PATCH.upper);
+    const l = await patchLab(file, PATCH.lower);
+    const dL = Math.abs(u[0] - l[0]);
+    const ok = dL <= MAX_DL && u[2] < 0 && l[2] < 0;
+    if (!ok) fails++;
+    const f = (v) => `L* ${v[0].toFixed(1)} a* ${v[1].toFixed(1)} b* ${v[2].toFixed(1)}`;
+    console.log(`${ok ? "PASS" : "FAIL"}  ${mode.toUpperCase()} @${freeze}s: upper ${f(u)} | lower ${f(l)} | dL* ${dL.toFixed(1)} (need <= ${MAX_DL}, both b* < 0)`);
+  }
+  return fails ? 1 : 0;
 });
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-let fails = 0;
-for (const freeze of freezes) {
-  const page = await ctx.newPage();
-  await page.goto(`${BASE}/?nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}&crystallogo=0${process.env.EXTRA_QUERY ? "&" + process.env.EXTRA_QUERY : ""}`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(9000);
-  const file = resolve(shots, `glass-tone-${mode}-${freeze}.png`);
-  await page.screenshot({ path: file, clip: CLIP });
-  await page.close();
-  const u = await patchLab(file, PATCH.upper);
-  const l = await patchLab(file, PATCH.lower);
-  const dL = Math.abs(u[0] - l[0]);
-  const ok = dL <= MAX_DL && u[2] < 0 && l[2] < 0;
-  if (!ok) fails++;
-  const f = (v) => `L* ${v[0].toFixed(1)} a* ${v[1].toFixed(1)} b* ${v[2].toFixed(1)}`;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${mode.toUpperCase()} @${freeze}s: upper ${f(u)} | lower ${f(l)} | dL* ${dL.toFixed(1)} (need <= ${MAX_DL}, both b* < 0)`);
-}
-await browser.close();
-process.exit(fails ? 1 : 0);

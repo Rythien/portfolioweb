@@ -20,6 +20,7 @@
 // Every scenario: frame times over 10 s (p50/p95/p99, longest) and the
 // longest main-thread block once content is up (target <= 50 ms).
 import { firefox } from "playwright";
+import { launch, session } from "../_browser.mjs";
 
 const args = process.argv.slice(2);
 const BASE = args.find((a) => a.startsWith("http")) ?? "http://localhost:3100";
@@ -59,88 +60,88 @@ function longestAfter(frames, from, to) {
   return { ms: m, at: Math.round(at) };
 }
 
-const browser = await firefox.launch({
-  headless: true,
-  firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.angle.force-warp": software, "privacy.reduceTimerPrecision": false },
+await session(async () => {
+  const browser = await launch(firefox, {
+    firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.angle.force-warp": software, "privacy.reduceTimerPrecision": false },
+  });
+  const page0 = await browser.newPage();
+  await page0.goto("about:blank");
+  console.log("renderer:", await page0.evaluate(() => {
+    const c = document.createElement("canvas").getContext("webgl2");
+    return c ? c.getParameter(c.RENDERER) : "none";
+  }), software ? "(forced WARP)" : "");
+  await page0.close();
+
+  const results = [];
+  for (let r = 0; r < runs; r++) {
+    // ── hero ──
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await ctx.addInitScript(RECORDER);
+      const p = await ctx.newPage();
+      await p.goto(`${BASE}/?nopreload=1&mode=wake`, { waitUntil: "domcontentloaded" });
+      await p.waitForTimeout(10000);
+      const w = await p.evaluate(() => ({
+        screen: window.__screenDrawnAt, headline: window.__heroDrawnAt, crystal: window.__crystalDrawnAt,
+        profile: window.__gfxProfile?.profile, frames: window.__frames, beats: window.__beats,
+      }));
+      const visible = Math.max(w.screen ?? Infinity, w.headline ?? Infinity);
+      results.push({
+        scenario: "hero", profile: w.profile,
+        visibleMs: Math.round(visible), crystalMs: Math.round(w.crystal ?? Infinity),
+        frames: stats(w.frames, 0, 10000), longestBlockAfterVisible: longestAfter(w.frames, visible, 10000), block: blockAfter(w.beats, visible, 10000),
+      });
+      await ctx.close();
+    }
+    // ── dream-load ──
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await ctx.addInitScript(RECORDER);
+      const p = await ctx.newPage();
+      await p.goto(`${BASE}/?nopreload=1&mode=wake&noarchive=1`, { waitUntil: "domcontentloaded" });
+      await p.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
+      await p.goto(`${BASE}/?nopreload=1&mode=dream`, { waitUntil: "domcontentloaded" });
+      await p.waitForTimeout(10000);
+      const w = await p.evaluate(() => ({
+        void: window.__archiveFirstFrameAt, glass: window.__archiveGlassDrawnAt, frames: window.__frames, beats: window.__beats, profile: window.__gfxProfile?.profile,
+      }));
+      const voidAt = w.void ?? Infinity;
+      results.push({
+        scenario: "dream-load", profile: w.profile,
+        voidMs: Math.round(voidAt), archiveMs: Math.round(w.glass ?? Infinity),
+        frames: stats(w.frames, 0, 10000), longestBlockAfterVoid: longestAfter(w.frames, voidAt, 10000), block: blockAfter(w.beats, voidAt, 10000),
+      });
+      await ctx.close();
+    }
+    // ── dream-click ──
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await ctx.addInitScript(RECORDER);
+      const p = await ctx.newPage();
+      await p.goto(`${BASE}/?nopreload=1&mode=wake&noarchive=1`, { waitUntil: "domcontentloaded" });
+      await p.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
+      await p.goto(`${BASE}/?nopreload=1&mode=wake`, { waitUntil: "domcontentloaded" });
+      await p.waitForTimeout(1000);
+      const btn = p.getByRole("group", { name: "Site mode" }).getByRole("button", { name: /dream/i });
+      await btn.waitFor({ timeout: 20000 });
+      const clickAt = await btn.evaluate((el) => { const t = performance.now(); el.click(); return t; });
+      await p.waitForTimeout(10000);
+      const w = await p.evaluate(() => ({ flood: window.__floodStartedAt, void: window.__archiveFirstFrameAt, frames: window.__frames, beats: window.__beats, profile: window.__gfxProfile?.profile }));
+      results.push({
+        scenario: "dream-click", profile: w.profile,
+        clickAtMs: Math.round(clickAt), floodLatencyMs: w.flood ? Math.round(w.flood - clickAt) : null,
+        frames: stats(w.frames, clickAt, clickAt + 10000), longestBlockAfterClick: longestAfter(w.frames, clickAt, clickAt + 10000), block: blockAfter(w.beats, clickAt, clickAt + 10000),
+      });
+      await ctx.close();
+    }
+  }
+
+  for (const r of results) {
+    const f = r.frames;
+    const head = `${r.scenario.padEnd(12)} [${r.profile}]`;
+    const fs = f.n ? `frames p50 ${f.p50} p95 ${f.p95} p99 ${f.p99} max ${f.max} ms` : "no frames";
+    if (r.scenario === "hero") console.log(`${head} visible ${r.visibleMs} ms, crystal ${r.crystalMs} ms | ${fs} | longest frame after visible ${r.longestBlockAfterVisible.ms} ms | main-thread block ${r.block.ms} ms @${r.block.at}`);
+    if (r.scenario === "dream-load") console.log(`${head} void ${r.voidMs} ms, archive ${r.archiveMs} ms | ${fs} | longest frame after void ${r.longestBlockAfterVoid.ms} ms | main-thread block ${r.block.ms} ms @${r.block.at}`);
+    if (r.scenario === "dream-click") console.log(`${head} clicked @${r.clickAtMs}, flood +${r.floodLatencyMs} ms | ${fs} | longest frame after click ${r.longestBlockAfterClick.ms} ms | main-thread block ${r.block.ms} ms @${r.block.at}`);
+  }
 });
-const page0 = await browser.newPage();
-await page0.goto("about:blank");
-console.log("renderer:", await page0.evaluate(() => {
-  const c = document.createElement("canvas").getContext("webgl2");
-  return c ? c.getParameter(c.RENDERER) : "none";
-}), software ? "(forced WARP)" : "");
-await page0.close();
-
-const results = [];
-for (let r = 0; r < runs; r++) {
-  // ── hero ──
-  {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await ctx.addInitScript(RECORDER);
-    const p = await ctx.newPage();
-    await p.goto(`${BASE}/?nopreload=1&mode=wake`, { waitUntil: "domcontentloaded" });
-    await p.waitForTimeout(10000);
-    const w = await p.evaluate(() => ({
-      screen: window.__screenDrawnAt, headline: window.__heroDrawnAt, crystal: window.__crystalDrawnAt,
-      profile: window.__gfxProfile?.profile, frames: window.__frames, beats: window.__beats,
-    }));
-    const visible = Math.max(w.screen ?? Infinity, w.headline ?? Infinity);
-    results.push({
-      scenario: "hero", profile: w.profile,
-      visibleMs: Math.round(visible), crystalMs: Math.round(w.crystal ?? Infinity),
-      frames: stats(w.frames, 0, 10000), longestBlockAfterVisible: longestAfter(w.frames, visible, 10000), block: blockAfter(w.beats, visible, 10000),
-    });
-    await ctx.close();
-  }
-  // ── dream-load ──
-  {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await ctx.addInitScript(RECORDER);
-    const p = await ctx.newPage();
-    await p.goto(`${BASE}/?nopreload=1&mode=wake&noarchive=1`, { waitUntil: "domcontentloaded" });
-    await p.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
-    await p.goto(`${BASE}/?nopreload=1&mode=dream`, { waitUntil: "domcontentloaded" });
-    await p.waitForTimeout(10000);
-    const w = await p.evaluate(() => ({
-      void: window.__archiveFirstFrameAt, glass: window.__archiveGlassDrawnAt, frames: window.__frames, beats: window.__beats, profile: window.__gfxProfile?.profile,
-    }));
-    const voidAt = w.void ?? Infinity;
-    results.push({
-      scenario: "dream-load", profile: w.profile,
-      voidMs: Math.round(voidAt), archiveMs: Math.round(w.glass ?? Infinity),
-      frames: stats(w.frames, 0, 10000), longestBlockAfterVoid: longestAfter(w.frames, voidAt, 10000), block: blockAfter(w.beats, voidAt, 10000),
-    });
-    await ctx.close();
-  }
-  // ── dream-click ──
-  {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await ctx.addInitScript(RECORDER);
-    const p = await ctx.newPage();
-    await p.goto(`${BASE}/?nopreload=1&mode=wake&noarchive=1`, { waitUntil: "domcontentloaded" });
-    await p.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
-    await p.goto(`${BASE}/?nopreload=1&mode=wake`, { waitUntil: "domcontentloaded" });
-    await p.waitForTimeout(1000);
-    const btn = p.getByRole("group", { name: "Site mode" }).getByRole("button", { name: /dream/i });
-    await btn.waitFor({ timeout: 20000 });
-    const clickAt = await btn.evaluate((el) => { const t = performance.now(); el.click(); return t; });
-    await p.waitForTimeout(10000);
-    const w = await p.evaluate(() => ({ flood: window.__floodStartedAt, void: window.__archiveFirstFrameAt, frames: window.__frames, beats: window.__beats, profile: window.__gfxProfile?.profile }));
-    results.push({
-      scenario: "dream-click", profile: w.profile,
-      clickAtMs: Math.round(clickAt), floodLatencyMs: w.flood ? Math.round(w.flood - clickAt) : null,
-      frames: stats(w.frames, clickAt, clickAt + 10000), longestBlockAfterClick: longestAfter(w.frames, clickAt, clickAt + 10000), block: blockAfter(w.beats, clickAt, clickAt + 10000),
-    });
-    await ctx.close();
-  }
-}
-await browser.close();
-
-for (const r of results) {
-  const f = r.frames;
-  const head = `${r.scenario.padEnd(12)} [${r.profile}]`;
-  const fs = f.n ? `frames p50 ${f.p50} p95 ${f.p95} p99 ${f.p99} max ${f.max} ms` : "no frames";
-  if (r.scenario === "hero") console.log(`${head} visible ${r.visibleMs} ms, crystal ${r.crystalMs} ms | ${fs} | longest frame after visible ${r.longestBlockAfterVisible.ms} ms | main-thread block ${r.block.ms} ms @${r.block.at}`);
-  if (r.scenario === "dream-load") console.log(`${head} void ${r.voidMs} ms, archive ${r.archiveMs} ms | ${fs} | longest frame after void ${r.longestBlockAfterVoid.ms} ms | main-thread block ${r.block.ms} ms @${r.block.at}`);
-  if (r.scenario === "dream-click") console.log(`${head} clicked @${r.clickAtMs}, flood +${r.floodLatencyMs} ms | ${fs} | longest frame after click ${r.longestBlockAfterClick.ms} ms | main-thread block ${r.block.ms} ms @${r.block.at}`);
-}

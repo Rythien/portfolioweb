@@ -33,6 +33,7 @@
  * Fonts (Geist, Newsreader) are fetched from Google Fonts at render time.
  */
 import { chromium } from "playwright";
+import { launch, session } from "../_browser.mjs";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as simpleIcons from "simple-icons";
@@ -829,7 +830,6 @@ window.__ready = true;
 const MIME = { ".js": "text/javascript", ".html": "text/html" };
 
 const launchOpts = {
-  headless: true,
   args: [
     "--use-gl=angle",
     "--use-angle=swiftshader",
@@ -837,81 +837,82 @@ const launchOpts = {
     "--disable-accelerated-2d-canvas",
   ],
 };
-let browser;
-try {
-  browser = await chromium.launch(launchOpts);
-} catch {
-  // Bundled build not downloaded: fall back to an installed Chromium
-  browser = await chromium.launch({ ...launchOpts, channel: process.env.COVERS_CHANNEL ?? "msedge" });
-}
-const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
-page.on("pageerror", (e) => console.error("[page]", e.message));
-await page.route("http://covers.local/**", async (route) => {
-  const url = new URL(route.request().url());
-  if (url.pathname === "/index.html") {
-    return route.fulfill({ body: PAGE, contentType: "text/html" });
-  }
-  let file = null;
-  if (url.pathname.startsWith("/three/build/")) {
-    file = path.join(ROOT, "node_modules/three/build", url.pathname.slice("/three/build/".length));
-  } else if (url.pathname.startsWith("/three/addons/")) {
-    file = path.join(ROOT, "node_modules/three/examples/jsm", url.pathname.slice("/three/addons/".length));
-  }
-  if (!file) return route.fulfill({ status: 404, body: "" });
+await session(async () => {
+  let browser;
   try {
-    const body = await readFile(file);
-    return route.fulfill({ body, contentType: MIME[path.extname(file)] ?? "application/octet-stream" });
+    browser = await launch(chromium, launchOpts);
   } catch {
-    return route.fulfill({ status: 404, body: "" });
+    // Bundled build not downloaded: fall back to an installed Chromium
+    browser = await launch(chromium, { ...launchOpts, channel: process.env.COVERS_CHANNEL ?? "msedge" });
   }
-});
-await page.goto("http://covers.local/index.html");
-await page.waitForFunction(() => window.__ready === true, null, { timeout: 60000 });
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
+  page.on("pageerror", (e) => console.error("[page]", e.message));
+  await page.route("http://covers.local/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/index.html") {
+      return route.fulfill({ body: PAGE, contentType: "text/html" });
+    }
+    let file = null;
+    if (url.pathname.startsWith("/three/build/")) {
+      file = path.join(ROOT, "node_modules/three/build", url.pathname.slice("/three/build/".length));
+    } else if (url.pathname.startsWith("/three/addons/")) {
+      file = path.join(ROOT, "node_modules/three/examples/jsm", url.pathname.slice("/three/addons/".length));
+    }
+    if (!file) return route.fulfill({ status: 404, body: "" });
+    try {
+      const body = await readFile(file);
+      return route.fulfill({ body, contentType: MIME[path.extname(file)] ?? "application/octet-stream" });
+    } catch {
+      return route.fulfill({ status: 404, body: "" });
+    }
+  });
+  await page.goto("http://covers.local/index.html");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 60000 });
 
-const decode = (dataUrl) => Buffer.from(dataUrl.split(",")[1], "base64");
-const written = [];
-const selected = projects.filter((p) => !only || p.slug === only);
+  const decode = (dataUrl) => Buffer.from(dataUrl.split(",")[1], "base64");
+  const written = [];
+  const selected = projects.filter((p) => !only || p.slug === only);
 
-for (const project of selected) {
-  const seed = hashSlug(project.slug);
-  const t0 = Date.now();
-  const res = await page.evaluate(([o, kinds]) => window.renderSet(o, kinds), [
-    {
-      seed,
-      accent: ACCENTS[project.slug] ?? DEFAULT_ACCENT,
-      lines: titleLines(project),
-      icons: iconsFor(project),
-    },
-    KINDS,
-  ]);
-  const dir = path.join(outDir, project.slug);
-  await mkdir(dir, { recursive: true });
-  for (const kind of KINDS) {
-    for (const mode of ["wake", "dream"]) {
-      for (const small of [false, true]) {
-        const data = res[kind][mode][small ? "small" : "full"];
-        const buf = decode(data);
-        const name = fileName(kind, mode, small);
-        await writeFile(path.join(dir, name), buf);
-        written.push({ slug: project.slug, kind, mode, small, name, kb: Math.round(buf.length / 1024), data });
+  for (const project of selected) {
+    const seed = hashSlug(project.slug);
+    const t0 = Date.now();
+    const res = await page.evaluate(([o, kinds]) => window.renderSet(o, kinds), [
+      {
+        seed,
+        accent: ACCENTS[project.slug] ?? DEFAULT_ACCENT,
+        lines: titleLines(project),
+        icons: iconsFor(project),
+      },
+      KINDS,
+    ]);
+    const dir = path.join(outDir, project.slug);
+    await mkdir(dir, { recursive: true });
+    for (const kind of KINDS) {
+      for (const mode of ["wake", "dream"]) {
+        for (const small of [false, true]) {
+          const data = res[kind][mode][small ? "small" : "full"];
+          const buf = decode(data);
+          const name = fileName(kind, mode, small);
+          await writeFile(path.join(dir, name), buf);
+          written.push({ slug: project.slug, kind, mode, small, name, kb: Math.round(buf.length / 1024), data });
+        }
       }
     }
+    console.log(`${project.slug}  seed=${seed}  ${Date.now() - t0}ms`);
   }
-  console.log(`${project.slug}  seed=${seed}  ${Date.now() - t0}ms`);
-}
 
-if (wantSheet) {
-  const cell = (w) => `<figure><img src="${w.data}"><figcaption>${w.name} · ${w.kb}KB</figcaption></figure>`;
-  const rows = selected
-    .map((p) => {
-      const pick = (mode) => KINDS.map((k) => written.find((w) => w.slug === p.slug && w.kind === k && w.mode === mode && !w.small));
-      return `<section><h2>${p.title}<span>${p.slug} · accent ${ACCENTS[p.slug] ?? DEFAULT_ACCENT}</span></h2>
+  if (wantSheet) {
+    const cell = (w) => `<figure><img src="${w.data}"><figcaption>${w.name} · ${w.kb}KB</figcaption></figure>`;
+    const rows = selected
+      .map((p) => {
+        const pick = (mode) => KINDS.map((k) => written.find((w) => w.slug === p.slug && w.kind === k && w.mode === mode && !w.small));
+        return `<section><h2>${p.title}<span>${p.slug} · accent ${ACCENTS[p.slug] ?? DEFAULT_ACCENT}</span></h2>
         <div class="grid">${pick("wake").map(cell).join("")}</div>
         <div class="grid">${pick("dream").map(cell).join("")}</div></section>`;
-    })
-    .join("");
-  await page.setViewportSize({ width: 1680, height: 900 });
-  await page.setContent(`<!doctype html><html><head><style>
+      })
+      .join("");
+    await page.setViewportSize({ width: 1680, height: 900 });
+    await page.setContent(`<!doctype html><html><head><style>
     body{margin:0;padding:28px;background:#111;color:#ddd;font:13px ui-monospace,monospace}
     h1{font-size:18px;color:#fff;margin:0 0 20px}
     section{margin-bottom:32px}
@@ -922,11 +923,11 @@ if (wantSheet) {
     img{width:100%;display:block;border-radius:2px}
     figcaption{color:#888;margin-top:4px}
   </style></head><body><h1>Concept artwork preview · top row WAKE, bottom row DREAM · cover, detail-1, detail-2, detail-3</h1>${rows}</body></html>`);
-  await mkdir(path.dirname(sheetPath), { recursive: true });
-  await page.screenshot({ path: sheetPath, fullPage: true });
-  console.log(`contact sheet: ${sheetPath}`);
-}
+    await mkdir(path.dirname(sheetPath), { recursive: true });
+    await page.screenshot({ path: sheetPath, fullPage: true });
+    console.log(`contact sheet: ${sheetPath}`);
+  }
 
-await browser.close();
-const total = written.reduce((s, w) => s + w.kb, 0);
-console.log(`${written.length} files, ${total}KB total`);
+  const total = written.reduce((s, w) => s + w.kb, 0);
+  console.log(`${written.length} files, ${total}KB total`);
+});

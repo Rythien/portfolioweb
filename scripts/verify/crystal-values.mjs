@@ -15,6 +15,7 @@
 // Edge (Chromium): headless Firefox can hand screenshots a stale WebGL frame.
 import { chromium } from "playwright";
 import sharp from "sharp";
+import { launch, session } from "../_browser.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const BASE = arg("url", "http://localhost:3000");
@@ -38,44 +39,45 @@ async function frame(browser, mode, extra) {
   return sharp(png).raw().toBuffer({ resolveWithObject: true });
 }
 
-const browser = await chromium.launch({ channel: "msedge", headless: true });
-let ok = true;
-for (const mode of ["wake", "dream"]) {
-  const m = await frame(browser, mode, "&crystalview=matte");
-  const f = await frame(browser, mode, "");
-  const { width: W, height: H, channels: C } = m.info;
-  const raw = new Uint8Array(W * H);
-  for (let i = 0; i < W * H; i++) {
-    const r = m.data[i * C], g = m.data[i * C + 1], b = m.data[i * C + 2];
-    raw[i] = r > 200 && g < 60 && b > 200 ? 1 : 0;
-  }
-  // Erode 2 px: keep only pixels whose 5x5 neighbourhood is all glass
-  const L = [];
-  for (let y = 2; y < H - 2; y++)
-    for (let x = 2; x < W - 2; x++) {
-      if (!raw[y * W + x]) continue;
-      let all = true;
-      for (let dy = -2; dy <= 2 && all; dy++) for (let dx = -2; dx <= 2; dx++) if (!raw[(y + dy) * W + x + dx]) { all = false; break; }
-      if (!all) continue;
-      const i = (y * W + x) * C;
-      L.push(Lstar(f.data[i], f.data[i + 1], f.data[i + 2]));
+await session(async () => {
+  const browser = await launch(chromium, { channel: "msedge" });
+  let ok = true;
+  for (const mode of ["wake", "dream"]) {
+    const m = await frame(browser, mode, "&crystalview=matte");
+    const f = await frame(browser, mode, "");
+    const { width: W, height: H, channels: C } = m.info;
+    const raw = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) {
+      const r = m.data[i * C], g = m.data[i * C + 1], b = m.data[i * C + 2];
+      raw[i] = r > 200 && g < 60 && b > 200 ? 1 : 0;
     }
-  if (L.length < 5000) {
-    console.log(`FAIL  ${mode}: only ${L.length} glass pixels found (matte view missing?)`);
-    ok = false;
-    continue;
+    // Erode 2 px: keep only pixels whose 5x5 neighbourhood is all glass
+    const L = [];
+    for (let y = 2; y < H - 2; y++)
+      for (let x = 2; x < W - 2; x++) {
+        if (!raw[y * W + x]) continue;
+        let all = true;
+        for (let dy = -2; dy <= 2 && all; dy++) for (let dx = -2; dx <= 2; dx++) if (!raw[(y + dy) * W + x + dx]) { all = false; break; }
+        if (!all) continue;
+        const i = (y * W + x) * C;
+        L.push(Lstar(f.data[i], f.data[i + 1], f.data[i + 2]));
+      }
+    if (L.length < 5000) {
+      console.log(`FAIL  ${mode}: only ${L.length} glass pixels found (matte view missing?)`);
+      ok = false;
+      continue;
+    }
+    L.sort((a, b) => a - b);
+    const pct = (q) => L[Math.min(L.length - 1, Math.floor(q * L.length))];
+    const share = (lo, hi) => L.filter((v) => v >= lo && v < hi).length / L.length;
+    const bins = Array.from({ length: 10 }, (_, k) => share(k * 10, k === 9 ? 101 : k * 10 + 10));
+    const lo = pct(0.005), hi = pct(0.995), dark = share(0, 30);
+    const pass = lo <= 10 && hi >= 95 && dark >= 0.15;
+    ok &&= pass;
+    console.log(
+      `${pass ? "PASS" : "FAIL"}  ${mode}: ${L.length} px; p0.5 ${lo.toFixed(1)} p5 ${pct(0.05).toFixed(1)} p50 ${pct(0.5).toFixed(1)} p95 ${pct(0.95).toFixed(1)} p99.5 ${hi.toFixed(1)}; below L*30 ${(dark * 100).toFixed(1)}%, 70-95 ${(share(70, 95) * 100).toFixed(1)}%`,
+    );
+    console.log(`      ${bins.map((s, k) => `${k * 10}-${k * 10 + 10}: ${(s * 100).toFixed(1).padStart(4)}%`).join("  ")}`);
   }
-  L.sort((a, b) => a - b);
-  const pct = (q) => L[Math.min(L.length - 1, Math.floor(q * L.length))];
-  const share = (lo, hi) => L.filter((v) => v >= lo && v < hi).length / L.length;
-  const bins = Array.from({ length: 10 }, (_, k) => share(k * 10, k === 9 ? 101 : k * 10 + 10));
-  const lo = pct(0.005), hi = pct(0.995), dark = share(0, 30);
-  const pass = lo <= 10 && hi >= 95 && dark >= 0.15;
-  ok &&= pass;
-  console.log(
-    `${pass ? "PASS" : "FAIL"}  ${mode}: ${L.length} px; p0.5 ${lo.toFixed(1)} p5 ${pct(0.05).toFixed(1)} p50 ${pct(0.5).toFixed(1)} p95 ${pct(0.95).toFixed(1)} p99.5 ${hi.toFixed(1)}; below L*30 ${(dark * 100).toFixed(1)}%, 70-95 ${(share(70, 95) * 100).toFixed(1)}%`,
-  );
-  console.log(`      ${bins.map((s, k) => `${k * 10}-${k * 10 + 10}: ${(s * 100).toFixed(1).padStart(4)}%`).join("  ")}`);
-}
-await browser.close();
-process.exit(ok ? 0 : 1);
+  return ok ? 0 : 1;
+});

@@ -6,23 +6,24 @@
 import { firefox } from "playwright";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { launch, session } from "../_browser.mjs";
 
 const shots = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "shots");
 const [name = "archive", at = "start", wait = "9000", extra = ""] = process.argv.slice(2);
 const BASE = process.env.BASE ?? "http://localhost:3000";
 
-const browser = await firefox.launch({
-  headless: true,
-  firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false },
+await session(async () => {
+  const browser = await launch(firefox, {
+    firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false },
+  });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  const q = `nopreload=1&mode=dream${at === "start" ? "" : `&archiveat=${at}`}${extra ? "&" + extra : ""}`;
+  await page.goto(`${BASE}/?${q}`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(Number(wait));
+  await page.screenshot({ path: resolve(shots, `${name}.png`) });
+  console.log(`shots/${name}.png`);
+  if (errors.length) console.log("console errors:", errors.slice(0, 5).join(" | "));
 });
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-const errors = [];
-page.on("pageerror", (e) => errors.push(String(e)));
-page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-const q = `nopreload=1&mode=dream${at === "start" ? "" : `&archiveat=${at}`}${extra ? "&" + extra : ""}`;
-await page.goto(`${BASE}/?${q}`, { waitUntil: "domcontentloaded" });
-await page.waitForTimeout(Number(wait));
-await page.screenshot({ path: resolve(shots, `${name}.png`) });
-console.log(`shots/${name}.png`);
-if (errors.length) console.log("console errors:", errors.slice(0, 5).join(" | "));
-await browser.close();

@@ -19,6 +19,7 @@ import sharp from "sharp";
 import { mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { launch, session } from "../_browser.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
@@ -32,77 +33,77 @@ const MAX_BAD = 12;
 const outDir = resolve(__dirname, "..", "..", "shots", "header-band");
 mkdirSync(outDir, { recursive: true });
 
-const browser = await firefox.launch({
-  headless: true,
-  firefoxUserPrefs: { "webgl.force-enabled": true },
-});
+await session(async () => {
+  const browser = await launch(firefox, {
+    firefoxUserPrefs: { "webgl.force-enabled": true },
+  });
 
-let failures = 0;
-for (const mode of modes) {
-  for (const w of widths) {
-    const h = w < 768 ? 844 : 900;
-    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
-    const page = await ctx.newPage();
-    const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
-    await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
-    await page.mouse.move(w / 2, h - 4);
-    await page.waitForTimeout(3000);
+  let failures = 0;
+  for (const mode of modes) {
+    for (const w of widths) {
+      const h = w < 768 ? 844 : 900;
+      const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+      const page = await ctx.newPage();
+      const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
+      await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
+      await page.mouse.move(w / 2, h - 4);
+      await page.waitForTimeout(3000);
 
-    // The solid part of the backdrop: nav row on desktop, nav + strip below lg
-    // (107, not 108, below lg: the bottom row is the strip's own 1px rule)
-    const band = w >= 1024 ? 64 : 107;
-    const max = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
-    let checked = 0;
-    for (let y = 41; y <= max; y += Math.round(h * stepVh)) {
-      await page.evaluate((y) => window.scrollTo(0, y), y);
-      await page.waitForTimeout(150);
-      // The backdrop fades in over 300ms once past 40px: wait it out, or
-      // the DREAM stars behind it show mid-fade at the first stop
-      await page.waitForFunction(
-        () => getComputedStyle(document.querySelector(".header-scrim")).opacity === "1",
-        null,
-        { timeout: 3000 },
-      );
-      // The header's own items and the strip's label/line are allowed
-      const holes = await page.evaluate((band) => {
-        const sel = "header a, header button, header nav, header [aria-live], [data-rail-strip] > *";
-        return [...document.querySelectorAll(sel)]
-          .map((el) => el.getBoundingClientRect())
-          .filter((r) => r.width > 0 && r.top < band)
-          .map((r) => [r.left - 6, r.top - 6, r.right + 6, r.bottom + 6].map(Math.round));
-      }, band);
-      const png = await page.screenshot({ clip: { x: 0, y: 0, width: w, height: band } });
-      const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-      const inHole = (x, yy) => holes.some(([l, t, r, b]) => x >= l && x <= r && yy >= t && yy <= b);
-      let bad = 0;
-      let worst = 0;
-      for (let x = 0; x < info.width; x++) {
-        const col = [];
-        for (let yy = 0; yy < info.height; yy++) {
-          if (inHole(x, yy)) continue;
-          const i = (yy * info.width + x) * 3;
-          col.push([data[i], data[i + 1], data[i + 2]]);
+      // The solid part of the backdrop: nav row on desktop, nav + strip below lg
+      // (107, not 108, below lg: the bottom row is the strip's own 1px rule)
+      const band = w >= 1024 ? 64 : 107;
+      const max = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+      let checked = 0;
+      for (let y = 41; y <= max; y += Math.round(h * stepVh)) {
+        await page.evaluate((y) => window.scrollTo(0, y), y);
+        await page.waitForTimeout(150);
+        // The backdrop fades in over 300ms once past 40px: wait it out, or
+        // the DREAM stars behind it show mid-fade at the first stop
+        await page.waitForFunction(
+          () => getComputedStyle(document.querySelector(".header-scrim")).opacity === "1",
+          null,
+          { timeout: 3000 },
+        );
+        // The header's own items and the strip's label/line are allowed
+        const holes = await page.evaluate((band) => {
+          const sel = "header a, header button, header nav, header [aria-live], [data-rail-strip] > *";
+          return [...document.querySelectorAll(sel)]
+            .map((el) => el.getBoundingClientRect())
+            .filter((r) => r.width > 0 && r.top < band)
+            .map((r) => [r.left - 6, r.top - 6, r.right + 6, r.bottom + 6].map(Math.round));
+        }, band);
+        const png = await page.screenshot({ clip: { x: 0, y: 0, width: w, height: band } });
+        const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+        const inHole = (x, yy) => holes.some(([l, t, r, b]) => x >= l && x <= r && yy >= t && yy <= b);
+        let bad = 0;
+        let worst = 0;
+        for (let x = 0; x < info.width; x++) {
+          const col = [];
+          for (let yy = 0; yy < info.height; yy++) {
+            if (inHole(x, yy)) continue;
+            const i = (yy * info.width + x) * 3;
+            col.push([data[i], data[i + 1], data[i + 2]]);
+          }
+          if (col.length < 4) continue;
+          const med = [0, 1, 2].map((c) => col.map((p) => p[c]).sort((a, b) => a - b)[col.length >> 1]);
+          for (const p of col) {
+            const d = Math.max(Math.abs(p[0] - med[0]), Math.abs(p[1] - med[1]), Math.abs(p[2] - med[2]));
+            if (d > worst) worst = d;
+            if (d > TOL) bad++;
+          }
         }
-        if (col.length < 4) continue;
-        const med = [0, 1, 2].map((c) => col.map((p) => p[c]).sort((a, b) => a - b)[col.length >> 1]);
-        for (const p of col) {
-          const d = Math.max(Math.abs(p[0] - med[0]), Math.abs(p[1] - med[1]), Math.abs(p[2] - med[2]));
-          if (d > worst) worst = d;
-          if (d > TOL) bad++;
+        checked++;
+        if (bad > MAX_BAD) {
+          failures++;
+          const file = resolve(outDir, `fail-${mode}-${w}-${y}.png`);
+          await sharp(png).toFile(file);
+          console.log(`✗ ${mode} ${w}px y=${y}: ${bad} px differ from their column (worst ${worst})  ${file}`);
         }
       }
-      checked++;
-      if (bad > MAX_BAD) {
-        failures++;
-        const file = resolve(outDir, `fail-${mode}-${w}-${y}.png`);
-        await sharp(png).toFile(file);
-        console.log(`✗ ${mode} ${w}px y=${y}: ${bad} px differ from their column (worst ${worst})  ${file}`);
-      }
+      console.log(`${failures ? "…" : "✓"} ${mode} ${w}px: ${checked} scroll positions checked`);
+      await ctx.close();
     }
-    console.log(`${failures ? "…" : "✓"} ${mode} ${w}px: ${checked} scroll positions checked`);
-    await ctx.close();
   }
-}
-await browser.close();
-console.log(failures ? `\nFAIL: content legible through the header at ${failures} position(s)` : "\nPASS: nothing shows through the header band");
-process.exit(failures ? 1 : 0);
+  console.log(failures ? `\nFAIL: content legible through the header at ${failures} position(s)` : "\nPASS: nothing shows through the header band");
+  return failures ? 1 : 0;
+});

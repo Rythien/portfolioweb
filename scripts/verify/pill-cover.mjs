@@ -20,6 +20,7 @@
  * visibility hidden, display none, inert or aria-hidden.
  */
 import { firefox } from "playwright";
+import { launch, session } from "../_browser.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const base = arg("url", "http://localhost:3000");
@@ -107,48 +108,49 @@ const audit = () => {
   return { ctl, hits, inHeader };
 };
 
-const browser = await firefox.launch({ headless: true, firefoxUserPrefs: { "webgl.force-enabled": true } });
-let failures = 0;
-for (const mode of modes) {
-  for (const w of widths) {
-    const h = w < 768 ? (w === 414 ? 896 : 844) : 1024;
-    const page = await browser.newPage({ viewport: { width: w, height: h } });
-    const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
-    await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
-    await page.waitForTimeout(2500);
-    const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
-    const positions = Array.from({ length: STEPS }, (_, i) => Math.round((max * i) / (STEPS - 1)));
-    const bad = [];
-    let shown = 0;
-    // Down the page, then back up through the same positions
-    for (const [dir, list] of [["down", positions], ["up", [...positions].reverse()]]) {
-      for (const y of list) {
-        // Arrive by a real wheel gesture over the last 400px, so scroll
-        // direction logic sees the direction the reader moved in
-        const from = dir === "down" ? Math.max(0, y - 400) : Math.min(max, y + 400);
-        await page.evaluate((y) => window.scrollTo(0, y), from);
-        await page.waitForTimeout(150);
-        await page.mouse.move(w / 2, h / 2);
-        await page.mouse.wheel(0, y - from);
-        await page.waitForTimeout(700);
-        await page.evaluate((y) => window.scrollTo(0, y), y);
-        await page.waitForTimeout(500);
-        const r = await page.evaluate(audit);
-        if (r.error) { bad.push(r.error); break; }
-        if (!r.ctl.hidden) shown++;
-        for (const hit of r.hits) bad.push(`${dir} y=${y}: covers ${hit}`);
+await session(async () => {
+  const browser = await launch(firefox, { firefoxUserPrefs: { "webgl.force-enabled": true } });
+  let failures = 0;
+  for (const mode of modes) {
+    for (const w of widths) {
+      const h = w < 768 ? (w === 414 ? 896 : 844) : 1024;
+      const page = await browser.newPage({ viewport: { width: w, height: h } });
+      const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
+      await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
+      await page.waitForTimeout(2500);
+      const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+      const positions = Array.from({ length: STEPS }, (_, i) => Math.round((max * i) / (STEPS - 1)));
+      const bad = [];
+      let shown = 0;
+      // Down the page, then back up through the same positions
+      for (const [dir, list] of [["down", positions], ["up", [...positions].reverse()]]) {
+        for (const y of list) {
+          // Arrive by a real wheel gesture over the last 400px, so scroll
+          // direction logic sees the direction the reader moved in
+          const from = dir === "down" ? Math.max(0, y - 400) : Math.min(max, y + 400);
+          await page.evaluate((y) => window.scrollTo(0, y), from);
+          await page.waitForTimeout(150);
+          await page.mouse.move(w / 2, h / 2);
+          await page.mouse.wheel(0, y - from);
+          await page.waitForTimeout(700);
+          await page.evaluate((y) => window.scrollTo(0, y), y);
+          await page.waitForTimeout(500);
+          const r = await page.evaluate(audit);
+          if (r.error) { bad.push(r.error); break; }
+          if (!r.ctl.hidden) shown++;
+          for (const hit of r.hits) bad.push(`${dir} y=${y}: covers ${hit}`);
+        }
       }
+      const uniq = [...new Set(bad)];
+      if (!shown) uniq.push("the control was never visible (it must be reachable)");
+      if (uniq.length) {
+        for (const b of uniq.slice(0, 12)) console.log(`✗ ${mode} ${w}px ${b}`);
+        if (uniq.length > 12) console.log(`  … ${uniq.length - 12} more`);
+      } else console.log(`✓ ${mode} ${w}px: nothing covered at ${STEPS * 2} stops (control visible at ${shown})`);
+      failures += uniq.length;
+      await page.close();
     }
-    const uniq = [...new Set(bad)];
-    if (!shown) uniq.push("the control was never visible (it must be reachable)");
-    if (uniq.length) {
-      for (const b of uniq.slice(0, 12)) console.log(`✗ ${mode} ${w}px ${b}`);
-      if (uniq.length > 12) console.log(`  … ${uniq.length - 12} more`);
-    } else console.log(`✓ ${mode} ${w}px: nothing covered at ${STEPS * 2} stops (control visible at ${shown})`);
-    failures += uniq.length;
-    await page.close();
   }
-}
-await browser.close();
-console.log(failures ? `\nFAIL: ${failures} problem(s)` : "\nPASS");
-process.exit(failures ? 1 : 0);
+  console.log(failures ? `\nFAIL: ${failures} problem(s)` : "\nPASS");
+  return failures ? 1 : 0;
+});

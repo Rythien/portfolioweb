@@ -15,6 +15,7 @@
 // lists every one over 20 ms, with what it was (shader size, texture size).
 //   node scripts/perf/jank.mjs [base=http://localhost:3100] [--headed] [--only=name,...] [--long] [--gl]
 import { firefox } from "playwright";
+import { launch, session } from "../_browser.mjs";
 
 const args = process.argv.slice(2);
 const BASE = args.find((a) => a.startsWith("http")) ?? "http://localhost:3100";
@@ -191,40 +192,41 @@ const SCENARIOS = [
 
 const pct = (a, p) => a[Math.min(a.length - 1, Math.floor(p * a.length))];
 
-const browser = await firefox.launch({ headless: !headed, firefoxUserPrefs: { "webgl.force-enabled": true, "privacy.reduceTimerPrecision": false } });
-for (const sc of SCENARIOS) {
-  if (only.length && !only.includes(sc.name)) continue;
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  await ctx.addInitScript(RECORDER);
-  if (glTrace) await ctx.addInitScript(GL_TRACE);
-  const page = await ctx.newPage();
-  await page.goto(`${BASE}/?nopreload=1&noarchive=1`, { waitUntil: "domcontentloaded" });
-  await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
-  await page.goto(BASE + sc.url, { waitUntil: "load" });
-  if (sc.ready) await page.waitForFunction(() => (window.__archiveFrames ?? 0) > 30, null, { timeout: 60000 });
-  await page.waitForTimeout(sc.settle);
-  if (sc.before) await sc.before(page);
-  const progBefore = progTrace ? await programKeys(page) : null;
-  await page.evaluate(() => window.__jankStart());
-  await sc.run(page);
-  const j = await page.evaluate(() => window.__jankStop());
-  const d = [...j.dts].sort((a, b) => a - b);
-  const over = j.dts.filter((x) => x > LONG_MS).length;
-  console.log(`${sc.name.padEnd(14)} frames ${String(d.length).padStart(5)}  p50 ${pct(d, 0.5).toFixed(1).padStart(5)}  p95 ${pct(d, 0.95).toFixed(1).padStart(5)}  p99 ${pct(d, 0.99).toFixed(1).padStart(6)}  max ${d.at(-1).toFixed(0).padStart(5)} ms  >${LONG_MS}ms: ${over}`);
-  if (showLong && j.long.length) for (const l of j.long) console.log(`    t=${String(l.at).padStart(6)} ms  ${String(l.dt).padStart(4)} ms  y=${l.y} mode=${l.mode} archive=${l.archive}`);
-  if (progTrace) {
-    const after = await programKeys(page);
-    for (const [c, keys] of Object.entries(after)) {
-      const before = progBefore[c] ?? [];
-      const fresh = keys.filter((k) => !before.includes(k));
-      console.log("    " + c + ": " + before.length + " programs before, " + fresh.length + " new during the window");
-      for (const k of fresh) console.log("      + " + explain(k, before.length ? before : keys.filter((x) => x !== k)));
+await session(async () => {
+  const browser = await launch(firefox, { firefoxUserPrefs: { "webgl.force-enabled": true, "privacy.reduceTimerPrecision": false } });
+  for (const sc of SCENARIOS) {
+    if (only.length && !only.includes(sc.name)) continue;
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctx.addInitScript(RECORDER);
+    if (glTrace) await ctx.addInitScript(GL_TRACE);
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/?nopreload=1&noarchive=1`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => localStorage.setItem("archive-progress-v1", JSON.stringify({ freed: [], recovered: [], hintSeen: true })));
+    await page.goto(BASE + sc.url, { waitUntil: "load" });
+    if (sc.ready) await page.waitForFunction(() => (window.__archiveFrames ?? 0) > 30, null, { timeout: 60000 });
+    await page.waitForTimeout(sc.settle);
+    if (sc.before) await sc.before(page);
+    const progBefore = progTrace ? await programKeys(page) : null;
+    await page.evaluate(() => window.__jankStart());
+    await sc.run(page);
+    const j = await page.evaluate(() => window.__jankStop());
+    const d = [...j.dts].sort((a, b) => a - b);
+    const over = j.dts.filter((x) => x > LONG_MS).length;
+    console.log(`${sc.name.padEnd(14)} frames ${String(d.length).padStart(5)}  p50 ${pct(d, 0.5).toFixed(1).padStart(5)}  p95 ${pct(d, 0.95).toFixed(1).padStart(5)}  p99 ${pct(d, 0.99).toFixed(1).padStart(6)}  max ${d.at(-1).toFixed(0).padStart(5)} ms  >${LONG_MS}ms: ${over}`);
+    if (showLong && j.long.length) for (const l of j.long) console.log(`    t=${String(l.at).padStart(6)} ms  ${String(l.dt).padStart(4)} ms  y=${l.y} mode=${l.mode} archive=${l.archive}`);
+    if (progTrace) {
+      const after = await programKeys(page);
+      for (const [c, keys] of Object.entries(after)) {
+        const before = progBefore[c] ?? [];
+        const fresh = keys.filter((k) => !before.includes(k));
+        console.log("    " + c + ": " + before.length + " programs before, " + fresh.length + " new during the window");
+        for (const k of fresh) console.log("      + " + explain(k, before.length ? before : keys.filter((x) => x !== k)));
+      }
     }
+    if (glTrace) {
+      const g = await page.evaluate(() => window.__gl.filter((x) => x.at >= 0));
+      for (const x of g) console.log(`    gl t=${String(x.at).padStart(6)} ms  ${String(x.dt).padStart(5)} ms  ${x.call} ${x.what}`);
+    }
+    await ctx.close();
   }
-  if (glTrace) {
-    const g = await page.evaluate(() => window.__gl.filter((x) => x.at >= 0));
-    for (const x of g) console.log(`    gl t=${String(x.at).padStart(6)} ms  ${String(x.dt).padStart(5)} ms  ${x.call} ${x.what}`);
-  }
-  await ctx.close();
-}
-await browser.close();
+});

@@ -27,6 +27,7 @@ import { firefox } from "playwright";
 import sharp from "sharp";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { launch, session } from "../_browser.mjs";
 
 const shots = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "shots");
 const BASE = process.env.BASE ?? "http://localhost:3000";
@@ -102,40 +103,40 @@ function edgePairs(L, mask, w, h) {
 }
 const pct = (arr, p) => arr[Math.min(arr.length - 1, Math.floor(p * arr.length))];
 
-const browser = await firefox.launch({
-  headless: true,
-  firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false },
-});
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-let fails = 0;
-for (const freeze of freezes) for (const mode of ["wake", "dream"]) {
-  const files = {};
-  for (const logo of ["on", "matte"]) {
-    const page = await ctx.newPage();
-    const q = `nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}${logo === "matte" ? "&crystallogo=matte" : ""}`;
-    await page.goto(`${BASE}/?${q}${process.env.EXTRA_QUERY ? "&" + process.env.EXTRA_QUERY : ""}`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(9000);
-    files[logo] = resolve(shots, `logo-contrast-${mode}-${freeze}-${logo}.png`);
-    await page.screenshot({ path: files[logo], clip: CLIP });
-    await page.close();
+await session(async () => {
+  const browser = await launch(firefox, {
+    firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false },
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  let fails = 0;
+  for (const freeze of freezes) for (const mode of ["wake", "dream"]) {
+    const files = {};
+    for (const logo of ["on", "matte"]) {
+      const page = await ctx.newPage();
+      const q = `nopreload=1&noarchive=1&mode=${mode}&crystalfreeze=${freeze}${logo === "matte" ? "&crystallogo=matte" : ""}`;
+      await page.goto(`${BASE}/?${q}${process.env.EXTRA_QUERY ? "&" + process.env.EXTRA_QUERY : ""}`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(9000);
+      files[logo] = resolve(shots, `logo-contrast-${mode}-${freeze}-${logo}.png`);
+      await page.screenshot({ path: files[logo], clip: CLIP });
+      await page.close();
+    }
+    const A = await lmap(files.on);
+    const mask = close(await magenta(files.matte), CLIP.width, CLIP.height, 2);
+    const logoL = [];
+    for (let i = 0; i < A.length; i++) if (mask[i]) logoL.push(A[i]);
+    logoL.sort((a, b) => a - b);
+    const n = logoL.length;
+    const spread = n ? pct(logoL, 0.9) - pct(logoL, 0.1) : 0;
+    const edges = edgePairs(A, mask, CLIP.width, CLIP.height);
+    const edgeMed = edges.length ? pct(edges, 0.5) : 0;
+    const share = edges.length ? edges.filter((d) => d > EDGE_PAIR_DL).length / edges.length : 0;
+    const ok = n > 2000 && edges.length > 200 && edgeMed >= MIN_EDGE_MEDIAN && spread >= MIN_SPREAD;
+    if (!ok) fails++;
+    console.log(
+      `${ok ? "PASS" : "FAIL"}  ${mode.toUpperCase()} @${freeze}s: ${edges.length} edge pairs, median |dL*| ${edgeMed.toFixed(1)} (need >= ${MIN_EDGE_MEDIAN}), ` +
+        `${(share * 100).toFixed(0)}% of pairs over ${EDGE_PAIR_DL}; ` +
+        `L* across face p10 ${pct(logoL, 0.1)?.toFixed(1)} / p50 ${pct(logoL, 0.5)?.toFixed(1)} / p90 ${pct(logoL, 0.9)?.toFixed(1)}, spread ${spread.toFixed(1)} (need >= ${MIN_SPREAD})`,
+    );
   }
-  const A = await lmap(files.on);
-  const mask = close(await magenta(files.matte), CLIP.width, CLIP.height, 2);
-  const logoL = [];
-  for (let i = 0; i < A.length; i++) if (mask[i]) logoL.push(A[i]);
-  logoL.sort((a, b) => a - b);
-  const n = logoL.length;
-  const spread = n ? pct(logoL, 0.9) - pct(logoL, 0.1) : 0;
-  const edges = edgePairs(A, mask, CLIP.width, CLIP.height);
-  const edgeMed = edges.length ? pct(edges, 0.5) : 0;
-  const share = edges.length ? edges.filter((d) => d > EDGE_PAIR_DL).length / edges.length : 0;
-  const ok = n > 2000 && edges.length > 200 && edgeMed >= MIN_EDGE_MEDIAN && spread >= MIN_SPREAD;
-  if (!ok) fails++;
-  console.log(
-    `${ok ? "PASS" : "FAIL"}  ${mode.toUpperCase()} @${freeze}s: ${edges.length} edge pairs, median |dL*| ${edgeMed.toFixed(1)} (need >= ${MIN_EDGE_MEDIAN}), ` +
-      `${(share * 100).toFixed(0)}% of pairs over ${EDGE_PAIR_DL}; ` +
-      `L* across face p10 ${pct(logoL, 0.1)?.toFixed(1)} / p50 ${pct(logoL, 0.5)?.toFixed(1)} / p90 ${pct(logoL, 0.9)?.toFixed(1)}, spread ${spread.toFixed(1)} (need >= ${MIN_SPREAD})`,
-  );
-}
-await browser.close();
-process.exit(fails ? 1 : 0);
+  return fails ? 1 : 0;
+});

@@ -17,6 +17,7 @@ import sharp from "sharp";
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { COLOR, ENEMY_COLORS, GEM_COLORS, TILE_COLORS } from "../../src/components/void/palette.ts";
+import { launch, session } from "../_browser.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const BASE = arg("url", "http://localhost:3000");
@@ -56,61 +57,62 @@ console.log(`worst case: ${worst.edge.toFixed(2)}:1 against ${worst.name} (${wor
 check(worst.edge >= 3, `the gem's edge is >= 3:1 against every tile and enemy colour (worst ${worst.edge.toFixed(2)}:1)`);
 
 /* 2. Pixels */
-const browser = await chromium.launch({ channel: "msedge", headless: true });
-const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
-await page.goto(`${BASE}/?nopreload=1&mode=dream&dream=void`, { waitUntil: "load" });
-await page.waitForFunction(() => window.__void?.count?.() > 30, null, { timeout: 30000 });
+await session(async () => {
+  const browser = await launch(chromium, { channel: "msedge" });
+  const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+  await page.goto(`${BASE}/?nopreload=1&mode=dream&dream=void`, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__void?.count?.() > 30, null, { timeout: 30000 });
 
-/** Max desaturated luma inside the gem's box vs everywhere else, in the logical frame. */
-const measure = () =>
-  page.evaluate(() => {
-    const v = window.__void;
-    const p = v.world.player;
-    const x = v.off.getContext("2d");
-    const { data } = x.getImageData(0, 0, 480, 270);
-    const L = (i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-    let gem = 0, rest = 0, restAt = "";
-    for (let y = 0; y < 270; y++)
-      for (let xx = 0; xx < 480; xx++) {
-        const i = (y * 480 + xx) * 4;
-        const inGem = xx >= p.x - 8 && xx <= p.x + 8 && y >= p.y - 18 && y <= p.y;
-        const l = L(i);
-        if (inGem) gem = Math.max(gem, l);
-        else if (l > rest) { rest = l; restAt = `${xx},${y} rgb(${data[i]},${data[i + 1]},${data[i + 2]})`; }
-      }
-    const flashing = v.world.enemies.some((d) => d.alive && d.flash > 0) || v.world.player.invuln > 0;
-    return { gem, rest, restAt, flashing, hearts: v.world.player.hearts };
-  });
-const spot = async (label) => {
-  let m = await measure();
-  for (let i = 0; i < 20 && m.flashing; i++) { await page.waitForTimeout(50); m = await measure(); }
-  check(m.gem > m.rest, `${label}: gem brightest (luma ${m.gem.toFixed(0)} vs next ${m.rest.toFixed(0)} at ${m.restAt})`);
-  return m;
-};
+  /** Max desaturated luma inside the gem's box vs everywhere else, in the logical frame. */
+  const measure = () =>
+    page.evaluate(() => {
+      const v = window.__void;
+      const p = v.world.player;
+      const x = v.off.getContext("2d");
+      const { data } = x.getImageData(0, 0, 480, 270);
+      const L = (i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      let gem = 0, rest = 0, restAt = "";
+      for (let y = 0; y < 270; y++)
+        for (let xx = 0; xx < 480; xx++) {
+          const i = (y * 480 + xx) * 4;
+          const inGem = xx >= p.x - 8 && xx <= p.x + 8 && y >= p.y - 18 && y <= p.y;
+          const l = L(i);
+          if (inGem) gem = Math.max(gem, l);
+          else if (l > rest) { rest = l; restAt = `${xx},${y} rgb(${data[i]},${data[i + 1]},${data[i + 2]})`; }
+        }
+      const flashing = v.world.enemies.some((d) => d.alive && d.flash > 0) || v.world.player.invuln > 0;
+      return { gem, rest, restAt, flashing, hearts: v.world.player.hearts };
+    });
+  const spot = async (label) => {
+    let m = await measure();
+    for (let i = 0; i < 20 && m.flashing; i++) { await page.waitForTimeout(50); m = await measure(); }
+    check(m.gem > m.rest, `${label}: gem brightest (luma ${m.gem.toFixed(0)} vs next ${m.rest.toFixed(0)} at ${m.restAt})`);
+    return m;
+  };
 
-await spot("open floor");
-// Walk north until the ice stops us: the gem against the lit rim
-await page.keyboard.down("KeyW");
-await page.waitForTimeout(1600);
-await page.keyboard.up("KeyW");
-await spot("against the lit north rim");
-// A cluster: six drifters in a ring 14 px round the living gem (closer than
-// they get without touching), then the game's own blur pause holds the frame
-await page.evaluate(() => {
-  const w = window.__void.world, p = w.player;
-  const ds = w.enemies.filter((d) => d.alive).slice(0, 6);
-  ds.forEach((d, i) => {
-    const a = (i / ds.length) * Math.PI * 2;
-    Object.assign(d, { x: p.x + Math.cos(a) * 14, y: p.y + Math.sin(a) * 11, arrive: 0, flash: 0 });
+  await spot("open floor");
+  // Walk north until the ice stops us: the gem against the lit rim
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(1600);
+  await page.keyboard.up("KeyW");
+  await spot("against the lit north rim");
+  // A cluster: six drifters in a ring 14 px round the living gem (closer than
+  // they get without touching), then the game's own blur pause holds the frame
+  await page.evaluate(() => {
+    const w = window.__void.world, p = w.player;
+    const ds = w.enemies.filter((d) => d.alive).slice(0, 6);
+    ds.forEach((d, i) => {
+      const a = (i / ds.length) * Math.PI * 2;
+      Object.assign(d, { x: p.x + Math.cos(a) * 14, y: p.y + Math.sin(a) * 11, arrive: 0, flash: 0 });
+    });
+    p.invuln = 0;
+    window.dispatchEvent(new Event("blur"));
   });
-  p.invuln = 0;
-  window.dispatchEvent(new Event("blur"));
+  await page.waitForTimeout(150);
+  const cluster = await spot("inside a cluster of six drifters");
+  const png = await page.screenshot();
+  await sharp(png).greyscale().toFile(join(OUT, "desaturated.png"));
+  console.log(`wrote ${join(OUT, "desaturated.png")} (hearts at the cluster shot: ${cluster.hearts})`);
+  console.log(failures ? `\n${failures} failed` : "\nall passed");
+  return failures ? 1 : 0;
 });
-await page.waitForTimeout(150);
-const cluster = await spot("inside a cluster of six drifters");
-const png = await page.screenshot();
-await sharp(png).greyscale().toFile(join(OUT, "desaturated.png"));
-console.log(`wrote ${join(OUT, "desaturated.png")} (hearts at the cluster shot: ${cluster.hearts})`);
-await browser.close();
-console.log(failures ? `\n${failures} failed` : "\nall passed");
-process.exit(failures ? 1 : 0);

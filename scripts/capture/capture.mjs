@@ -31,6 +31,7 @@
 // posterAt }] recorded like the preview into <name>.mp4 (--only=clips)
 //   eval   js                       escape hatch, runs in the page
 import { chromium } from "playwright";
+import { launch } from "../_browser.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync, renameSync, statSync, rmSync, existsSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
@@ -536,8 +537,7 @@ let browser = null;
 const made = [];
 try {
   server = await startServers();
-  browser = await chromium.launch({
-    headless: true,
+  browser = await launch(chromium, {
     channel: cfg.channel ?? "msedge",
     args: ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist", "--hide-scrollbars", "--autoplay-policy=no-user-gesture-required"],
   });

@@ -13,6 +13,7 @@ import { firefox } from "playwright";
 import { mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { launch, session } from "../_browser.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const label = process.argv[2] ?? "shot";
@@ -35,49 +36,49 @@ const STOPS = [
   ["footer", "footer", "end"],
 ];
 
-const browser = await firefox.launch({
-  headless: true,
-  firefoxUserPrefs: { "webgl.force-enabled": true },
-});
+await session(async () => {
+  const browser = await launch(firefox, {
+    firefoxUserPrefs: { "webgl.force-enabled": true },
+  });
 
-for (const mode of ["wake", "dream"]) {
-  for (const [w, h] of [[1440, 900], [390, 844]]) {
-    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
-    const page = await ctx.newPage();
-    const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
-    await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
-    await page.mouse.move(w - 1, h - 1);
-    // DREAM's glass compiles later; before that the crystal is the flat
-    // stand-in, which is not what a visitor sees for long
-    await page.waitForTimeout(mode === "dream" ? 15000 : 5000);
-    for (const [name, sel, off] of STOPS) {
-      if (only && !name.startsWith(only)) continue;
-      const y = await page.evaluate(([sel, off]) => {
-        const el = document.querySelector(sel);
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        const top = r.top + window.scrollY;
-        if (off === "end") return Math.round(top + r.height - window.innerHeight + 20);
-        return Math.round(top + off);
-      }, [sel, off]);
-      if (y == null) {
-        console.log(`  ${name}: no ${sel}`);
-        continue;
+  for (const mode of ["wake", "dream"]) {
+    for (const [w, h] of [[1440, 900], [390, 844]]) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+      const page = await ctx.newPage();
+      const q = `nopreload=1&mode=${mode}${mode === "dream" ? "&noarchive=1" : ""}`;
+      await page.goto(`${base}/?${q}`, { waitUntil: "load", timeout: 120000 });
+      await page.mouse.move(w - 1, h - 1);
+      // DREAM's glass compiles later; before that the crystal is the flat
+      // stand-in, which is not what a visitor sees for long
+      await page.waitForTimeout(mode === "dream" ? 15000 : 5000);
+      for (const [name, sel, off] of STOPS) {
+        if (only && !name.startsWith(only)) continue;
+        const y = await page.evaluate(([sel, off]) => {
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          const top = r.top + window.scrollY;
+          if (off === "end") return Math.round(top + r.height - window.innerHeight + 20);
+          return Math.round(top + off);
+        }, [sel, off]);
+        if (y == null) {
+          console.log(`  ${name}: no ${sel}`);
+          continue;
+        }
+        // Step there so scroll-triggered reveals and the crystal pose settle
+        await page.evaluate((y) => {
+          const l = window.__lenis;
+          if (l) l.scrollTo(y, { immediate: true });
+          else window.scrollTo(0, y);
+        }, y);
+        // Nudge the mouse so the custom cursor follows it into the corner
+        await page.mouse.move(w - 1, h - 2, { steps: 2 });
+        await page.waitForTimeout(1800);
+        const file = resolve(outDir, `${label}-${mode}-${w}-${name}.png`);
+        await page.screenshot({ path: file });
+        console.log(`  ${file}`);
       }
-      // Step there so scroll-triggered reveals and the crystal pose settle
-      await page.evaluate((y) => {
-        const l = window.__lenis;
-        if (l) l.scrollTo(y, { immediate: true });
-        else window.scrollTo(0, y);
-      }, y);
-      // Nudge the mouse so the custom cursor follows it into the corner
-      await page.mouse.move(w - 1, h - 2, { steps: 2 });
-      await page.waitForTimeout(1800);
-      const file = resolve(outDir, `${label}-${mode}-${w}-${name}.png`);
-      await page.screenshot({ path: file });
-      console.log(`  ${file}`);
+      await ctx.close();
     }
-    await ctx.close();
   }
-}
-await browser.close();
+});
