@@ -55,6 +55,30 @@ function crystalBox(): CrystalBox | null {
   return { left, top, right, bottom, fade: probe.fade };
 }
 
+/**
+ * Test hook (scripts/verify/shard-clamp.mjs): the top edge, in CSS px, of
+ * every broken shard drawn this frame (meshes after the intact crystal).
+ */
+function shardTops(): number[] {
+  if (!probe || probe.fade < 0.01) return [];
+  const tops: number[] = [];
+  for (const mesh of probe.meshes.slice(1)) {
+    if (!mesh || !mesh.visible) continue;
+    const mat = mesh.material as THREE.MeshPhysicalMaterial;
+    if (mat && "opacity" in mat && mat.opacity < 0.01) continue;
+    mesh.updateWorldMatrix(true, false);
+    const pos = mesh.geometry.getAttribute("position");
+    let top = Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      _v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).project(probe.camera);
+      top = Math.min(top, ((1 - _v.y) / 2) * probe.height);
+    }
+    tops.push(top);
+  }
+  return tops;
+}
+
 if (typeof window !== "undefined") {
   (window as unknown as { __crystalBox: typeof crystalBox }).__crystalBox = crystalBox;
+  (window as unknown as { __shardTops: typeof shardTops }).__shardTops = shardTops;
 }

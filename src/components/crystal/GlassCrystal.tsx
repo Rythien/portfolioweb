@@ -3,6 +3,7 @@
 import { forwardRef, use, useEffect, useMemo, useRef } from "react";
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { setCrystalProbe } from "./screenBox";
+import { headerBandBottom } from "./headerBand";
 import { MeshTransmissionMaterial, useFBO } from "@react-three/drei";
 import * as THREE from "three";
 import { useFractureStore } from "@/store/useFractureStore";
@@ -100,6 +101,18 @@ const DEBUG = (() => {
   };
 })();
 
+/** Broken shards stay this far (CSS px) below the header band's bottom edge. */
+const SHARD_BAND_GAP_PX = 8;
+/** World units over which the shard clamp eases in (smoothMin's k). */
+const SHARD_BAND_SOFT = 0.25;
+/** min(a, b), rounded over k (polynomial smooth min); never above min(a, b). */
+function smoothMin(a: number, b: number, k: number): number {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+}
+const _bandW = new THREE.Vector3();
+const bandInv = new THREE.Matrix4();
+
 const _swayEuler = new THREE.Euler();
 const _swayQ = new THREE.Quaternion();
 const _parentInvQ = new THREE.Quaternion();
@@ -140,6 +153,8 @@ export interface ShardData {
   geometry: THREE.BufferGeometry;
   /** Largest bounding-box side, for thickness and logo sizing. */
   size: number;
+  /** Farthest vertex from its centre: how far it reaches, at any tumble. */
+  radius: number;
   centroid: THREE.Vector3;
   direction: THREE.Vector3;
   tumbleAxis: THREE.Vector3;
@@ -167,6 +182,8 @@ function buildShards(geos: THREE.BufferGeometry[], seed: number): ShardData[] {
     geo.computeBoundingBox();
     const dims = geo.boundingBox!.getSize(new THREE.Vector3());
     const size = Math.max(dims.x, dims.y, dims.z);
+    let radius = 0;
+    for (let v = 0; v < pos.count; v++) radius = Math.max(radius, Math.hypot(pos.getX(v), pos.getY(v), pos.getZ(v)));
 
     const direction = centroid.clone().normalize();
     const tumbleAxis = new THREE.Vector3(animRng() - 0.5, animRng() - 0.5, animRng() - 0.5).normalize();
@@ -188,7 +205,7 @@ function buildShards(geos: THREE.BufferGeometry[], seed: number): ShardData[] {
     const lissAmp = new THREE.Vector3(0.3 + animRng() * 0.5, 0.2 + animRng() * 0.4, 0.1 + animRng() * 0.2);
     const brokenScale = 0.35 + animRng() * 0.25;
     return {
-      geometry: geo, size, centroid, direction, tumbleAxis, tumbleSpeed,
+      geometry: geo, size, radius, centroid, direction, tumbleAxis, tumbleSpeed,
       driftCenter, lissFreq, lissPhase, lissAmp, brokenScale,
     };
   });
@@ -926,6 +943,19 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
       const explosionFade = 1 - smoothstep(0.3, 0.8, breakVal);
       const driftFade = smoothstep(0.1, 0.5, breakVal);
       const spreadDist = breakVal * 2.0 * explosionFade;
+      // The header band's bottom edge (plus a gap) in NDC, for the shard clamp
+      const bandCam = portalCamera as THREE.PerspectiveCamera;
+      const bandTan = Math.tan(THREE.MathUtils.degToRad((bandCam.fov ?? 50) / 2));
+      const bandCamY = bandCam.position.y;
+      const bandCamZ = bandCam.position.z;
+      const bandNdc = 1 - (2 * (headerBandBottom() + SHARD_BAND_GAP_PX)) / Math.max(1, state.size.height);
+      // The shards' parent: local <-> world for the clamp
+      const bandParent = shardMeshRefs.current.find(Boolean)?.parent ?? null;
+      if (bandParent) {
+        bandParent.updateWorldMatrix(true, false);
+        bandInv.copy(bandParent.matrixWorld).invert();
+      }
+      const bandParentScale = bandParent ? bandParent.matrixWorld.getMaxScaleOnAxis() : 1;
       // Test hook (scripts/verify/chips.mjs): shards visible this frame
       (window as unknown as { __crystalShards: number }).__crystalShards =
         showShards && !assembled && smoothstep(0.05, 0.15, breakVal) * fade > 0.01 ? shards.length : 0;
@@ -979,6 +1009,22 @@ const GlassCrystal = forwardRef<THREE.Group, GlassCrystalProps>(
 
         const scaleVal = 1 - driftFade * (1 - s.brokenScale);
         mesh.scale.setScalar(scaleVal);
+
+        // Kept under the fixed header: the band's bottom edge as a world
+        // height at this shard's depth, less the shard's reach (its radius,
+        // whatever its tumble), applied to where it ends up (drift target
+        // plus the break's spread). Soft, so a shard eases along the limit
+        // instead of flattening against it.
+        if (!assembled && bandParent) {
+          _bandW.copy(mesh.position).applyMatrix4(bandParent.matrixWorld);
+          const topY = bandCamY + bandTan * (bandCamZ - _bandW.z) * bandNdc
+            - s.radius * scaleVal * bandParentScale;
+          const y = smoothMin(_bandW.y, topY, SHARD_BAND_SOFT);
+          if (y < _bandW.y) {
+            _bandW.y = y;
+            mesh.position.copy(_bandW.applyMatrix4(bandInv));
+          }
+        }
 
         const tumbleFade = smoothstep(0.02, 0.15, breakVal);
         const tumbleAngle = tumbleFade *
