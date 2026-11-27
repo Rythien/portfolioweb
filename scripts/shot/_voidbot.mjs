@@ -45,7 +45,7 @@ export function createVoidBot(page, { trace = false } = {}) {
       const ds = w.enemies.filter((d) => d.alive && d.arrive <= 0).map((d) => [d.x, d.y, d.kind, d.state, d.ax, d.ay]);
       const bs = w.bolts.filter((b) => b.alive).map((b) => [b.x, b.y, b.vx, b.vy]);
       const sl = w.seal;
-      const seal = sl.state === 0 || sl.state === 7 ? null : { x: sl.x, y: sl.y, state: sl.state, rings: w.rings.filter((q) => q.alive).map((q) => [q.r, q.gapA, q.spin]) };
+      const seal = sl.state === 0 || sl.state === 7 ? null : { x: sl.x, y: sl.y, gap: sl.gap, state: sl.state, rings: w.rings.filter((q) => q.alive).map((q) => [q.r, q.gapA, q.spin]) };
       return { x: p.x, y: p.y, cd: p.dashCd, ds, bs, phase: w.phase, hearts: p.hearts, open: w.doorOpen, room: w.roomIndex, moving: w.transition >= 0,
         seal, sealState: sl.state, t: w.t, freed: [...w.freed], view };
     });
@@ -98,7 +98,7 @@ export function createVoidBot(page, { trace = false } = {}) {
       for (const [rr, gapA] of s.seal.rings) {
         let da = Math.atan2(gy, gx) - gapA;
         da = Math.atan2(Math.sin(da), Math.cos(da));
-        if (rr < pd + 2 && pd - rr < 11 && Math.abs(da) > 0.95 / 2 - 0.08) sting = da;
+        if (rr < pd + 2 && pd - rr < 11 && Math.abs(da) > s.seal.gap / 2 - 0.08) sting = da;
       }
       if (sting !== null) {
         // Dash ready: through the band (it travels outward, and is then

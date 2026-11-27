@@ -631,7 +631,7 @@ export function drawWorld(
       const a = (k / n) * Math.PI * 2;
       let da = a - r.gapA;
       da = Math.atan2(Math.sin(da), Math.cos(da));
-      if (Math.abs(da) < TUNE.seal.gap / 2) continue;
+      if (Math.abs(da) < w.seal.gap / 2) continue;
       const px = Math.round(sl.x + Math.cos(a) * r.r), py = Math.round(sl.y - 8 + Math.sin(a) * r.r);
       x.fillStyle = COLOR.ice0;
       x.fillRect(px - 1, py, 3, 1);
@@ -744,7 +744,7 @@ function drawSealTells(x: CanvasRenderingContext2D, w: World): void {
         const a = (k / n) * Math.PI * 2;
         let da = a - s.nextGap;
         da = Math.atan2(Math.sin(da), Math.cos(da));
-        if (Math.abs(da) < TUNE.seal.gap / 2) continue;
+        if (Math.abs(da) < w.seal.gap / 2) continue;
         x.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), 1, 1);
       }
     }

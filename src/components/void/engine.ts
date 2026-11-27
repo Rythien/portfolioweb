@@ -150,6 +150,8 @@ export interface SealPattern {
   spread: number;
   /** The vulnerable window (s). */
   recover: number;
+  /** Its rings' gap (rad), if not TUNE.seal.gap. */
+  gap?: number;
 }
 
 /** Seal states. */
@@ -178,6 +180,8 @@ export interface Seal {
   aimA: number;
   /** Since it was freed (drives the bloom), or -1. */
   freedT: number;
+  /** This seal's ring gap (rad): its pattern's, else TUNE.seal.gap. */
+  gap: number;
 }
 
 /** Enemy kinds (plain object: node's type stripping has no enums). */
@@ -244,8 +248,12 @@ export interface Room {
 const SEAL_1: SealPattern = { rings: 1, ringEvery: 0, spin: 0.9, alternate: false, fan: 3, spread: 0.5, recover: 1.5 };
 /** Seal 2: two rings 1.2 s apart spinning opposite ways (their gaps cross), a 5-bolt fan, a shorter window. */
 const SEAL_2: SealPattern = { rings: 2, ringEvery: 1.2, spin: 1.3, alternate: true, fan: 5, spread: 0.8, recover: 1.3 };
-/** Seal 3: three rings 1.0 s apart, alternating, faster; a 7-bolt fan; the shortest window. */
-const SEAL_3: SealPattern = { rings: 3, ringEvery: 1.0, spin: 1.6, alternate: true, fan: 7, spread: 1.1, recover: 1.1 };
+/**
+ * Seal 3, still the hardest: three rings, alternating, the fastest spin, a
+ * 7-bolt fan, the shortest window. Eased 2026-11-27 (it took 4-18 deaths a
+ * run): rings 1.2 s apart (was 1.0) and a wider gap (1.15 rad, was 0.95).
+ */
+const SEAL_3: SealPattern = { rings: 3, ringEvery: 1.2, spin: 1.6, alternate: true, fan: 7, spread: 1.1, recover: 1.1, gap: 1.15 };
 export const ROOMS: { half: [number, number]; pits: [number, number, number, number][]; wave: Wave; seal: SealPattern }[] = [
   { half: [13, 5.5], pits: [[14, 9, 3, 3], [31, 15, 4, 2]], wave: { drifter: 8 }, seal: SEAL_1 },
   { half: [13, 5.5], pits: [[12, 8, 3, 2], [19, 16, 2, 3], [29, 9, 4, 2], [33, 16, 3, 2]], wave: { drifter: 6, charger: 3 }, seal: SEAL_2 },
@@ -505,7 +513,7 @@ export function createWorld(seed = 1, reduced = false, wave: Wave | null = null,
     waveOverride: wave,
     roomIndex: 0,
     doorOpen: false,
-    seal: { state: SealState.Off, t: 0, x: SEAL_SPOT.x, y: SEAL_SPOT.y, hp: TUNE.seal.hits, flash: 0, ringsLeft: 0, nextGap: 0, aimA: 0, freedT: -1 },
+    seal: { state: SealState.Off, t: 0, x: SEAL_SPOT.x, y: SEAL_SPOT.y, hp: TUNE.seal.hits, flash: 0, ringsLeft: 0, nextGap: 0, aimA: 0, freedT: -1, gap: TUNE.seal.gap },
     rings: Array.from({ length: MAX_RINGS }, (): Ring => ({ alive: false, r: 0, gapA: 0, spin: 0 })),
     freed: ROOMS.map(() => false),
     transition: -1,
@@ -562,6 +570,7 @@ export function loadRoom(w: World, index: number, atSeal = false): void {
 function startSeal(w: World): void {
   const s = w.seal;
   w.checkpoint = w.roomIndex;
+  s.gap = sealPattern(w).gap ?? TUNE.seal.gap;
   s.state = SealState.Arrive;
   s.t = TUNE.seal.arrive * (w.reduced ? 1.5 : 1);
   s.x = SEAL_SPOT.x;
@@ -953,7 +962,7 @@ function stepSeal(w: World, dt: number): void {
     if (Math.abs(Math.hypot(gx, gy) - r.r) > S.ringHit) continue;
     let da = Math.atan2(gy, gx) - r.gapA;
     da = Math.atan2(Math.sin(da), Math.cos(da));
-    if (Math.abs(da) > S.gap / 2) hurt(w, s.x, s.y - 8);
+    if (Math.abs(da) > s.gap / 2) hurt(w, s.x, s.y - 8);
   }
   if (s.state === SealState.Off) return;
   if (s.state === SealState.Freed) {

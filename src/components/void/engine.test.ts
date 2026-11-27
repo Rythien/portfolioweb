@@ -604,3 +604,27 @@ test("the checkpoint is per room: a death before the wave is down refights the w
   restart(w, 0);
   assert.ok(alive(w) > 0, "room 1 has its wave");
 });
+
+test("seal 3 eased (1.2 s rings, 1.15 rad gap) and still the hardest of the three", () => {
+  const [s1, s2, s3] = ROOMS.map((r) => r.seal);
+  assert.equal(s3.ringEvery, 1.2);
+  assert.equal(s3.gap, 1.15);
+  assert.ok(s3.rings > s2.rings && s2.rings > s1.rings, "most rings");
+  assert.ok(s3.spin > s2.spin && s3.fan > s2.fan && s3.recover < s2.recover, "fastest spin, widest fan, shortest window");
+  // Its wider gap is what the rule uses: a gem 0.55 rad off the gap's centre
+  // (inside 1.15 / 2, outside 0.95 / 2) passes
+  const w = atSeal(2);
+  until(w, SealState.Rings);
+  assert.equal(w.seal.gap, 1.15);
+  for (const r of w.rings) r.alive = false;
+  const ring = w.rings[0];
+  const a = -Math.PI / 2;
+  Object.assign(ring, { alive: true, r: 40, spin: 0, gapA: a + 0.55 });
+  w.player.invuln = 0;
+  w.player.dashAge = 99;
+  w.player.x = w.seal.x + Math.cos(a) * 40;
+  w.player.y = w.seal.y - 8 + Math.sin(a) * 40;
+  const hearts = w.player.hearts;
+  step(w, DT, idle());
+  assert.equal(w.player.hearts, hearts, "passed in the wider gap");
+});
