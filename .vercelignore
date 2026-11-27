@@ -1,0 +1,12 @@
+# `vercel deploy` uploads this folder as it is on disk, including git-ignored
+# shots, builds and loose screenshots (hundreds of MB). Send only what the
+# build reads: everything is ignored except the entries below.
+/*
+!src
+!public
+!package.json
+!package-lock.json
+!next.config.ts
+!tsconfig.json
+!.npmrc
+!eslint.config.mjs
